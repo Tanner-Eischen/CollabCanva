@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "canvas": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "presence": {
+      ".read": "auth != null",
+      "$userId": {
+        ".write": "$userId === auth.uid"
+      }
+    }
+  }
+}
