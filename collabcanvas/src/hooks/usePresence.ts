@@ -38,7 +38,7 @@ interface UsePresenceOptions {
 interface UsePresenceReturn {
   otherUsers: Map<string, Presence>
   updateCursorPosition: (x: number, y: number) => void
-  updateSelection: (objectId: string | null) => void
+  updateSelection: (objectIds: string[] | null) => void
 }
 
 /**
@@ -77,15 +77,16 @@ export function usePresence({
   )
 
   /**
-   * Update selected object ID (no throttle needed)
+   * Update selected object IDs (no throttle needed)
+   * Now supports multi-select with array format
    */
   const updateSelection = useCallback(
-    (objectId: string | null) => {
+    (objectIds: string[] | null) => {
       // Don't update if user is not authenticated
       if (!userId) return
       
       const presenceRef = ref(db, `presence/${userId}`)
-      currentPresence.current.sel = objectId
+      currentPresence.current.sel = objectIds
       set(presenceRef, currentPresence.current).catch((error) => {
         console.error('Failed to update selection:', error)
       })

@@ -8,13 +8,15 @@ interface RectangleProps {
   y: number
   isSelected: boolean
   selectionColor?: string
-  onSelect: () => void
+  onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void
+  onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
 }
 
 /**
  * Rectangle shape component
  * Fixed 100x100px, blue color (#3B82F6), NO transformer/resize
+ * Supports multi-select highlighting
  */
 export default function Rectangle({
   id: _id,
@@ -23,8 +25,14 @@ export default function Rectangle({
   isSelected,
   selectionColor,
   onSelect,
+  onDragStart,
   onDragEnd,
 }: RectangleProps) {
+  const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    const node = e.target
+    onDragStart(node.x(), node.y())
+  }
+
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const node = e.target
     onDragEnd(node.x(), node.y())
@@ -42,6 +50,7 @@ export default function Rectangle({
         draggable
         onClick={onSelect}
         onTap={onSelect}
+        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       />
 

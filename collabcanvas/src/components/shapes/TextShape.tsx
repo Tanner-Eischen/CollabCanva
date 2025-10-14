@@ -11,13 +11,15 @@ interface TextShapeProps {
   height: number
   isSelected: boolean
   selectionColor?: string
-  onSelect: () => void
+  onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void
+  onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
 }
 
 /**
  * Text shape component
  * Blue color (#3B82F6), auto-sized to content, NO editing after creation
+ * Supports multi-select highlighting
  */
 export default function TextShape({
   id: _id,
@@ -29,8 +31,14 @@ export default function TextShape({
   isSelected,
   selectionColor,
   onSelect,
+  onDragStart,
   onDragEnd,
 }: TextShapeProps) {
+  const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    const node = e.target
+    onDragStart(node.x(), node.y())
+  }
+
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     const node = e.target
     onDragEnd(node.x(), node.y())
@@ -51,6 +59,7 @@ export default function TextShape({
         draggable
         onClick={onSelect}
         onTap={onSelect}
+        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       />
 

@@ -6,6 +6,11 @@ import {
   DEFAULT_CANVAS_CONFIG,
   DEFAULT_CANVAS_BOUNDS,
 } from '../types/canvas'
+import type { SelectionBox as SelectionBoxType } from '../types/selection'
+import {
+  createInitialSelectionBox,
+  shapeIntersectsSelectionBox,
+} from '../types/selection'
 import { useAuth } from '../hooks/useAuth'
 import { usePresence } from '../hooks/usePresence'
 import { useCanvas } from '../hooks/useCanvas'
@@ -13,6 +18,7 @@ import Cursor from './Cursor'
 import Rectangle from './shapes/Rectangle'
 import Circle from './shapes/Circle'
 import TextShape from './shapes/TextShape'
+import { SelectionBox } from './shapes/SelectionBox'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
@@ -40,6 +46,16 @@ export default function Canvas({
     y: number
     value: string
   } | null>(null)
+  
+  // NEW: Selection box state for drag-to-select
+  const [selectionBox, setSelectionBox] = useState<SelectionBoxType>(
+    createInitialSelectionBox()
+  )
+  const [isDrawingSelection, setIsDrawingSelection] = useState(false)
+  
+  // NEW: Track drag state for bulk move
+  const isDraggingShapeRef = useRef(false)
+  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null)
 
   // Hooks
   const { user } = useAuth()
@@ -51,11 +67,18 @@ export default function Canvas({
   const {
     shapes,
     selectedId,
+    selectedIds,
     addShape,
     addText,
     updateShape,
     deleteShape,
     setSelection,
+    toggleSelection,
+    selectMultiple,
+    clearSelection,
+    selectAll,
+    bulkMove,
+    bulkDelete,
   } = useCanvas({
     canvasId: CANVAS_ID,
     userId: user?.uid || '',
@@ -66,31 +89,49 @@ export default function Canvas({
   const containerWidth = window.innerWidth
   const containerHeight = window.innerHeight
 
-  // Sync selection to presence
+  // Sync selection to presence (convert Set to array)
   useEffect(() => {
-    updateSelection(selectedId)
-    onShapeSelect(selectedId)
-  }, [selectedId, updateSelection, onShapeSelect])
+    const selectionArray = Array.from(selectedIds)
+    updateSelection(selectionArray.length > 0 ? selectionArray : null)
+    onShapeSelect(selectedId) // backward compatibility
+  }, [selectedIds, selectedId, updateSelection, onShapeSelect])
 
   // Handle delete from parent toolbar
   useEffect(() => {
-    if (deleteTriggered && deleteTriggered > 0 && selectedId) {
-      deleteShape(selectedId)
+    if (deleteTriggered && deleteTriggered > 0) {
+      if (selectedIds.size > 0) {
+        bulkDelete()
+      } else if (selectedId) {
+        deleteShape(selectedId)
+      }
     }
-  }, [deleteTriggered, selectedId, deleteShape])
+  }, [deleteTriggered, selectedId, selectedIds, deleteShape, bulkDelete])
 
-  // Keyboard shortcut for delete
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+      // Delete/Backspace - delete selected shapes
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size > 0) {
         e.preventDefault()
-        deleteShape(selectedId)
+        bulkDelete()
+      }
+      
+      // Escape - clear selection
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        clearSelection()
+      }
+      
+      // Cmd/Ctrl+A - select all
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault()
+        selectAll()
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedId, deleteShape])
+  }, [selectedIds, bulkDelete, clearSelection, selectAll])
 
   /**
    * Handle mouse wheel for zoom functionality
@@ -188,11 +229,11 @@ export default function Canvas({
   )
 
   /**
-   * Handle canvas click for shape creation
+   * Handle mouse down on stage - start selection box or shape creation
    */
-  const handleCanvasClick = useCallback(
+  const handleStageMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
-      // Only create shapes if clicking on the stage itself (not on shapes)
+      // Only handle if clicking on the stage itself (not on shapes)
       if (e.target !== e.target.getStage()) {
         return
       }
@@ -207,20 +248,114 @@ export default function Canvas({
       const canvasX = (pointer.x - viewport.x) / viewport.scale
       const canvasY = (pointer.y - viewport.y) / viewport.scale
 
-      // Handle shape creation based on selected tool
-      if (selectedTool === 'rectangle') {
-        addShape('rectangle', canvasX, canvasY)
-      } else if (selectedTool === 'circle') {
-        addShape('circle', canvasX, canvasY)
-      } else if (selectedTool === 'text') {
-        // Show text input for text tool
-        setTextInput({ x: canvasX, y: canvasY, value: '' })
-      } else if (selectedTool === 'select') {
-        // Clear selection when clicking empty space
-        setSelection(null)
+      // Handle selection box start (only in select mode)
+      if (selectedTool === 'select') {
+        setIsDrawingSelection(true)
+        setSelectionBox({
+          startX: canvasX,
+          startY: canvasY,
+          currentX: canvasX,
+          currentY: canvasY,
+          visible: true,
+        })
       }
     },
-    [selectedTool, viewport, addShape, setSelection]
+    [selectedTool, viewport]
+  )
+
+  /**
+   * Handle mouse move on stage - update selection box
+   */
+  const handleStageMouseMove = useCallback(
+    (_e: Konva.KonvaEventObject<MouseEvent>) => {
+      // Update selection box if drawing
+      if (isDrawingSelection && selectedTool === 'select') {
+        const stage = stageRef.current
+        if (!stage) return
+
+        const pointer = stage.getPointerPosition()
+        if (!pointer) return
+
+        const canvasX = (pointer.x - viewport.x) / viewport.scale
+        const canvasY = (pointer.y - viewport.y) / viewport.scale
+
+        setSelectionBox((prev) => ({
+          ...prev,
+          currentX: canvasX,
+          currentY: canvasY,
+        }))
+      }
+
+      // Also update cursor position
+      handleMouseMove()
+    },
+    [isDrawingSelection, selectedTool, viewport, handleMouseMove]
+  )
+
+  /**
+   * Handle mouse up on stage - complete selection box or shape creation
+   */
+  const handleStageMouseUp = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const stage = stageRef.current
+      if (!stage) return
+
+      const pointer = stage.getPointerPosition()
+      if (!pointer) return
+
+      const canvasX = (pointer.x - viewport.x) / viewport.scale
+      const canvasY = (pointer.y - viewport.y) / viewport.scale
+
+      // Handle selection box completion
+      if (isDrawingSelection && selectedTool === 'select') {
+        setIsDrawingSelection(false)
+        
+        // Find shapes that intersect with selection box
+        const intersectingIds = shapes
+          .filter((shape) => shapeIntersectsSelectionBox(shape, selectionBox))
+          .map((shape) => shape.id)
+
+        // Select the intersecting shapes
+        if (intersectingIds.length > 0) {
+          selectMultiple(intersectingIds)
+        }
+
+        // Hide selection box
+        setSelectionBox((prev) => ({ ...prev, visible: false }))
+        return
+      }
+
+      // Handle shape creation (only if not dragging selection box)
+      if (!isDrawingSelection) {
+        // Only create shapes if clicking on the stage itself
+        if (e.target !== e.target.getStage()) {
+          return
+        }
+
+        if (selectedTool === 'rectangle') {
+          addShape('rectangle', canvasX, canvasY)
+        } else if (selectedTool === 'circle') {
+          addShape('circle', canvasX, canvasY)
+        } else if (selectedTool === 'text') {
+          setTextInput({ x: canvasX, y: canvasY, value: '' })
+        } else if (selectedTool === 'select') {
+          // Clear selection when clicking empty space (if not shift key)
+          if (!e.evt.shiftKey) {
+            clearSelection()
+          }
+        }
+      }
+    },
+    [
+      isDrawingSelection,
+      selectedTool,
+      viewport,
+      selectionBox,
+      shapes,
+      selectMultiple,
+      addShape,
+      clearSelection,
+    ]
   )
 
   /**
@@ -242,22 +377,62 @@ export default function Canvas({
 
   /**
    * Handle shape selection
+   * Supports Shift+click for multi-select
    */
   const handleShapeSelect = useCallback(
-    (shapeId: string) => {
-      setSelection(shapeId)
+    (shapeId: string, shiftKey: boolean) => {
+      if (shiftKey) {
+        // Shift+click: toggle selection
+        toggleSelection(shapeId)
+      } else {
+        // Normal click: single select
+        setSelection(shapeId)
+      }
     },
-    [setSelection]
+    [setSelection, toggleSelection]
+  )
+
+  /**
+   * Handle shape drag start
+   */
+  const handleShapeDragStart = useCallback(
+    (shapeId: string, x: number, y: number) => {
+      isDraggingShapeRef.current = true
+      dragStartPosRef.current = { x, y }
+      
+      // If dragging a shape that's not selected, select it
+      if (!selectedIds.has(shapeId)) {
+        setSelection(shapeId)
+      }
+    },
+    [selectedIds, setSelection]
   )
 
   /**
    * Handle shape drag end
+   * Supports bulk move if multiple shapes are selected
    */
   const handleShapeDragEnd = useCallback(
     (shapeId: string, x: number, y: number) => {
-      updateShape(shapeId, { x, y })
+      if (!dragStartPosRef.current) {
+        return
+      }
+
+      const deltaX = x - dragStartPosRef.current.x
+      const deltaY = y - dragStartPosRef.current.y
+
+      // If multiple shapes are selected and this shape is one of them, bulk move
+      if (selectedIds.size > 1 && selectedIds.has(shapeId)) {
+        bulkMove(deltaX, deltaY)
+      } else {
+        // Single shape move
+        updateShape(shapeId, { x, y })
+      }
+
+      isDraggingShapeRef.current = false
+      dragStartPosRef.current = null
     },
-    [updateShape]
+    [selectedIds, bulkMove, updateShape]
   )
 
   /**
@@ -310,11 +485,12 @@ export default function Canvas({
         ref={stageRef}
         width={containerWidth}
         height={containerHeight}
-        draggable={selectedTool === 'select'}
+        draggable={selectedTool === 'select' && !isDrawingSelection}
         onWheel={handleWheel}
         onDragEnd={handleDragEnd}
-        onMouseMove={handleMouseMove}
-        onClick={handleCanvasClick}
+        onMouseMove={handleStageMouseMove}
+        onMouseDown={handleStageMouseDown}
+        onMouseUp={handleStageMouseUp}
         x={viewport.x}
         y={viewport.y}
         scaleX={viewport.scale}
@@ -328,7 +504,7 @@ export default function Canvas({
         {/* Shapes Layer */}
         <Layer>
           {shapes.map((shape) => {
-            const isSelected = shape.id === selectedId
+            const isSelected = selectedIds.has(shape.id)
             const userColor = getUserColor()
 
             if (shape.type === 'rectangle') {
@@ -340,8 +516,9 @@ export default function Canvas({
                   y={shape.y}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
-                  onSelect={() => handleShapeSelect(shape.id)}
-                  onDragEnd={(x, y) => handleShapeDragEnd(shape.id, x, y)}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
                 />
               )
             } else if (shape.type === 'circle') {
@@ -353,8 +530,9 @@ export default function Canvas({
                   y={shape.y}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
-                  onSelect={() => handleShapeSelect(shape.id)}
-                  onDragEnd={(x, y) => handleShapeDragEnd(shape.id, x, y)}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
                 />
               )
             } else if (shape.type === 'text' && shape.text) {
@@ -369,13 +547,17 @@ export default function Canvas({
                   height={shape.height}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
-                  onSelect={() => handleShapeSelect(shape.id)}
-                  onDragEnd={(x, y) => handleShapeDragEnd(shape.id, x, y)}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
                 />
               )
             }
             return null
           })}
+          
+          {/* Selection Box for drag-to-select */}
+          <SelectionBox selectionBox={selectionBox} />
         </Layer>
 
         {/* Cursors Layer - render other users' cursors */}

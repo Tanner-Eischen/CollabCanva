@@ -112,16 +112,67 @@ export async function syncDeleteShape(
 }
 
 /**
+ * Sync bulk move operation to Firebase
+ * Updates multiple shapes' positions at once
+ */
+export async function syncBulkMove(
+  canvasId: string,
+  updates: Record<string, { x: number; y: number }>
+): Promise<void> {
+  try {
+    // Build a flat update object for Firebase
+    const firebaseUpdates: Record<string, number> = {}
+    
+    Object.entries(updates).forEach(([shapeId, position]) => {
+      firebaseUpdates[`canvas/${canvasId}/objects/${shapeId}/x`] = Math.round(position.x)
+      firebaseUpdates[`canvas/${canvasId}/objects/${shapeId}/y`] = Math.round(position.y)
+    })
+    
+    // Perform atomic multi-path update
+    const dbRef = ref(db)
+    await update(dbRef, firebaseUpdates)
+  } catch (error) {
+    console.error('Failed to sync bulk move:', error)
+    throw error
+  }
+}
+
+/**
+ * Sync bulk delete operation to Firebase
+ * Deletes multiple shapes at once
+ */
+export async function syncBulkDelete(
+  canvasId: string,
+  shapeIds: string[]
+): Promise<void> {
+  try {
+    // Build a flat update object with null values (deletes in Firebase)
+    const firebaseUpdates: Record<string, null> = {}
+    
+    shapeIds.forEach((shapeId) => {
+      firebaseUpdates[`canvas/${canvasId}/objects/${shapeId}`] = null
+    })
+    
+    // Perform atomic multi-path delete
+    const dbRef = ref(db)
+    await update(dbRef, firebaseUpdates)
+  } catch (error) {
+    console.error('Failed to sync bulk delete:', error)
+    throw error
+  }
+}
+
+/**
  * Sync selection state to presence
- * Selection is stored per-user in presence/${userId}/sel
+ * Selection is stored per-user in presence/${userId}/sel as an array
  */
 export async function syncSelection(
   userId: string,
-  selectedId: string | null
+  selectedIds: string[] | null
 ): Promise<void> {
   try {
     const selectionRef = ref(db, `presence/${userId}/sel`)
-    await set(selectionRef, selectedId)
+    await set(selectionRef, selectedIds)
   } catch (error) {
     console.error('Failed to sync selection:', error)
     throw error

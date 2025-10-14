@@ -6,6 +6,8 @@ import {
   syncCreateShape,
   syncUpdateShape,
   syncDeleteShape,
+  syncBulkMove,
+  syncBulkDelete,
   subscribeToCanvas,
 } from '../services/canvasSync'
 
@@ -17,12 +19,21 @@ interface UseCanvasOptions {
 
 interface UseCanvasReturn {
   shapes: Shape[]
-  selectedId: string | null
+  selectedId: string | null // for backward compatibility
+  selectedIds: Set<string> // NEW: multi-select support
   addShape: (type: 'rectangle' | 'circle', x: number, y: number) => string
   addText: (text: string, x: number, y: number) => string | null
   updateShape: (id: string, updates: Partial<Shape>) => void
   deleteShape: (id: string) => void
-  setSelection: (id: string | null) => void
+  setSelection: (id: string | null) => void // for backward compatibility
+  // NEW: Multi-select functions
+  toggleSelection: (id: string) => void
+  selectMultiple: (ids: string[]) => void
+  clearSelection: () => void
+  selectAll: () => void
+  getSelectedShapes: () => Shape[]
+  bulkMove: (deltaX: number, deltaY: number) => void
+  bulkDelete: () => void
 }
 
 /**
@@ -31,7 +42,8 @@ interface UseCanvasReturn {
  */
 export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   const [shapes, setShapes] = useState<Shape[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null) // for backward compatibility
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set()) // NEW: multi-select
   const syncEnabled = options?.enableSync ?? true
   const canvasId = options?.canvasId ?? 'default-canvas'
   const userId = options?.userId ?? ''
@@ -152,6 +164,13 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       setShapes((prev) => prev.filter((shape) => shape.id !== id))
       setSelectedId((prev) => (prev === id ? null : prev))
       
+      // Remove from selectedIds if it was selected
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      
       // Remove from local shapes tracking
       localShapesRef.current.delete(id)
       
@@ -166,12 +185,130 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   )
 
   /**
-   * Set selected shape ID
+   * Set selected shape ID (backward compatibility - single selection)
    * Selection state is synced via presence (handled in Canvas component)
    */
   const setSelection = useCallback((id: string | null): void => {
     setSelectedId(id)
+    // Update selectedIds to match
+    if (id === null) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set([id]))
+    }
   }, [])
+
+  /**
+   * Toggle selection of a shape (add/remove from selection)
+   * Used for Shift+Click behavior
+   */
+  const toggleSelection = useCallback((id: string): void => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      // Update selectedId for backward compatibility (use last selected)
+      setSelectedId(next.size > 0 ? id : null)
+      return next
+    })
+  }, [])
+
+  /**
+   * Select multiple shapes at once
+   * Used after drag-to-select box completes
+   */
+  const selectMultiple = useCallback((ids: string[]): void => {
+    const newSelection = new Set(ids)
+    setSelectedIds(newSelection)
+    // Update selectedId for backward compatibility (use last in array)
+    setSelectedId(ids.length > 0 ? ids[ids.length - 1] : null)
+  }, [])
+
+  /**
+   * Clear all selections
+   */
+  const clearSelection = useCallback((): void => {
+    setSelectedIds(new Set())
+    setSelectedId(null)
+  }, [])
+
+  /**
+   * Select all shapes on the canvas
+   */
+  const selectAll = useCallback((): void => {
+    const allIds = shapes.map((shape) => shape.id)
+    selectMultiple(allIds)
+  }, [shapes, selectMultiple])
+
+  /**
+   * Get array of currently selected shape objects
+   */
+  const getSelectedShapes = useCallback((): Shape[] => {
+    return shapes.filter((shape) => selectedIds.has(shape.id))
+  }, [shapes, selectedIds])
+
+  /**
+   * Move all selected shapes by delta amount
+   * Maintains relative positions
+   */
+  const bulkMove = useCallback(
+    (deltaX: number, deltaY: number): void => {
+      const updates: Record<string, { x: number; y: number }> = {}
+      
+      // Calculate new positions for all selected shapes
+      shapes.forEach((shape) => {
+        if (selectedIds.has(shape.id)) {
+          updates[shape.id] = {
+            x: shape.x + deltaX,
+            y: shape.y + deltaY,
+          }
+        }
+      })
+      
+      // Update local state immediately
+      setShapes((prev) =>
+        prev.map((shape) =>
+          updates[shape.id]
+            ? { ...shape, ...updates[shape.id] }
+            : shape
+        )
+      )
+      
+      // Sync to Firebase (only if user is authenticated)
+      if (syncEnabled && userId && Object.keys(updates).length > 0) {
+        syncBulkMove(canvasId, updates).catch((error) => {
+          console.error('Failed to sync bulk move:', error)
+        })
+      }
+    },
+    [shapes, selectedIds, syncEnabled, canvasId, userId]
+  )
+
+  /**
+   * Delete all selected shapes
+   */
+  const bulkDelete = useCallback((): void => {
+    const idsToDelete = Array.from(selectedIds)
+    
+    // Update local state immediately
+    setShapes((prev) => prev.filter((shape) => !selectedIds.has(shape.id)))
+    
+    // Clear selection
+    clearSelection()
+    
+    // Remove from local shapes tracking
+    idsToDelete.forEach((id) => localShapesRef.current.delete(id))
+    
+    // Sync to Firebase (only if user is authenticated)
+    if (syncEnabled && userId && idsToDelete.length > 0) {
+      syncBulkDelete(canvasId, idsToDelete).catch((error) => {
+        console.error('Failed to sync bulk delete:', error)
+      })
+    }
+  }, [selectedIds, syncEnabled, canvasId, userId, clearSelection])
 
   /**
    * Subscribe to Firebase updates from other users
@@ -203,6 +340,12 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       onDelete: (shapeId) => {
         setShapes((prev) => prev.filter((shape) => shape.id !== shapeId))
         setSelectedId((prev) => (prev === shapeId ? null : prev))
+        // Remove from selectedIds if it was selected
+        setSelectedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(shapeId)
+          return next
+        })
         localShapesRef.current.delete(shapeId)
       },
     })
@@ -215,11 +358,19 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   return {
     shapes,
     selectedId,
+    selectedIds,
     addShape,
     addText,
     updateShape,
     deleteShape,
     setSelection,
+    toggleSelection,
+    selectMultiple,
+    clearSelection,
+    selectAll,
+    getSelectedShapes,
+    bulkMove,
+    bulkDelete,
   }
 }
 
