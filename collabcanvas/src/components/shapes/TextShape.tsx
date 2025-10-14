@@ -1,7 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { Text, Transformer } from 'react-konva'
 import type Konva from 'konva'
-import { DEFAULT_CANVAS_CONFIG } from '../../types/canvas'
 
 interface TextShapeProps {
   id: string
@@ -32,11 +31,11 @@ export default function TextShape({
   y,
   text,
   width,
-  height,
+  height: _height,
   rotation = 0,
   fill,
   isSelected,
-  selectionColor,
+  selectionColor: _selectionColor,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -104,7 +103,7 @@ export default function TextShape({
         onTransformEnd={handleTransformEnd}
       />
 
-      {/* Transformer for width resize only (no rotation for text) */}
+      {/* Transformer for width resize only (no rotation for text) - Figma style (PR-20) */}
       {isSelected && (
         <Transformer
           ref={trRef}
@@ -124,6 +123,13 @@ export default function TextShape({
             'middle-right',
           ]}
           rotateEnabled={false}
+          borderStroke="#6366F1"
+          borderStrokeWidth={2}
+          anchorFill="#FFFFFF"
+          anchorStroke="#6366F1"
+          anchorStrokeWidth={2}
+          anchorSize={8}
+          anchorCornerRadius={2}
         />
       )}
     </>

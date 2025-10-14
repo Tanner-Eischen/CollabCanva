@@ -1,4 +1,5 @@
 import type { ToolType } from '../types/canvas'
+import { ToolButton } from './ToolButton'
 
 interface ToolbarProps {
   selectedTool: ToolType
@@ -13,8 +14,8 @@ interface ToolbarProps {
 }
 
 /**
- * Toolbar - Left vertical toolbar with shape creation tools and delete button
- * Fixed position on left side, 60-80px width
+ * Toolbar - Professional Figma-style left vertical toolbar (PR-20)
+ * 48px width, fixed position, with tooltips
  */
 export default function Toolbar({
   selectedTool,
@@ -30,103 +31,80 @@ export default function Toolbar({
     type: ToolType
     icon: string
     label: string
-    isSeparator?: boolean
+    shortcut?: string
   }> = [
+    // Selection Tool
+    { type: 'select', icon: '⌖', label: 'Select', shortcut: 'V' },
+    
     // Basic Shapes
-    { type: 'rectangle', icon: '▭', label: 'Rectangle' },
-    { type: 'circle', icon: '●', label: 'Circle' },
+    { type: 'rectangle', icon: '▭', label: 'Rectangle', shortcut: 'R' },
+    { type: 'circle', icon: '●', label: 'Circle', shortcut: 'O' },
     { type: 'roundRect', icon: '▢', label: 'Rounded Rectangle' },
-    // Advanced Shapes (PR-16)
+    
+    // Advanced Shapes
     { type: 'polygon', icon: '⬡', label: 'Polygon' },
     { type: 'star', icon: '★', label: 'Star' },
-    // Line Tool (PR-16)
-    { type: 'line', icon: '/', label: 'Line' },
+    { type: 'line', icon: '/', label: 'Line', shortcut: 'L' },
+    
     // Text Tool
-    { type: 'text', icon: 'T', label: 'Text' },
+    { type: 'text', icon: 'T', label: 'Text', shortcut: 'T' },
   ]
 
   return (
-    <div className="fixed left-0 top-14 bottom-0 w-20 bg-gray-800 shadow-lg z-40 flex flex-col items-center py-4 space-y-2">
-      {/* Shape Tools */}
-      {tools.map((tool) => (
-        <button
-          key={tool.type}
-          onClick={() => onToolSelect(tool.type)}
-          className={`
-            w-14 h-14 rounded-lg flex items-center justify-center text-2xl font-bold
-            transition-all duration-200
-            ${
-              selectedTool === tool.type
-                ? 'bg-blue-600 text-white shadow-lg scale-105'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
-            }
-          `}
-          title={tool.label}
-        >
-          {tool.icon}
-        </button>
+    <div className="fixed left-0 top-header bottom-0 w-toolbar bg-white border-r border-neutral-200 shadow-soft z-40 flex flex-col items-center py-3 gap-1">
+      {/* Tool Buttons */}
+      {tools.map((tool, index) => (
+        <div key={tool.type}>
+          <ToolButton
+            icon={tool.icon}
+            label={tool.label}
+            shortcut={tool.shortcut}
+            active={selectedTool === tool.type}
+            onClick={() => onToolSelect(tool.type)}
+          />
+          
+          {/* Separator after select tool and after shapes */}
+          {(index === 0 || index === 6) && (
+            <div className="w-9 h-px bg-neutral-200 my-1" />
+          )}
+        </div>
       ))}
 
       {/* Spacer - pushes action buttons to the bottom */}
       <div className="flex-1" />
 
-      {/* Undo Button (PR-14) */}
+      {/* Action Buttons */}
       {onUndo && (
-        <button
-          onClick={onUndo}
+        <ToolButton
+          icon="↶"
+          label="Undo"
+          shortcut="Ctrl+Z"
           disabled={!canUndo}
-          className={`
-            w-14 h-14 rounded-lg flex items-center justify-center text-xl
-            transition-all duration-200
-            ${
-              canUndo
-                ? 'bg-gray-700 text-white hover:bg-gray-600 shadow-lg'
-                : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50'
-            }
-          `}
-          title={canUndo ? 'Undo (Ctrl+Z)' : 'Nothing to undo'}
-        >
-          ↶
-        </button>
+          onClick={onUndo}
+        />
       )}
 
-      {/* Redo Button (PR-14) */}
       {onRedo && (
-        <button
-          onClick={onRedo}
+        <ToolButton
+          icon="↷"
+          label="Redo"
+          shortcut="Ctrl+Shift+Z"
           disabled={!canRedo}
-          className={`
-            w-14 h-14 rounded-lg flex items-center justify-center text-xl
-            transition-all duration-200
-            ${
-              canRedo
-                ? 'bg-gray-700 text-white hover:bg-gray-600 shadow-lg'
-                : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50'
-            }
-          `}
-          title={canRedo ? 'Redo (Ctrl+Shift+Z)' : 'Nothing to redo'}
-        >
-          ↷
-        </button>
+          onClick={onRedo}
+        />
       )}
+
+      {/* Separator before delete */}
+      <div className="w-9 h-px bg-neutral-200 my-1" />
 
       {/* Delete Button */}
-      <button
-        onClick={onDelete}
+      <ToolButton
+        icon="🗑"
+        label="Delete"
+        shortcut="Del"
         disabled={!hasSelection}
-        className={`
-          w-14 h-14 rounded-lg flex items-center justify-center text-xl
-          transition-all duration-200
-          ${
-            hasSelection
-              ? 'bg-red-600 text-white hover:bg-red-700 shadow-lg'
-              : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50'
-          }
-        `}
-        title={hasSelection ? 'Delete (Del)' : 'No selection'}
-      >
-        🗑
-      </button>
+        onClick={onDelete}
+      />
     </div>
   )
 }

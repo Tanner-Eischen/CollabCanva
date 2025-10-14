@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { Stage, Layer, Line as KonvaLine } from 'react-konva'
+import { Stage, Layer, Line as KonvaLine, Circle as KonvaCircle } from 'react-konva'
 import Konva from 'konva'
 import type { ViewportTransform, ToolType } from '../types/canvas'
 import {
@@ -51,6 +51,18 @@ export default function Canvas({
     y: 0,
     scale: 1,
   })
+  
+  // Center canvas on initial load (PR-20)
+  useEffect(() => {
+    const centerX = (window.innerWidth / 2) - (CANVAS_BOUNDS.maxX / 2)
+    const centerY = (window.innerHeight / 2) - (CANVAS_BOUNDS.maxY / 2)
+    
+    setViewport({
+      x: centerX,
+      y: centerY,
+      scale: 1,
+    })
+  }, []) // Run once on mount
   const [textInput, setTextInput] = useState<{
     x: number
     y: number
@@ -576,39 +588,30 @@ export default function Canvas({
   }, [])
 
   /**
-   * Generate grid lines for visual reference
+   * Generate dot grid for visual reference (PR-20)
+   * 20px spacing, 1px dots, light gray
    */
-  const generateGridLines = useCallback((): React.ReactNode[] => {
-    const lines: React.ReactNode[] = []
-    const spacing = CANVAS_CONFIG.gridSpacing
+  const generateDotGrid = useCallback((): React.ReactNode[] => {
+    const dots: React.ReactNode[] = []
+    const spacing = 20 // 20px spacing for professional look
 
-    // Vertical lines
+    // Generate dots in a grid pattern
     for (let x = 0; x <= CANVAS_BOUNDS.maxX; x += spacing) {
-      lines.push(
-        <KonvaLine
-          key={`v-${x}`}
-          points={[x, 0, x, CANVAS_BOUNDS.maxY]}
-          stroke="#E5E7EB"
-          strokeWidth={1}
-          listening={false}
-        />
-      )
+      for (let y = 0; y <= CANVAS_BOUNDS.maxY; y += spacing) {
+        dots.push(
+          <KonvaCircle
+            key={`dot-${x}-${y}`}
+            x={x}
+            y={y}
+            radius={1}
+            fill="#E5E7EB"
+            listening={false}
+          />
+        )
+      }
     }
 
-    // Horizontal lines
-    for (let y = 0; y <= CANVAS_BOUNDS.maxY; y += spacing) {
-      lines.push(
-        <KonvaLine
-          key={`h-${y}`}
-          points={[0, y, CANVAS_BOUNDS.maxX, y]}
-          stroke="#E5E7EB"
-          strokeWidth={1}
-          listening={false}
-        />
-      )
-    }
-
-    return lines
+    return dots
   }, [])
 
   return (
@@ -642,7 +645,7 @@ export default function Canvas({
       >
         {/* Grid Layer - renders behind all shapes */}
         <Layer listening={false}>
-          {generateGridLines()}
+          {generateDotGrid()}
         </Layer>
 
         {/* Shapes Layer */}

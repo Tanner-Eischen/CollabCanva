@@ -26,11 +26,11 @@ export default function Line({
   id: _id,
   points,
   fill,
-  stroke,
+  stroke: _stroke,
   strokeWidth = 2,
   arrows,
   isSelected,
-  selectionColor,
+  selectionColor: _selectionColor,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -139,11 +139,11 @@ export default function Line({
         />
       )}
 
-      {/* Transformer for line endpoints */}
+      {/* Transformer for line endpoints - Figma style (PR-20) */}
       {isSelected && (
         <Transformer
           ref={trRef}
-          boundBoxFunc={(oldBox, newBox) => {
+          boundBoxFunc={(_oldBox, newBox) => {
             // Allow any size for lines
             return newBox
           }}
@@ -154,6 +154,13 @@ export default function Line({
             'bottom-right',
           ]}
           rotateEnabled={false}
+          borderStroke="#6366F1"
+          borderStrokeWidth={2}
+          anchorFill="#FFFFFF"
+          anchorStroke="#6366F1"
+          anchorStrokeWidth={2}
+          anchorSize={8}
+          anchorCornerRadius={2}
         />
       )}
     </>

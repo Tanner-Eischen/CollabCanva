@@ -1,7 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { Rect, Transformer } from 'react-konva'
 import type Konva from 'konva'
-import { DEFAULT_CANVAS_CONFIG } from '../../types/canvas'
 
 interface RectangleProps {
   id: string
@@ -37,7 +36,7 @@ export default function Rectangle({
   stroke,
   strokeWidth = 0,
   isSelected,
-  selectionColor,
+  selectionColor: _selectionColor,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -105,7 +104,7 @@ export default function Rectangle({
         onTransformEnd={handleTransformEnd}
       />
 
-      {/* Transformer for resize/rotate handles */}
+      {/* Transformer for resize/rotate handles - Figma style (PR-20) */}
       {isSelected && (
         <Transformer
           ref={trRef}
@@ -127,6 +126,13 @@ export default function Rectangle({
             'bottom-right',
           ]}
           rotateEnabled={true}
+          borderStroke="#6366F1"
+          borderStrokeWidth={2}
+          anchorFill="#FFFFFF"
+          anchorStroke="#6366F1"
+          anchorStrokeWidth={2}
+          anchorSize={8}
+          anchorCornerRadius={2}
         />
       )}
     </>

@@ -1,7 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { Circle as KonvaCircle, Transformer } from 'react-konva'
 import type Konva from 'konva'
-import { DEFAULT_CANVAS_CONFIG } from '../../types/canvas'
 
 interface CircleProps {
   id: string
@@ -37,7 +36,7 @@ export default function Circle({
   stroke,
   strokeWidth = 0,
   isSelected,
-  selectionColor,
+  selectionColor: _selectionColor,
   onSelect,
   onDragStart,
   onDragEnd,
@@ -78,12 +77,13 @@ export default function Circle({
     node.scaleX(1)
     node.scaleY(1)
 
+    const radius = node.radius()
     onTransformEnd(
-      Math.max(10, node.radiusX() * 2 * scaleX), // min width 10px
-      Math.max(10, node.radiusY() * 2 * scaleY), // min height 10px
+      Math.max(10, radius * 2 * scaleX), // min width 10px
+      Math.max(10, radius * 2 * scaleY), // min height 10px
       node.rotation(),
-      node.x() - node.radiusX() * scaleX, // adjust x for radius change
-      node.y() - node.radiusY() * scaleY  // adjust y for radius change
+      node.x() - radius * scaleX, // adjust x for radius change
+      node.y() - radius * scaleY  // adjust y for radius change
     )
   }
 
@@ -108,7 +108,7 @@ export default function Circle({
         onTransformEnd={handleTransformEnd}
       />
 
-      {/* Transformer for resize/rotate handles */}
+      {/* Transformer for resize/rotate handles - Figma style (PR-20) */}
       {isSelected && (
         <Transformer
           ref={trRef}
@@ -130,6 +130,13 @@ export default function Circle({
             'bottom-right',
           ]}
           rotateEnabled={true}
+          borderStroke="#6366F1"
+          borderStrokeWidth={2}
+          anchorFill="#FFFFFF"
+          anchorStroke="#6366F1"
+          anchorStrokeWidth={2}
+          anchorSize={8}
+          anchorCornerRadius={2}
         />
       )}
     </>

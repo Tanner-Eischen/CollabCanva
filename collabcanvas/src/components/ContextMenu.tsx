@@ -106,7 +106,7 @@ export function ContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed bg-white border border-gray-300 rounded-md shadow-lg py-1 z-50 min-w-[180px]"
+      className="fixed bg-white border border-neutral-200 rounded-lg shadow-hard py-1 z-50 min-w-[192px]"
       style={{
         left: x,
         top: y,
@@ -117,51 +117,51 @@ export function ContextMenu({
         <>
           <div className="relative">
             <button
-              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700 flex items-center justify-between"
+              className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700 flex items-center justify-between"
               onMouseEnter={() => setShowAlignSubmenu(true)}
               onMouseLeave={() => setShowAlignSubmenu(false)}
             >
               <span>Align</span>
-              <span className="text-gray-400">›</span>
+              <span className="text-neutral-400">›</span>
             </button>
             {showAlignSubmenu && (
               <div
-                className="absolute left-full top-0 bg-white border border-gray-300 rounded-md shadow-lg py-1 ml-1 min-w-[140px]"
+                className="absolute left-full top-0 bg-white border border-neutral-200 rounded-lg shadow-hard py-1 ml-1 min-w-[140px]"
                 onMouseEnter={() => setShowAlignSubmenu(true)}
                 onMouseLeave={() => setShowAlignSubmenu(false)}
               >
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                   onClick={() => handleMenuAction(() => onAlign('left'))}
                 >
                   Left
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                   onClick={() => handleMenuAction(() => onAlign('center'))}
                 >
                   Center
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                   onClick={() => handleMenuAction(() => onAlign('right'))}
                 >
                   Right
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                   onClick={() => handleMenuAction(() => onAlign('top'))}
                 >
                   Top
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                   onClick={() => handleMenuAction(() => onAlign('middle'))}
                 >
                   Middle
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                   onClick={() => handleMenuAction(() => onAlign('bottom'))}
                 >
                   Bottom
@@ -176,27 +176,27 @@ export function ContextMenu({
       {canDistribute && onDistributeHorizontally && onDistributeVertically && (
         <div className="relative">
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700 flex items-center justify-between"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700 flex items-center justify-between"
             onMouseEnter={() => setShowDistributeSubmenu(true)}
             onMouseLeave={() => setShowDistributeSubmenu(false)}
           >
             <span>Distribute</span>
-            <span className="text-gray-400">›</span>
+            <span className="text-neutral-400">›</span>
           </button>
           {showDistributeSubmenu && (
             <div
-              className="absolute left-full top-0 bg-white border border-gray-300 rounded-md shadow-lg py-1 ml-1 min-w-[140px]"
+              className="absolute left-full top-0 bg-white border border-neutral-200 rounded-lg shadow-hard py-1 ml-1 min-w-[140px]"
               onMouseEnter={() => setShowDistributeSubmenu(true)}
               onMouseLeave={() => setShowDistributeSubmenu(false)}
             >
               <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                 onClick={() => handleMenuAction(onDistributeHorizontally)}
               >
                 Horizontally
               </button>
               <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
                 onClick={() => handleMenuAction(onDistributeVertically)}
               >
                 Vertically
@@ -209,7 +209,7 @@ export function ContextMenu({
       {/* Center in Canvas (PR-18) */}
       {hasSelection && onCenterInCanvas && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
           onClick={() => handleMenuAction(onCenterInCanvas)}
         >
           Center in Canvas
@@ -218,73 +218,73 @@ export function ContextMenu({
 
       {/* Divider */}
       {(canAlign || canDistribute || (hasSelection && onCenterInCanvas)) && (
-        <div className="border-t border-gray-200 my-1" />
+        <div className="border-t border-neutral-200 my-1" />
       )}
 
       {/* Z-Index Operations */}
       {hasSelection && (
         <>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
             onClick={() => handleMenuAction(onBringToFront)}
           >
             Bring to Front
           </button>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
             onClick={() => handleMenuAction(onBringForward)}
           >
             Bring Forward
           </button>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
             onClick={() => handleMenuAction(onSendBackward)}
           >
             Send Backward
           </button>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
             onClick={() => handleMenuAction(onSendToBack)}
           >
             Send to Back
           </button>
-          <div className="border-t border-gray-200 my-1" />
+          <div className="border-t border-neutral-200 my-1" />
         </>
       )}
 
       {/* Clipboard Operations */}
       {canCopy && onCopy && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
           onClick={() => handleMenuAction(onCopy)}
         >
           Copy
-          <span className="float-right text-gray-400 text-xs ml-4">⌘C</span>
+          <span className="float-right text-neutral-400 text-xs ml-4">⌘C</span>
         </button>
       )}
       {canPaste && onPaste && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
           onClick={() => handleMenuAction(onPaste)}
         >
           Paste
-          <span className="float-right text-gray-400 text-xs ml-4">⌘V</span>
+          <span className="float-right text-neutral-400 text-xs ml-4">⌘V</span>
         </button>
       )}
       {canCopy && onDuplicate && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
           onClick={() => handleMenuAction(onDuplicate)}
         >
           Duplicate
-          <span className="float-right text-gray-400 text-xs ml-4">⌘D</span>
+          <span className="float-right text-neutral-400 text-xs ml-4">⌘D</span>
         </button>
       )}
 
       {/* Delete Operation */}
       {hasSelection && onDelete && (
         <>
-          <div className="border-t border-gray-200 my-1" />
+          <div className="border-t border-neutral-200 my-1" />
           <button
             className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600"
             onClick={() => handleMenuAction(onDelete)}

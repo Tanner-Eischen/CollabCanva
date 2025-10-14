@@ -1,7 +1,7 @@
 // Clipboard Service for Copy/Paste/Duplicate Operations
 // In-memory clipboard only (no native clipboard integration)
 
-import { Shape } from '../types/canvas'
+import type { Shape } from '../types/canvas'
 import { v4 as uuidv4 } from 'uuid'
 
 /**

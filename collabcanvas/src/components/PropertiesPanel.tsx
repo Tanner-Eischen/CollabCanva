@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { ColorPicker } from './ColorPicker'
-import { Shape } from '../types/canvas'
+import type { Shape } from '../types/canvas'
 
 /**
  * PropertiesPanel Component

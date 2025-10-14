@@ -66,8 +66,8 @@ export default function CanvasPage() {
   )
 
   return (
-    <div className="w-full h-screen overflow-hidden flex flex-col">
-      {/* Top Header - Presence Bar */}
+    <div className="w-full h-screen overflow-hidden flex flex-col bg-neutral-50">
+      {/* Top Header - Presence Bar (PR-20: 64px height, z-index 50) */}
       <PresenceBar
         currentUser={{
           displayName: user?.displayName || null,
@@ -76,9 +76,9 @@ export default function CanvasPage() {
         otherUsers={otherUsers}
       />
 
-      {/* Main Content Area - Toolbar + Canvas */}
-      <div className="flex-1 mt-14 flex">
-        {/* Left Toolbar */}
+      {/* Main Content Area - Toolbar + Canvas (PR-20: proper sizing) */}
+      <div className="flex flex-row h-[calc(100vh-64px)]">
+        {/* Left Toolbar (PR-20: 48px width, from top 64px) */}
         <Toolbar
           selectedTool={selectedTool}
           onToolSelect={handleToolSelect}
@@ -90,8 +90,8 @@ export default function CanvasPage() {
           onRedo={redoFn || undefined}
         />
 
-        {/* Canvas - offset by toolbar width (80px = w-20) */}
-        <div className="flex-1 ml-20">
+        {/* Canvas Container (PR-20: calc(100vw - 48px) width, calc(100vh - 64px) height) */}
+        <div className="flex-1 w-[calc(100vw-48px)] h-full">
           <Canvas
             selectedTool={selectedTool}
             onShapeSelect={handleShapeSelect}
