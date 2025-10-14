@@ -524,7 +524,7 @@ interface Command {
 ### Subtasks
 
 #### 15.1 Update Canvas Types for Colors
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/types/canvas.ts` (add fill, stroke, strokeWidth to Shape interface)
@@ -540,7 +540,7 @@ interface Shape {
 ```
 
 #### 15.2 Create Color Picker Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/ColorPicker.tsx` (color picker UI with presets and custom input)
@@ -553,7 +553,7 @@ interface Shape {
 - Opacity slider (0-100%) - stored as RGBA format (#3B82F6FF)
 
 #### 15.3 Create Properties Panel Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/PropertiesPanel.tsx` (right sidebar panel for selected shape properties)
@@ -566,7 +566,7 @@ interface Shape {
 - Show "Multiple" when multi-select with different values
 
 #### 15.4 Update Shape Components to Use Colors
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Rectangle.tsx` (use fill, stroke, strokeWidth props)
@@ -579,7 +579,7 @@ interface Shape {
 - Text uses fill as text color (no stroke for text)
 
 #### 15.5 Update Canvas Hook for Color Changes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (add updateColors function)
@@ -590,7 +590,7 @@ interface Shape {
 - `addRecentColor(color: string)` - Add to recent colors (max 5)
 
 #### 15.6 Update Firebase Sync for Colors
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/services/canvasSync.ts` (include fill, stroke, strokeWidth in synced data)
@@ -614,7 +614,7 @@ canvas/objects/{id}: {
 - Migration script to add RGBA values to existing shapes
 
 #### 15.7 Add Color Change to Command History
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/commands/ColorCommand.ts` (undo/redo color changes)
@@ -625,7 +625,7 @@ canvas/objects/{id}: {
 - Apply new colors on redo
 
 #### 15.8 Handle Multi-Select Color Changes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/PropertiesPanel.tsx` (batch update colors for all selected)
@@ -636,7 +636,7 @@ canvas/objects/{id}: {
 - Clicking "Multiple" shows color picker for batch update
 
 #### 15.9 Recent Colors Persistence
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/services/colorStorage.ts` (localStorage for recent colors)

@@ -10,6 +10,9 @@ interface CircleProps {
   width: number
   height: number
   rotation?: number
+  fill: string
+  stroke?: string
+  strokeWidth?: number
   isSelected: boolean
   selectionColor?: string
   onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void
@@ -20,7 +23,7 @@ interface CircleProps {
 
 /**
  * Circle shape component
- * Variable size (ellipse), blue color (#3B82F6), with Transformer for resize/rotate
+ * Variable size (ellipse), customizable colors, with Transformer for resize/rotate
  * Supports multi-select highlighting
  */
 export default function Circle({
@@ -30,6 +33,9 @@ export default function Circle({
   width,
   height,
   rotation = 0,
+  fill,
+  stroke,
+  strokeWidth = 0,
   isSelected,
   selectionColor,
   onSelect,
@@ -91,7 +97,9 @@ export default function Circle({
         radiusX={radiusX}
         radiusY={radiusY}
         rotation={rotation}
-        fill={DEFAULT_CANVAS_CONFIG.defaultColor}
+        fill={fill}
+        stroke={strokeWidth && strokeWidth > 0 ? stroke : undefined}
+        strokeWidth={strokeWidth}
         draggable
         onClick={onSelect}
         onTap={onSelect}

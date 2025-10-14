@@ -19,6 +19,7 @@ import Rectangle from './shapes/Rectangle'
 import Circle from './shapes/Circle'
 import TextShape from './shapes/TextShape'
 import { SelectionBox } from './shapes/SelectionBox'
+import { PropertiesPanel } from './PropertiesPanel'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
@@ -89,6 +90,9 @@ export default function Canvas({
     redo,
     canUndo,
     canRedo,
+    updateColors,
+    getRecentColors,
+    addRecentColor,
   } = useCanvas({
     canvasId: CANVAS_ID,
     userId: user?.uid || '',
@@ -581,6 +585,9 @@ export default function Canvas({
                   width={shape.width}
                   height={shape.height}
                   rotation={shape.rotation}
+                  fill={shape.fill}
+                  stroke={shape.stroke}
+                  strokeWidth={shape.strokeWidth}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
                   onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
@@ -599,6 +606,9 @@ export default function Canvas({
                   width={shape.width}
                   height={shape.height}
                   rotation={shape.rotation}
+                  fill={shape.fill}
+                  stroke={shape.stroke}
+                  strokeWidth={shape.strokeWidth}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
                   onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
@@ -618,6 +628,7 @@ export default function Canvas({
                   width={shape.width}
                   height={shape.height}
                   rotation={shape.rotation}
+                  fill={shape.fill}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
                   onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
@@ -682,6 +693,13 @@ export default function Canvas({
           </div>
         </div>
       )}
+
+      {/* Properties Panel (PR-15) */}
+      <PropertiesPanel
+        selectedShapes={Array.from(selectedIds).map(id => shapes.find(s => s.id === id)!).filter(Boolean)}
+        onUpdateColors={(fill, stroke, strokeWidth) => updateColors(fill, stroke, strokeWidth)}
+        recentColors={getRecentColors()}
+      />
     </div>
   )
 }

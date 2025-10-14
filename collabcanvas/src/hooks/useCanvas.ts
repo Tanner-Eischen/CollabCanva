@@ -19,6 +19,10 @@ import {
 import { createHistoryManager } from '../services/commandHistory'
 import { CreateCommand } from '../commands/CreateCommand'
 import { DeleteCommand } from '../commands/DeleteCommand'
+import {
+  loadRecentColors,
+  saveRecentColors,
+} from '../services/colorStorage'
 
 interface UseCanvasOptions {
   canvasId: string
@@ -52,6 +56,10 @@ interface UseCanvasReturn {
   redo: () => void
   canUndo: boolean
   canRedo: boolean
+  // NEW: Color management functions (PR-15)
+  updateColors: (fill?: string, stroke?: string, strokeWidth?: number) => void
+  getRecentColors: () => string[]
+  addRecentColor: (color: string) => void
 }
 
 /**
@@ -73,6 +81,10 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   const historyManager = useMemo(() => createHistoryManager(), [])
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
+  
+  // Recent colors for color picker (PR-15)
+  const [recentColors, setRecentColors] = useState<string[]>(() => loadRecentColors())
+  const DEFAULT_FILL = '#3B82F6FF' // Default blue with full opacity
 
   /**
    * Helper function to add shape to state (used by commands)
@@ -139,6 +151,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         y,
         width: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
         height: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
+        fill: DEFAULT_FILL, // PR-15: Default color
       }
 
       // Create command for this operation
@@ -188,6 +201,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         width,
         height,
         text,
+        fill: DEFAULT_FILL, // PR-15: Default color
       }
 
       // Create command for this operation
@@ -209,7 +223,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   )
 
   /**
-   * Update shape properties (position, dimensions, rotation)
+   * Update shape properties (position, dimensions, rotation, colors)
    */
   const updateShape = useCallback(
     (id: string, updates: Partial<Shape>): void => {
@@ -226,7 +240,10 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         updates.y !== undefined ||
         updates.width !== undefined ||
         updates.height !== undefined ||
-        updates.rotation !== undefined
+        updates.rotation !== undefined ||
+        updates.fill !== undefined ||
+        updates.stroke !== undefined ||
+        updates.strokeWidth !== undefined
       
       if (syncEnabled && userId && hasSyncableUpdate) {
         syncUpdateShape(canvasId, id, updates).catch((error) => {
@@ -471,6 +488,54 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   }, [getSelectedShapes, syncEnabled, canvasId, userId, selectMultiple])
 
   /**
+   * Add color to recent colors list (PR-15)
+   * Maintains max 5 colors, most recent first
+   */
+  const addRecentColor = useCallback((color: string): void => {
+    setRecentColors((prev) => {
+      // Remove color if it already exists
+      const filtered = prev.filter((c) => c.toUpperCase() !== color.toUpperCase())
+      // Add to front and limit to 5
+      return [color, ...filtered].slice(0, 5)
+    })
+  }, [])
+
+  /**
+   * Get recent colors (PR-15)
+   */
+  const getRecentColors = useCallback((): string[] => {
+    return recentColors
+  }, [recentColors])
+
+  /**
+   * Update colors for selected shapes (PR-15)
+   * Updates fill, stroke, and strokeWidth for all selected shapes
+   */
+  const updateColors = useCallback(
+    (fill?: string, stroke?: string, strokeWidth?: number): void => {
+      const selectedShapesList = getSelectedShapes()
+      if (selectedShapesList.length === 0) return
+
+      // Build updates object
+      const updates: Partial<Shape> = {}
+      if (fill !== undefined) updates.fill = fill
+      if (stroke !== undefined) updates.stroke = stroke
+      if (strokeWidth !== undefined) updates.strokeWidth = strokeWidth
+
+      // Update all selected shapes
+      selectedShapesList.forEach((shape) => {
+        updateShape(shape.id, updates)
+      })
+
+      // Add fill color to recent colors if provided
+      if (fill !== undefined) {
+        addRecentColor(fill)
+      }
+    },
+    [getSelectedShapes, updateShape, addRecentColor]
+  )
+
+  /**
    * Undo the last command (PR-14)
    */
   const undo = useCallback((): void => {
@@ -489,6 +554,13 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     setCanUndo(historyManager.canUndo())
     setCanRedo(historyManager.canRedo())
   }, [historyManager])
+
+  /**
+   * Persist recent colors to localStorage (PR-15)
+   */
+  useEffect(() => {
+    saveRecentColors(recentColors)
+  }, [recentColors])
 
   /**
    * Subscribe to Firebase updates from other users
@@ -558,6 +630,9 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     redo,
     canUndo,
     canRedo,
+    updateColors,
+    getRecentColors,
+    addRecentColor,
   }
 }
 

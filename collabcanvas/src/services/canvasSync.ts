@@ -5,8 +5,8 @@ import type { Shape } from '../types/canvas'
 
 /**
  * Compress shape data for Firebase storage
- * Uses short keys to reduce bandwidth: t, x, y, w, h, txt
- * NO color property stored (all shapes are blue #3B82F6)
+ * Uses short keys to reduce bandwidth: t, x, y, w, h, txt, f, s, sw
+ * Phase 3: Now includes color properties (fill, stroke, strokeWidth)
  */
 function compressShape(shape: Shape): CanvasObject {
   const compressed: CanvasObject = {
@@ -15,11 +15,25 @@ function compressShape(shape: Shape): CanvasObject {
     y: Math.round(shape.y),
     w: Math.round(shape.width),
     h: Math.round(shape.height),
+    f: shape.fill, // fill color (RGBA hex)
   }
 
   // Add text content for text shapes
   if (shape.type === 'text' && shape.text) {
     compressed.txt = shape.text
+  }
+
+  // Add rotation if present (backward compatibility)
+  if (shape.rotation !== undefined) {
+    compressed.rot = Math.round(shape.rotation)
+  }
+
+  // Add stroke properties if present
+  if (shape.stroke !== undefined) {
+    compressed.s = shape.stroke
+  }
+  if (shape.strokeWidth !== undefined) {
+    compressed.sw = Math.round(shape.strokeWidth)
   }
 
   return compressed
@@ -28,6 +42,7 @@ function compressShape(shape: Shape): CanvasObject {
 /**
  * Decompress Firebase data to client Shape format
  * Converts short keys back to full property names
+ * Phase 3: Includes color properties with defaults for backward compatibility
  */
 function decompressShape(id: string, data: CanvasObject): Shape {
   const shape: Shape = {
@@ -38,11 +53,20 @@ function decompressShape(id: string, data: CanvasObject): Shape {
     width: data.w,
     height: data.h,
     rotation: data.rot ?? 0, // default to 0 if not present (backward compatibility)
+    fill: data.f ?? '#3B82F6FF', // default blue if not present (backward compatibility)
   }
 
   // Add text content for text shapes
   if (data.txt) {
     shape.text = data.txt
+  }
+
+  // Add stroke properties if present
+  if (data.s) {
+    shape.stroke = data.s
+  }
+  if (data.sw !== undefined) {
+    shape.strokeWidth = data.sw
   }
 
   return shape
@@ -68,7 +92,7 @@ export async function syncCreateShape(
 
 /**
  * Sync shape updates to Firebase
- * Supports position, dimensions, and rotation updates
+ * Supports position, dimensions, rotation, and color updates (Phase 3)
  */
 export async function syncUpdateShape(
   canvasId: string,
@@ -95,6 +119,16 @@ export async function syncUpdateShape(
     }
     if (updates.rotation !== undefined) {
       compressed.rot = Math.round(updates.rotation)
+    }
+    // Phase 3: Color properties
+    if (updates.fill !== undefined) {
+      compressed.f = updates.fill
+    }
+    if (updates.stroke !== undefined) {
+      compressed.s = updates.stroke
+    }
+    if (updates.strokeWidth !== undefined) {
+      compressed.sw = Math.round(updates.strokeWidth)
     }
     
     await update(shapeRef, compressed)
@@ -257,7 +291,10 @@ export function subscribeToCanvas(
           prevData.y !== shapeData.y ||
           prevData.w !== shapeData.w ||
           prevData.h !== shapeData.h ||
-          prevData.rot !== shapeData.rot
+          prevData.rot !== shapeData.rot ||
+          prevData.f !== shapeData.f ||
+          prevData.s !== shapeData.s ||
+          prevData.sw !== shapeData.sw
         
         if (hasChanges) {
           if (callbacks.onUpdate) {
@@ -267,6 +304,10 @@ export function subscribeToCanvas(
             if (prevData.w !== shapeData.w) updates.width = shapeData.w
             if (prevData.h !== shapeData.h) updates.height = shapeData.h
             if (prevData.rot !== shapeData.rot) updates.rotation = shapeData.rot ?? 0
+            // Phase 3: Color changes
+            if (prevData.f !== shapeData.f) updates.fill = shapeData.f
+            if (prevData.s !== shapeData.s) updates.stroke = shapeData.s
+            if (prevData.sw !== shapeData.sw) updates.strokeWidth = shapeData.sw
             callbacks.onUpdate(id, updates)
           }
         }

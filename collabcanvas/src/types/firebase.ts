@@ -12,7 +12,9 @@ export interface CanvasObject {
   h: number // height (variable in Phase 2)
   rot?: number // rotation in degrees (Phase 2)
   txt?: string // text content (text objects only)
-  // NOTE: NO color property - all shapes blue #3B82F6
+  f?: string // fill color (RGBA hex, Phase 3)
+  s?: string // stroke color (RGBA hex, Phase 3, optional)
+  sw?: number // stroke width (Phase 3, optional)
 }
 
 /**

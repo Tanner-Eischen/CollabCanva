@@ -35,7 +35,10 @@ export interface Shape {
   height: number // height (now variable in Phase 2)
   rotation?: number // rotation in degrees (0-360) - Phase 2
   text?: string // text content (text shapes only)
-  // NOTE: NO color property - all shapes blue #3B82F6 per MVP requirements
+  // Phase 3: Color properties
+  fill: string // fill color (RGBA hex format, e.g., #3B82F6FF)
+  stroke?: string // stroke color (RGBA hex format, optional)
+  strokeWidth?: number // stroke width in pixels (0-20, optional)
 }
 
 /**

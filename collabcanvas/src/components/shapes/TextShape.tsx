@@ -11,6 +11,7 @@ interface TextShapeProps {
   width: number
   height: number
   rotation?: number
+  fill: string
   isSelected: boolean
   selectionColor?: string
   onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void
@@ -21,7 +22,7 @@ interface TextShapeProps {
 
 /**
  * Text shape component
- * Blue color (#3B82F6), auto-sized to content, NO editing after creation
+ * Customizable color (fill only, no stroke), auto-sized to content, NO editing after creation
  * Resizable (width) but NO rotation
  * Supports multi-select highlighting
  */
@@ -33,6 +34,7 @@ export default function TextShape({
   width,
   height,
   rotation = 0,
+  fill,
   isSelected,
   selectionColor,
   onSelect,
@@ -91,7 +93,7 @@ export default function TextShape({
         text={text}
         fontSize={20}
         fontFamily="Arial, sans-serif"
-        fill={DEFAULT_CANVAS_CONFIG.defaultColor}
+        fill={fill}
         width={width}
         rotation={rotation}
         draggable

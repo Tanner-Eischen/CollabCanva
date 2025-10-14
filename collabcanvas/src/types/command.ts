@@ -5,7 +5,7 @@
  * All commands must implement execute, undo, and redo methods
  */
 export interface Command {
-  type: 'create' | 'delete' | 'move' | 'transform' | 'bulk'
+  type: 'create' | 'delete' | 'move' | 'transform' | 'bulk' | 'color'
   execute(): void
   undo(): void
   redo(): void
@@ -37,7 +37,12 @@ export type TransformCommandType = 'transform'
 export type BulkCommandType = 'bulk'
 
 /**
+ * Command type for color changes (PR-15)
+ */
+export type ColorCommandType = 'color'
+
+/**
  * Union type of all command types
  */
-export type CommandType = CreateCommandType | DeleteCommandType | MoveCommandType | TransformCommandType | BulkCommandType
+export type CommandType = CreateCommandType | DeleteCommandType | MoveCommandType | TransformCommandType | BulkCommandType | ColorCommandType
 
