@@ -21,10 +21,18 @@ import { createHistoryManager } from '../services/commandHistory'
 import { CreateCommand } from '../commands/CreateCommand'
 import { DeleteCommand } from '../commands/DeleteCommand'
 import { ZIndexCommand } from '../commands/ZIndexCommand'
+import { AlignmentCommand } from '../commands/AlignmentCommand'
 import {
   loadRecentColors,
   saveRecentColors,
 } from '../services/colorStorage'
+import {
+  alignShapes,
+  distributeHorizontally,
+  distributeVertically,
+  centerInCanvas,
+  type AlignmentType,
+} from '../services/alignment'
 
 interface UseCanvasOptions {
   canvasId: string
@@ -73,6 +81,11 @@ interface UseCanvasReturn {
   bringForward: (ids?: string[]) => void
   sendBackward: (ids?: string[]) => void
   sortShapesByZIndex: () => Shape[]
+  // NEW: Alignment functions (PR-18)
+  alignSelected: (type: AlignmentType) => void
+  distributeSelectedHorizontally: () => void
+  distributeSelectedVertically: () => void
+  centerSelectedInCanvas: (canvasWidth: number, canvasHeight: number) => void
 }
 
 /**
@@ -915,6 +928,157 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   )
 
   /**
+   * Align selected shapes (PR-18)
+   * Uses alignment service to calculate new positions
+   */
+  const alignSelected = useCallback(
+    (type: AlignmentType): void => {
+      const selectedShapes = getSelectedShapes()
+      if (selectedShapes.length < 2) return
+
+      // Calculate new positions using alignment service
+      const alignmentResult = alignShapes(selectedShapes, type)
+      
+      if (Object.keys(alignmentResult).length === 0) return
+
+      // Store old positions for undo
+      const oldPositions = new Map<string, { x: number; y: number }>()
+      const newPositions = new Map<string, { x: number; y: number }>()
+      
+      selectedShapes.forEach(shape => {
+        oldPositions.set(shape.id, { x: shape.x, y: shape.y })
+        if (alignmentResult[shape.id]) {
+          newPositions.set(shape.id, alignmentResult[shape.id])
+        }
+      })
+
+      // Create command for this operation
+      const command = new AlignmentCommand(
+        Array.from(newPositions.keys()),
+        oldPositions,
+        newPositions,
+        (id, updates) => updateShape(id, updates),
+        (id, x, y) => syncEnabled && userId ? syncUpdateShape(canvasId, id, { x, y }) : Promise.resolve()
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+    },
+    [getSelectedShapes, updateShape, syncEnabled, userId, canvasId, historyManager, updateHistoryState]
+  )
+
+  /**
+   * Distribute selected shapes horizontally (PR-18)
+   */
+  const distributeSelectedHorizontally = useCallback((): void => {
+    const selectedShapes = getSelectedShapes()
+    if (selectedShapes.length < 3) return // Need at least 3 shapes
+
+    // Calculate new positions using alignment service
+    const distributionResult = distributeHorizontally(selectedShapes)
+    
+    if (Object.keys(distributionResult).length === 0) return
+
+    // Store old positions for undo
+    const oldPositions = new Map<string, { x: number; y: number }>()
+    const newPositions = new Map<string, { x: number; y: number }>()
+    
+    selectedShapes.forEach(shape => {
+      oldPositions.set(shape.id, { x: shape.x, y: shape.y })
+      if (distributionResult[shape.id]) {
+        newPositions.set(shape.id, distributionResult[shape.id])
+      }
+    })
+
+    // Create command for this operation
+    const command = new AlignmentCommand(
+      Array.from(newPositions.keys()),
+      oldPositions,
+      newPositions,
+      (id, updates) => updateShape(id, updates),
+      (id, x, y) => syncEnabled && userId ? syncUpdateShape(canvasId, id, { x, y }) : Promise.resolve()
+    )
+    
+    historyManager.executeCommand(command)
+    updateHistoryState()
+  }, [getSelectedShapes, updateShape, syncEnabled, userId, canvasId, historyManager, updateHistoryState])
+
+  /**
+   * Distribute selected shapes vertically (PR-18)
+   */
+  const distributeSelectedVertically = useCallback((): void => {
+    const selectedShapes = getSelectedShapes()
+    if (selectedShapes.length < 3) return // Need at least 3 shapes
+
+    // Calculate new positions using alignment service
+    const distributionResult = distributeVertically(selectedShapes)
+    
+    if (Object.keys(distributionResult).length === 0) return
+
+    // Store old positions for undo
+    const oldPositions = new Map<string, { x: number; y: number }>()
+    const newPositions = new Map<string, { x: number; y: number }>()
+    
+    selectedShapes.forEach(shape => {
+      oldPositions.set(shape.id, { x: shape.x, y: shape.y })
+      if (distributionResult[shape.id]) {
+        newPositions.set(shape.id, distributionResult[shape.id])
+      }
+    })
+
+    // Create command for this operation
+    const command = new AlignmentCommand(
+      Array.from(newPositions.keys()),
+      oldPositions,
+      newPositions,
+      (id, updates) => updateShape(id, updates),
+      (id, x, y) => syncEnabled && userId ? syncUpdateShape(canvasId, id, { x, y }) : Promise.resolve()
+    )
+    
+    historyManager.executeCommand(command)
+    updateHistoryState()
+  }, [getSelectedShapes, updateShape, syncEnabled, userId, canvasId, historyManager, updateHistoryState])
+
+  /**
+   * Center selected shapes in canvas viewport (PR-18)
+   */
+  const centerSelectedInCanvas = useCallback(
+    (canvasWidth: number, canvasHeight: number): void => {
+      const selectedShapes = getSelectedShapes()
+      if (selectedShapes.length === 0) return
+
+      // Calculate new positions using alignment service
+      const centerResult = centerInCanvas(selectedShapes, canvasWidth, canvasHeight)
+      
+      if (Object.keys(centerResult).length === 0) return
+
+      // Store old positions for undo
+      const oldPositions = new Map<string, { x: number; y: number }>()
+      const newPositions = new Map<string, { x: number; y: number }>()
+      
+      selectedShapes.forEach(shape => {
+        oldPositions.set(shape.id, { x: shape.x, y: shape.y })
+        if (centerResult[shape.id]) {
+          newPositions.set(shape.id, centerResult[shape.id])
+        }
+      })
+
+      // Create command for this operation
+      const command = new AlignmentCommand(
+        Array.from(newPositions.keys()),
+        oldPositions,
+        newPositions,
+        (id, updates) => updateShape(id, updates),
+        (id, x, y) => syncEnabled && userId ? syncUpdateShape(canvasId, id, { x, y }) : Promise.resolve()
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+    },
+    [getSelectedShapes, updateShape, syncEnabled, userId, canvasId, historyManager, updateHistoryState]
+  )
+
+  /**
    * Persist recent colors to localStorage (PR-15)
    */
   useEffect(() => {
@@ -1001,6 +1165,10 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     bringForward,
     sendBackward,
     sortShapesByZIndex,
+    alignSelected,
+    distributeSelectedHorizontally,
+    distributeSelectedVertically,
+    centerSelectedInCanvas,
   }
 }
 

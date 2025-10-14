@@ -1,6 +1,7 @@
-// ContextMenu Component - Right-click menu for shapes (PR-17)
+// ContextMenu Component - Right-click menu for shapes (PR-17, PR-18)
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { AlignmentType } from '../services/alignment'
 
 interface ContextMenuProps {
   x: number
@@ -10,6 +11,7 @@ interface ContextMenuProps {
   hasSelection: boolean
   canCopy: boolean
   canPaste: boolean
+  selectedCount: number
   onBringToFront: () => void
   onBringForward: () => void
   onSendBackward: () => void
@@ -18,6 +20,11 @@ interface ContextMenuProps {
   onPaste?: () => void
   onDuplicate?: () => void
   onDelete?: () => void
+  // PR-18: Alignment operations
+  onAlign?: (type: AlignmentType) => void
+  onDistributeHorizontally?: () => void
+  onDistributeVertically?: () => void
+  onCenterInCanvas?: () => void
 }
 
 /**
@@ -32,6 +39,7 @@ export function ContextMenu({
   hasSelection,
   canCopy,
   canPaste,
+  selectedCount,
   onBringToFront,
   onBringForward,
   onSendBackward,
@@ -40,8 +48,14 @@ export function ContextMenu({
   onPaste,
   onDuplicate,
   onDelete,
+  onAlign,
+  onDistributeHorizontally,
+  onDistributeVertically,
+  onCenterInCanvas,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+  const [showAlignSubmenu, setShowAlignSubmenu] = useState(false)
+  const [showDistributeSubmenu, setShowDistributeSubmenu] = useState(false)
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -86,6 +100,9 @@ export function ContextMenu({
     onClose()
   }
 
+  const canAlign = selectedCount >= 2
+  const canDistribute = selectedCount >= 3
+
   return (
     <div
       ref={menuRef}
@@ -95,6 +112,115 @@ export function ContextMenu({
         top: y,
       }}
     >
+      {/* Alignment Operations (PR-18) */}
+      {canAlign && onAlign && (
+        <>
+          <div className="relative">
+            <button
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700 flex items-center justify-between"
+              onMouseEnter={() => setShowAlignSubmenu(true)}
+              onMouseLeave={() => setShowAlignSubmenu(false)}
+            >
+              <span>Align</span>
+              <span className="text-gray-400">›</span>
+            </button>
+            {showAlignSubmenu && (
+              <div
+                className="absolute left-full top-0 bg-white border border-gray-300 rounded-md shadow-lg py-1 ml-1 min-w-[140px]"
+                onMouseEnter={() => setShowAlignSubmenu(true)}
+                onMouseLeave={() => setShowAlignSubmenu(false)}
+              >
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  onClick={() => handleMenuAction(() => onAlign('left'))}
+                >
+                  Left
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  onClick={() => handleMenuAction(() => onAlign('center'))}
+                >
+                  Center
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  onClick={() => handleMenuAction(() => onAlign('right'))}
+                >
+                  Right
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  onClick={() => handleMenuAction(() => onAlign('top'))}
+                >
+                  Top
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  onClick={() => handleMenuAction(() => onAlign('middle'))}
+                >
+                  Middle
+                </button>
+                <button
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                  onClick={() => handleMenuAction(() => onAlign('bottom'))}
+                >
+                  Bottom
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Distribution Operations (PR-18) */}
+      {canDistribute && onDistributeHorizontally && onDistributeVertically && (
+        <div className="relative">
+          <button
+            className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700 flex items-center justify-between"
+            onMouseEnter={() => setShowDistributeSubmenu(true)}
+            onMouseLeave={() => setShowDistributeSubmenu(false)}
+          >
+            <span>Distribute</span>
+            <span className="text-gray-400">›</span>
+          </button>
+          {showDistributeSubmenu && (
+            <div
+              className="absolute left-full top-0 bg-white border border-gray-300 rounded-md shadow-lg py-1 ml-1 min-w-[140px]"
+              onMouseEnter={() => setShowDistributeSubmenu(true)}
+              onMouseLeave={() => setShowDistributeSubmenu(false)}
+            >
+              <button
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                onClick={() => handleMenuAction(onDistributeHorizontally)}
+              >
+                Horizontally
+              </button>
+              <button
+                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+                onClick={() => handleMenuAction(onDistributeVertically)}
+              >
+                Vertically
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Center in Canvas (PR-18) */}
+      {hasSelection && onCenterInCanvas && (
+        <button
+          className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-gray-700"
+          onClick={() => handleMenuAction(onCenterInCanvas)}
+        >
+          Center in Canvas
+        </button>
+      )}
+
+      {/* Divider */}
+      {(canAlign || canDistribute || (hasSelection && onCenterInCanvas)) && (
+        <div className="border-t border-gray-200 my-1" />
+      )}
+
       {/* Z-Index Operations */}
       {hasSelection && (
         <>

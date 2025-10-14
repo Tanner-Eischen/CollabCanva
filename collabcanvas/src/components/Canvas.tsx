@@ -25,6 +25,7 @@ import Polygon from './shapes/Polygon'
 import Star from './shapes/Star'
 import RoundedRect from './shapes/RoundedRect'
 import { ContextMenu } from './ContextMenu'
+import { AlignmentToolbar } from './AlignmentToolbar'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
@@ -113,6 +114,10 @@ export default function Canvas({
     bringForward,
     sendBackward,
     sortShapesByZIndex,
+    alignSelected,
+    distributeSelectedHorizontally,
+    distributeSelectedVertically,
+    centerSelectedInCanvas,
   } = useCanvas({
     canvasId: CANVAS_ID,
     userId: user?.uid || '',
@@ -607,9 +612,20 @@ export default function Canvas({
   }, [])
 
   return (
-    <div className="w-full h-screen bg-gray-100 overflow-hidden relative">
-      <Stage
-        ref={stageRef}
+    <div className="w-full h-screen bg-gray-100 overflow-hidden relative flex flex-col">
+      {/* Alignment Toolbar (PR-18) - appears when 2+ shapes selected */}
+      <AlignmentToolbar
+        visible={selectedIds.size >= 2}
+        selectedCount={selectedIds.size}
+        onAlign={(type) => alignSelected(type)}
+        onDistributeHorizontally={() => distributeSelectedHorizontally()}
+        onDistributeVertically={() => distributeSelectedVertically()}
+        onCenterInCanvas={() => centerSelectedInCanvas(containerWidth, containerHeight)}
+      />
+
+      <div className="flex-1 relative">
+        <Stage
+          ref={stageRef}
         width={containerWidth}
         height={containerHeight}
         draggable={selectedTool === 'select' && !isDrawingSelection}
@@ -849,24 +865,30 @@ export default function Canvas({
         recentColors={getRecentColors()}
       />
 
-      {/* Context Menu (PR-17) */}
-      <ContextMenu
-        x={contextMenu.x}
-        y={contextMenu.y}
-        visible={contextMenu.visible}
-        onClose={closeContextMenu}
-        hasSelection={selectedIds.size > 0}
-        canCopy={selectedIds.size > 0}
-        canPaste={true}
-        onBringToFront={() => bringToFront()}
-        onBringForward={() => bringForward()}
-        onSendBackward={() => sendBackward()}
-        onSendToBack={() => sendToBack()}
-        onCopy={copySelected}
-        onPaste={paste}
-        onDuplicate={duplicateSelected}
-        onDelete={bulkDelete}
-      />
+        {/* Context Menu (PR-17, PR-18) */}
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          visible={contextMenu.visible}
+          onClose={closeContextMenu}
+          hasSelection={selectedIds.size > 0}
+          canCopy={selectedIds.size > 0}
+          canPaste={true}
+          selectedCount={selectedIds.size}
+          onBringToFront={() => bringToFront()}
+          onBringForward={() => bringForward()}
+          onSendBackward={() => sendBackward()}
+          onSendToBack={() => sendToBack()}
+          onCopy={copySelected}
+          onPaste={paste}
+          onDuplicate={duplicateSelected}
+          onDelete={bulkDelete}
+          onAlign={(type) => alignSelected(type)}
+          onDistributeHorizontally={() => distributeSelectedHorizontally()}
+          onDistributeVertically={() => distributeSelectedVertically()}
+          onCenterInCanvas={() => centerSelectedInCanvas(containerWidth, containerHeight)}
+        />
+      </div>
     </div>
   )
 }

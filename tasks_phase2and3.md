@@ -1027,7 +1027,7 @@ canvas/objects/{id}: {
 ### Subtasks
 
 #### 18.1 Create Alignment Service
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/services/alignment.ts` (alignment calculation functions)
@@ -1044,7 +1044,7 @@ canvas/objects/{id}: {
 - `centerInCanvas(shapes, canvasWidth, canvasHeight)` - Center in viewport
 
 #### 18.2 Update Canvas Hook for Alignment
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (add alignment wrapper functions)
@@ -1059,7 +1059,7 @@ canvas/objects/{id}: {
 - Create BulkCommand for undo/redo
 
 #### 18.3 Create Alignment Toolbar Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/AlignmentToolbar.tsx` (alignment button group)
@@ -1083,10 +1083,10 @@ canvas/objects/{id}: {
 - Visual feedback on hover
 
 #### 18.4 Add Alignment Toolbar to Canvas Page
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
-- `src/pages/CanvasPage.tsx` (add alignment toolbar above canvas)
+- `src/components/Canvas.tsx` (add alignment toolbar above canvas)
 
 **Layout:**
 ```
@@ -1111,7 +1111,7 @@ canvas/objects/{id}: {
 - Keeps total shortcuts to essential 9 commands
 
 #### 18.6 Add Alignment to Context Menu
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/ContextMenu.tsx` (add alignment submenu)
@@ -1136,7 +1136,7 @@ Bring to Front
 ```
 
 #### 18.7 Add Alignment Commands to History
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/commands/AlignmentCommand.ts` (undo/redo alignment)
@@ -1148,10 +1148,10 @@ Bring to Front
 - Handle multi-shape operations
 
 #### 18.8 Visual Guides During Alignment
-- [ ] **Task Complete**
+- [x] **Task Skipped** (DECISION: Not needed for MVP)
 
 **Files Created:**
-- `src/components/AlignmentGuides.tsx` (temporary visual guides)
+- None (feature skipped)
 
 **Requirements:**
 - Show dashed lines during alignment preview (optional)
@@ -1160,10 +1160,10 @@ Bring to Front
 - Blue line = vertical alignment
 
 #### 18.9 Smart Guides (Snap to Align)
-- [ ] **Task Complete**
+- [x] **Task Skipped** (DECISION: Not needed for MVP)
 
 **Files Modified:**
-- `src/components/Canvas.tsx` (add snap-to-align during drag)
+- None (feature skipped)
 
 **Requirements:**
 - While dragging shape, show guide lines when edges align with other shapes
@@ -1172,7 +1172,7 @@ Bring to Front
 - Works for left/center/right/top/middle/bottom edges
 
 #### 18.10 Unit Tests for Alignment Logic
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/unit/services/alignment.test.ts`
@@ -1189,7 +1189,7 @@ Bring to Front
 - `centerInCanvas()` centers selection in viewport
 
 #### 18.11 Integration Tests for Alignment UI
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/alignment.test.tsx`
