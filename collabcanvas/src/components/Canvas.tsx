@@ -44,7 +44,7 @@ export default function Canvas({
   // Hooks
   const { user } = useAuth()
   const { otherUsers, updateCursorPosition, updateSelection } = usePresence({
-    userId: user?.uid || 'anonymous',
+    userId: user?.uid || '',
     userName: user?.displayName || user?.email || 'Anonymous',
     canvasId: CANVAS_ID,
   })
@@ -58,7 +58,7 @@ export default function Canvas({
     setSelection,
   } = useCanvas({
     canvasId: CANVAS_ID,
-    userId: user?.uid || 'anonymous',
+    userId: user?.uid || '',
     enableSync: true,
   })
 

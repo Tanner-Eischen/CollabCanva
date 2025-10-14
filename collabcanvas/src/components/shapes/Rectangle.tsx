@@ -17,7 +17,7 @@ interface RectangleProps {
  * Fixed 100x100px, blue color (#3B82F6), NO transformer/resize
  */
 export default function Rectangle({
-  id,
+  id: _id,
   x,
   y,
   isSelected,

@@ -20,7 +20,7 @@ interface TextShapeProps {
  * Blue color (#3B82F6), auto-sized to content, NO editing after creation
  */
 export default function TextShape({
-  id,
+  id: _id,
   x,
   y,
   text,

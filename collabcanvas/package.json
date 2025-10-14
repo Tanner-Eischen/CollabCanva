@@ -10,9 +10,11 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "deploy": "npm run build && firebase deploy --only hosting"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
     "firebase": "^12.4.0",
     "konva": "^10.0.2",
     "lodash-es": "^4.17.21",

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { ref, set, onValue, onDisconnect, off } from 'firebase/database'
 import { db } from '../services/firebase'
-import { Presence, PresenceData } from '../types/firebase'
+import type { Presence, PresenceData } from '../types/firebase'
 import { throttle } from '../utils/throttle'
 
 // Predefined color palette for user cursors and selections
@@ -48,11 +48,10 @@ interface UsePresenceReturn {
 export function usePresence({
   userId,
   userName,
-  canvasId,
+  canvasId: _canvasId,
 }: UsePresenceOptions): UsePresenceReturn {
   const [otherUsers, setOtherUsers] = useState<Map<string, Presence>>(new Map())
-  const userColor = useRef<string>(getUserColor(userId))
-  const presenceRef = useRef(ref(db, `presence/${userId}`))
+  const userColor = useRef<string>(getUserColor(userId || 'default'))
   const currentPresence = useRef<Presence>({
     n: userName,
     cl: userColor.current,
@@ -65,8 +64,12 @@ export function usePresence({
    */
   const updateCursorPosition = useCallback(
     throttle((x: number, y: number) => {
+      // Don't update if user is not authenticated
+      if (!userId) return
+      
+      const presenceRef = ref(db, `presence/${userId}`)
       currentPresence.current.c = [x, y]
-      set(presenceRef.current, currentPresence.current).catch((error) => {
+      set(presenceRef, currentPresence.current).catch((error) => {
         console.error('Failed to update cursor position:', error)
       })
     }, 50), // 20Hz = 50ms between updates
@@ -78,8 +81,12 @@ export function usePresence({
    */
   const updateSelection = useCallback(
     (objectId: string | null) => {
+      // Don't update if user is not authenticated
+      if (!userId) return
+      
+      const presenceRef = ref(db, `presence/${userId}`)
       currentPresence.current.sel = objectId
-      set(presenceRef.current, currentPresence.current).catch((error) => {
+      set(presenceRef, currentPresence.current).catch((error) => {
         console.error('Failed to update selection:', error)
       })
     },
@@ -90,6 +97,13 @@ export function usePresence({
    * Initialize presence and listen to other users
    */
   useEffect(() => {
+    // Don't initialize presence if userId is empty (user not authenticated)
+    if (!userId) {
+      return
+    }
+
+    const presenceRef = ref(db, `presence/${userId}`)
+
     // Set initial presence
     const initialPresence: Presence = {
       n: userName,
@@ -98,12 +112,12 @@ export function usePresence({
       sel: null,
     }
     currentPresence.current = initialPresence
-    set(presenceRef.current, initialPresence).catch((error) => {
+    set(presenceRef, initialPresence).catch((error) => {
       console.error('Failed to set initial presence:', error)
     })
 
     // Clean up presence on disconnect
-    const disconnectRef = onDisconnect(presenceRef.current)
+    const disconnectRef = onDisconnect(presenceRef)
     disconnectRef.remove().catch((error) => {
       console.error('Failed to set onDisconnect:', error)
     })
@@ -137,7 +151,7 @@ export function usePresence({
     // Cleanup on unmount
     return () => {
       // Remove presence data
-      set(presenceRef.current, null).catch((error) => {
+      set(presenceRef, null).catch((error) => {
         console.error('Failed to remove presence:', error)
       })
       // Unsubscribe from presence updates

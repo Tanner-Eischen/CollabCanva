@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { Shape, ShapeType } from '../types/canvas'
+import type { Shape } from '../types/canvas'
 import { DEFAULT_CANVAS_CONFIG } from '../types/canvas'
 import {
   syncCreateShape,
@@ -34,6 +34,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const syncEnabled = options?.enableSync ?? true
   const canvasId = options?.canvasId ?? 'default-canvas'
+  const userId = options?.userId ?? ''
   
   // Track locally created shapes to avoid duplicate onCreate from Firebase
   const localShapesRef = useRef(new Set<string>())
@@ -60,8 +61,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       // Mark as locally created
       localShapesRef.current.add(id)
       
-      // Sync to Firebase
-      if (syncEnabled) {
+      // Sync to Firebase (only if user is authenticated)
+      if (syncEnabled && userId) {
         syncCreateShape(canvasId, id, newShape).catch((error) => {
           console.error('Failed to sync shape creation:', error)
         })
@@ -69,7 +70,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       
       return id
     },
-    [syncEnabled, canvasId]
+    [syncEnabled, canvasId, userId]
   )
 
   /**
@@ -108,8 +109,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       // Mark as locally created
       localShapesRef.current.add(id)
       
-      // Sync to Firebase
-      if (syncEnabled) {
+      // Sync to Firebase (only if user is authenticated)
+      if (syncEnabled && userId) {
         syncCreateShape(canvasId, id, newShape).catch((error) => {
           console.error('Failed to sync text creation:', error)
         })
@@ -117,7 +118,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       
       return id
     },
-    [syncEnabled, canvasId]
+    [syncEnabled, canvasId, userId]
   )
 
   /**
@@ -132,14 +133,14 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         )
       )
       
-      // Sync to Firebase (only position for MVP)
-      if (syncEnabled && (updates.x !== undefined || updates.y !== undefined)) {
+      // Sync to Firebase (only position for MVP, and only if user is authenticated)
+      if (syncEnabled && userId && (updates.x !== undefined || updates.y !== undefined)) {
         syncUpdateShape(canvasId, id, updates).catch((error) => {
           console.error('Failed to sync shape update:', error)
         })
       }
     },
-    [syncEnabled, canvasId]
+    [syncEnabled, canvasId, userId]
   )
 
   /**
@@ -154,14 +155,14 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       // Remove from local shapes tracking
       localShapesRef.current.delete(id)
       
-      // Sync to Firebase
-      if (syncEnabled) {
+      // Sync to Firebase (only if user is authenticated)
+      if (syncEnabled && userId) {
         syncDeleteShape(canvasId, id).catch((error) => {
           console.error('Failed to sync shape deletion:', error)
         })
       }
     },
-    [syncEnabled, canvasId]
+    [syncEnabled, canvasId, userId]
   )
 
   /**
@@ -176,7 +177,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
    * Subscribe to Firebase updates from other users
    */
   useEffect(() => {
-    if (!syncEnabled) return
+    // Don't subscribe if sync is disabled or user is not authenticated
+    if (!syncEnabled || !userId) return
 
     const unsubscribe = subscribeToCanvas(canvasId, {
       onCreate: (shape) => {
@@ -208,7 +210,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     return () => {
       unsubscribe()
     }
-  }, [syncEnabled, canvasId])
+  }, [syncEnabled, canvasId, userId])
 
   return {
     shapes,

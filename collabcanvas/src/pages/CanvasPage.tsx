@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import Canvas from '../components/Canvas'
 import PresenceBar from '../components/PresenceBar'
 import Toolbar from '../components/Toolbar'
@@ -17,8 +17,10 @@ export default function CanvasPage() {
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null)
 
   const { user } = useAuth()
+  
+  // Only initialize presence when user is authenticated
   const { otherUsers } = usePresence({
-    userId: user?.uid || 'anonymous',
+    userId: user?.uid || '',
     userName: user?.displayName || user?.email || 'Anonymous',
     canvasId: CANVAS_ID,
   })

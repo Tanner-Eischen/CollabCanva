@@ -1,5 +1,5 @@
 import { logOut } from '../services/auth'
-import { Presence } from '../types/firebase'
+import type { Presence } from '../types/firebase'
 
 interface PresenceBarProps {
   currentUser: {

@@ -3,10 +3,10 @@ import {
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
-  UserCredential,
 } from 'firebase/auth'
+import type { UserCredential } from 'firebase/auth'
 import { auth } from './firebase'
-import { User } from '../types/firebase'
+import type { User } from '../types/firebase'
 
 /**
  * Sign up a new user with email, password, and display name

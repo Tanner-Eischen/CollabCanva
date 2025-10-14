@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth'
+import { onAuthStateChanged } from 'firebase/auth'
+import type { User as FirebaseUser } from 'firebase/auth'
 import { auth } from '../services/firebase'
-import { User } from '../types/firebase'
+import type { User } from '../types/firebase'
 
 interface UseAuthReturn {
   user: User | null

@@ -17,7 +17,7 @@ interface CircleProps {
  * Fixed 100x100px diameter, blue color (#3B82F6), NO transformer/resize
  */
 export default function Circle({
-  id,
+  id: _id,
   x,
   y,
   isSelected,
