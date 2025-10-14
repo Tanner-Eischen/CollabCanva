@@ -29,7 +29,6 @@ import { AlignmentToolbar } from './AlignmentToolbar'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
-const CANVAS_ID = import.meta.env.VITE_CANVAS_ID || 'default-canvas'
 
 interface CanvasProps {
   selectedTool: ToolType
@@ -37,6 +36,8 @@ interface CanvasProps {
   deleteTriggered?: number
   // PR-14: Expose undo/redo state to parent
   onUndoRedoChange?: (canUndo: boolean, canRedo: boolean, undo: () => void, redo: () => void) => void
+  // PR-22: Dynamic canvas ID
+  canvasId?: string
 }
 
 export default function Canvas({
@@ -44,6 +45,7 @@ export default function Canvas({
   onShapeSelect,
   deleteTriggered,
   onUndoRedoChange,
+  canvasId = 'default-canvas',
 }: CanvasProps) {
   const stageRef = useRef<Konva.Stage>(null)
   const [viewport, setViewport] = useState<ViewportTransform>({
@@ -91,7 +93,7 @@ export default function Canvas({
   const { otherUsers, updateCursorPosition, updateSelection } = usePresence({
     userId: user?.uid || '',
     userName: user?.displayName || user?.email || 'Anonymous',
-    canvasId: CANVAS_ID,
+    canvasId: canvasId,
   })
   const {
     shapes,
@@ -131,7 +133,7 @@ export default function Canvas({
     distributeSelectedVertically,
     centerSelectedInCanvas,
   } = useCanvas({
-    canvasId: CANVAS_ID,
+    canvasId: canvasId,
     userId: user?.uid || '',
     enableSync: true,
   })
