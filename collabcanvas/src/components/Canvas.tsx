@@ -6,9 +6,13 @@ import {
   DEFAULT_CANVAS_CONFIG,
   DEFAULT_CANVAS_BOUNDS,
 } from '../types/canvas'
+import { useAuth } from '../hooks/useAuth'
+import { usePresence } from '../hooks/usePresence'
+import Cursor from './Cursor'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
+const CANVAS_ID = import.meta.env.VITE_CANVAS_ID || 'default-canvas'
 
 export default function Canvas() {
   const stageRef = useRef<Konva.Stage>(null)
@@ -16,6 +20,14 @@ export default function Canvas() {
     x: 0,
     y: 0,
     scale: 1,
+  })
+
+  // Auth and presence hooks
+  const { user } = useAuth()
+  const { otherUsers, updateCursorPosition } = usePresence({
+    userId: user?.uid || 'anonymous',
+    userName: user?.displayName || user?.email || 'Anonymous',
+    canvasId: CANVAS_ID,
   })
 
   // Calculate container dimensions (full viewport)
@@ -101,6 +113,27 @@ export default function Canvas() {
   }, [])
 
   /**
+   * Handle mouse move for cursor position tracking
+   */
+  const handleMouseMove = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const stage = stageRef.current
+      if (!stage) return
+
+      const pointer = stage.getPointerPosition()
+      if (!pointer) return
+
+      // Convert screen coordinates to canvas coordinates
+      const canvasX = (pointer.x - viewport.x) / viewport.scale
+      const canvasY = (pointer.y - viewport.y) / viewport.scale
+
+      // Update cursor position (throttled to 20Hz in usePresence)
+      updateCursorPosition(canvasX, canvasY)
+    },
+    [viewport, updateCursorPosition]
+  )
+
+  /**
    * Generate grid lines for visual reference
    */
   const generateGridLines = useCallback(() => {
@@ -145,6 +178,7 @@ export default function Canvas() {
         draggable
         onWheel={handleWheel}
         onDragEnd={handleDragEnd}
+        onMouseMove={handleMouseMove}
         x={viewport.x}
         y={viewport.y}
         scaleX={viewport.scale}
@@ -160,9 +194,17 @@ export default function Canvas() {
           {/* Shapes will be added here in PR-6 */}
         </Layer>
 
-        {/* Cursors Layer - will be added in PR-4 */}
+        {/* Cursors Layer - render other users' cursors */}
         <Layer listening={false}>
-          {/* Other users' cursors will be rendered here */}
+          {Array.from(otherUsers.entries()).map(([userId, presence]) => (
+            <Cursor
+              key={userId}
+              x={presence.c[0]}
+              y={presence.c[1]}
+              userName={presence.n}
+              color={presence.cl}
+            />
+          ))}
         </Layer>
       </Stage>
     </div>
