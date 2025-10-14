@@ -4,35 +4,35 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { loadRecentColors, saveRecentColors } from '../../../src/services/colorStorage'
 
 // Mock localStorage
-const localStorageMock = (() => {
-  let store: Record<string, string> = {}
+const localStorageMock = {
+  store: {} as Record<string, string>,
+  getItem(key: string) {
+    return this.store[key] || null
+  },
+  setItem(key: string, value: string) {
+    this.store[key] = value.toString()
+  },
+  removeItem(key: string) {
+    delete this.store[key]
+  },
+  clear() {
+    this.store = {}
+  },
+}
 
-  return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
-      store[key] = value.toString()
-    },
-    removeItem: (key: string) => {
-      delete store[key]
-    },
-    clear: () => {
-      store = {}
-    },
-  }
-})()
-
-Object.defineProperty(window, 'localStorage', {
+Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
+  writable: true,
 })
 
 describe('Color Storage Service (PR-15)', () => {
   beforeEach(() => {
-    localStorageMock.clear()
+    localStorageMock.store = {}
     vi.clearAllMocks()
   })
 
   afterEach(() => {
-    localStorageMock.clear()
+    localStorageMock.store = {}
   })
 
   describe('loadRecentColors', () => {
@@ -43,21 +43,21 @@ describe('Color Storage Service (PR-15)', () => {
 
     it('should load colors from localStorage', () => {
       const testColors = ['#FF0000FF', '#00FF00FF', '#0000FFFF']
-      localStorageMock.setItem('collabcanvas-recent-colors', JSON.stringify(testColors))
+      localStorageMock.store['collabcanvas_recent_colors'] = JSON.stringify(testColors)
 
       const colors = loadRecentColors()
       expect(colors).toEqual(testColors)
     })
 
     it('should handle invalid JSON in localStorage', () => {
-      localStorageMock.setItem('collabcanvas-recent-colors', 'invalid json')
+      localStorageMock.store['collabcanvas_recent_colors'] = 'invalid json'
 
       const colors = loadRecentColors()
       expect(colors).toEqual([])
     })
 
     it('should handle non-array data in localStorage', () => {
-      localStorageMock.setItem('collabcanvas-recent-colors', JSON.stringify({ color: 'red' }))
+      localStorageMock.store['collabcanvas_recent_colors'] = JSON.stringify({ color: 'red' })
 
       const colors = loadRecentColors()
       expect(colors).toEqual([])
@@ -69,14 +69,14 @@ describe('Color Storage Service (PR-15)', () => {
       const testColors = ['#FF0000FF', '#00FF00FF']
       saveRecentColors(testColors)
 
-      const stored = localStorageMock.getItem('collabcanvas-recent-colors')
+      const stored = localStorageMock.store['collabcanvas_recent_colors']
       expect(stored).toBe(JSON.stringify(testColors))
     })
 
     it('should save empty array', () => {
       saveRecentColors([])
 
-      const stored = localStorageMock.getItem('collabcanvas-recent-colors')
+      const stored = localStorageMock.store['collabcanvas_recent_colors']
       expect(stored).toBe(JSON.stringify([]))
     })
 
@@ -87,7 +87,7 @@ describe('Color Storage Service (PR-15)', () => {
       saveRecentColors(oldColors)
       saveRecentColors(newColors)
 
-      const stored = localStorageMock.getItem('collabcanvas-recent-colors')
+      const stored = localStorageMock.store['collabcanvas_recent_colors']
       expect(stored).toBe(JSON.stringify(newColors))
     })
 
@@ -101,11 +101,11 @@ describe('Color Storage Service (PR-15)', () => {
         '#00FFFFFF', // 6th color should be dropped
       ]
       
-      // The function itself doesn't enforce the limit, but tests the saved data
+      // The function enforces the limit (max 5 colors)
       saveRecentColors(colors)
 
-      const stored = JSON.parse(localStorageMock.getItem('collabcanvas-recent-colors') || '[]')
-      expect(stored).toEqual(colors) // Function saves all, useCanvas enforces limit
+      const stored = JSON.parse(localStorageMock.store['collabcanvas_recent_colors'] || '[]')
+      expect(stored).toEqual(colors.slice(0, 5)) // Only first 5 are saved
     })
   })
 

@@ -29,6 +29,49 @@ describe('Copy/Paste/Duplicate Integration', () => {
   let mockShapes: any[]
   let mockSelectedIds: Set<string>
 
+  // Helper to create complete mock return value
+  const createMockCanvas = (overrides: Partial<ReturnType<typeof useCanvasHook.useCanvas>> = {}) => ({
+    shapes: mockShapes,
+    selectedId: 'shape-1',
+    selectedIds: mockSelectedIds,
+    addShape: vi.fn(),
+    addText: vi.fn(),
+    updateShape: vi.fn(),
+    deleteShape: vi.fn(),
+    setSelection: vi.fn(),
+    toggleSelection: vi.fn(),
+    selectMultiple: vi.fn(),
+    clearSelection: vi.fn(),
+    selectAll: vi.fn(),
+    getSelectedShapes: vi.fn(() => mockShapes.filter(s => mockSelectedIds.has(s.id))),
+    bulkMove: vi.fn(),
+    bulkDelete: vi.fn(),
+    copySelected: mockCopySelected,
+    paste: mockPaste,
+    duplicateSelected: mockDuplicateSelected,
+    undo: vi.fn(),
+    redo: vi.fn(),
+    canUndo: false,
+    canRedo: false,
+    updateColors: vi.fn(),
+    getRecentColors: vi.fn(() => []),
+    addRecentColor: vi.fn(),
+    addLine: vi.fn(),
+    addPolygon: vi.fn(),
+    addStar: vi.fn(),
+    addRoundedRect: vi.fn(),
+    bringToFront: vi.fn(),
+    sendToBack: vi.fn(),
+    bringForward: vi.fn(),
+    sendBackward: vi.fn(),
+    sortShapesByZIndex: vi.fn(() => mockShapes),
+    alignSelected: vi.fn(),
+    distributeSelectedHorizontally: vi.fn(),
+    distributeSelectedVertically: vi.fn(),
+    centerSelectedInCanvas: vi.fn(),
+    ...overrides,
+  } as any)
+
   beforeEach(() => {
     vi.clearAllMocks()
 
@@ -77,26 +120,7 @@ describe('Copy/Paste/Duplicate Integration', () => {
     mockSelectedIds = new Set(['shape-1'])
 
     // Mock useCanvas
-    vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
-      shapes: mockShapes,
-      selectedId: 'shape-1',
-      selectedIds: mockSelectedIds,
-      addShape: vi.fn(),
-      addText: vi.fn(),
-      updateShape: vi.fn(),
-      deleteShape: vi.fn(),
-      setSelection: vi.fn(),
-      toggleSelection: vi.fn(),
-      selectMultiple: vi.fn(),
-      clearSelection: vi.fn(),
-      selectAll: vi.fn(),
-      getSelectedShapes: vi.fn(() => mockShapes.filter(s => mockSelectedIds.has(s.id))),
-      bulkMove: vi.fn(),
-      bulkDelete: vi.fn(),
-      copySelected: mockCopySelected,
-      paste: mockPaste,
-      duplicateSelected: mockDuplicateSelected,
-    })
+    vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas())
   })
 
   describe('Keyboard Shortcuts', () => {
@@ -169,26 +193,11 @@ describe('Copy/Paste/Duplicate Integration', () => {
     it('should not call copySelected when no shapes are selected', async () => {
       // Mock empty selection
       mockSelectedIds = new Set()
-      vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
-        shapes: mockShapes,
+      vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas({
         selectedId: null,
         selectedIds: mockSelectedIds,
-        addShape: vi.fn(),
-        addText: vi.fn(),
-        updateShape: vi.fn(),
-        deleteShape: vi.fn(),
-        setSelection: vi.fn(),
-        toggleSelection: vi.fn(),
-        selectMultiple: vi.fn(),
-        clearSelection: vi.fn(),
-        selectAll: vi.fn(),
         getSelectedShapes: vi.fn(() => []),
-        bulkMove: vi.fn(),
-        bulkDelete: vi.fn(),
-        copySelected: mockCopySelected,
-        paste: mockPaste,
-        duplicateSelected: mockDuplicateSelected,
-      })
+      }))
 
       render(<CanvasPage />)
 
@@ -204,26 +213,11 @@ describe('Copy/Paste/Duplicate Integration', () => {
     it('should allow paste even without selection', async () => {
       // Mock empty selection
       mockSelectedIds = new Set()
-      vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
-        shapes: mockShapes,
+      vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas({
         selectedId: null,
         selectedIds: mockSelectedIds,
-        addShape: vi.fn(),
-        addText: vi.fn(),
-        updateShape: vi.fn(),
-        deleteShape: vi.fn(),
-        setSelection: vi.fn(),
-        toggleSelection: vi.fn(),
-        selectMultiple: vi.fn(),
-        clearSelection: vi.fn(),
-        selectAll: vi.fn(),
         getSelectedShapes: vi.fn(() => []),
-        bulkMove: vi.fn(),
-        bulkDelete: vi.fn(),
-        copySelected: mockCopySelected,
-        paste: mockPaste,
-        duplicateSelected: mockDuplicateSelected,
-      })
+      }))
 
       render(<CanvasPage />)
 
@@ -242,22 +236,10 @@ describe('Copy/Paste/Duplicate Integration', () => {
       let currentShapes = [...mockShapes]
 
       // Mock useCanvas with copy/paste behavior
-      vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
+      vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas({
         shapes: currentShapes,
-        selectedId: 'shape-1',
-        selectedIds: new Set(['shape-1']),
-        addShape: vi.fn(),
-        addText: vi.fn(),
-        updateShape: vi.fn(),
-        deleteShape: vi.fn(),
-        setSelection: vi.fn(),
-        toggleSelection: vi.fn(),
         selectMultiple: mockSelectMultiple,
-        clearSelection: vi.fn(),
-        selectAll: vi.fn(),
         getSelectedShapes: vi.fn(() => [mockShapes[0]]),
-        bulkMove: vi.fn(),
-        bulkDelete: vi.fn(),
         copySelected: () => {
           // Simulated copy
         },
@@ -277,8 +259,7 @@ describe('Copy/Paste/Duplicate Integration', () => {
           // Auto-select pasted shape
           mockSelectMultiple(['shape-3'])
         },
-        duplicateSelected: vi.fn(),
-      })
+      }))
 
       render(<CanvasPage />)
 
@@ -298,28 +279,16 @@ describe('Copy/Paste/Duplicate Integration', () => {
       mockSelectedIds = new Set(['shape-1', 'shape-2'])
       const mockSelectMultiple = vi.fn()
 
-      vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
-        shapes: mockShapes,
+      vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas({
         selectedId: 'shape-2',
         selectedIds: mockSelectedIds,
-        addShape: vi.fn(),
-        addText: vi.fn(),
-        updateShape: vi.fn(),
-        deleteShape: vi.fn(),
-        setSelection: vi.fn(),
-        toggleSelection: vi.fn(),
         selectMultiple: mockSelectMultiple,
-        clearSelection: vi.fn(),
-        selectAll: vi.fn(),
         getSelectedShapes: vi.fn(() => mockShapes),
-        bulkMove: vi.fn(),
-        bulkDelete: vi.fn(),
         copySelected: vi.fn(),
         paste: vi.fn(() => {
           mockSelectMultiple(['shape-3', 'shape-4'])
         }),
-        duplicateSelected: vi.fn(),
-      })
+      }))
 
       render(<CanvasPage />)
 
@@ -339,28 +308,16 @@ describe('Copy/Paste/Duplicate Integration', () => {
     it('should duplicate selected shape with offset', async () => {
       const mockSelectMultiple = vi.fn()
 
-      vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
-        shapes: mockShapes,
-        selectedId: 'shape-1',
+      vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas({
         selectedIds: new Set(['shape-1']),
-        addShape: vi.fn(),
-        addText: vi.fn(),
-        updateShape: vi.fn(),
-        deleteShape: vi.fn(),
-        setSelection: vi.fn(),
-        toggleSelection: vi.fn(),
         selectMultiple: mockSelectMultiple,
-        clearSelection: vi.fn(),
-        selectAll: vi.fn(),
         getSelectedShapes: vi.fn(() => [mockShapes[0]]),
-        bulkMove: vi.fn(),
-        bulkDelete: vi.fn(),
         copySelected: vi.fn(),
         paste: vi.fn(),
         duplicateSelected: () => {
           mockSelectMultiple(['shape-3'])
         },
-      })
+      }))
 
       render(<CanvasPage />)
 
@@ -385,26 +342,11 @@ describe('Copy/Paste/Duplicate Integration', () => {
         rotation: 45,
       }
 
-      vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
+      vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas({
         shapes: [shapeWithRotation],
-        selectedId: 'shape-1',
         selectedIds: new Set(['shape-1']),
-        addShape: vi.fn(),
-        addText: vi.fn(),
-        updateShape: vi.fn(),
-        deleteShape: vi.fn(),
-        setSelection: vi.fn(),
-        toggleSelection: vi.fn(),
-        selectMultiple: vi.fn(),
-        clearSelection: vi.fn(),
-        selectAll: vi.fn(),
         getSelectedShapes: vi.fn(() => [shapeWithRotation]),
-        bulkMove: vi.fn(),
-        bulkDelete: vi.fn(),
-        copySelected: mockCopySelected,
-        paste: mockPaste,
-        duplicateSelected: mockDuplicateSelected,
-      })
+      }))
 
       render(<CanvasPage />)
 
@@ -427,26 +369,12 @@ describe('Copy/Paste/Duplicate Integration', () => {
         text: 'Hello World',
       }
 
-      vi.mocked(useCanvasHook.useCanvas).mockReturnValue({
+      vi.mocked(useCanvasHook.useCanvas).mockReturnValue(createMockCanvas({
         shapes: [textShape],
         selectedId: 'text-1',
         selectedIds: new Set(['text-1']),
-        addShape: vi.fn(),
-        addText: vi.fn(),
-        updateShape: vi.fn(),
-        deleteShape: vi.fn(),
-        setSelection: vi.fn(),
-        toggleSelection: vi.fn(),
-        selectMultiple: vi.fn(),
-        clearSelection: vi.fn(),
-        selectAll: vi.fn(),
         getSelectedShapes: vi.fn(() => [textShape]),
-        bulkMove: vi.fn(),
-        bulkDelete: vi.fn(),
-        copySelected: mockCopySelected,
-        paste: mockPaste,
-        duplicateSelected: mockDuplicateSelected,
-      })
+      }))
 
       render(<CanvasPage />)
 

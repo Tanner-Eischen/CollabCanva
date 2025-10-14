@@ -25,7 +25,7 @@ vi.mock('../../../src/services/clipboard', () => ({
 
 vi.mock('../../../src/services/commandHistory', () => ({
   createHistoryManager: vi.fn().mockReturnValue({
-    executeCommand: vi.fn(),
+    executeCommand: vi.fn((command) => command.execute()),
     undo: vi.fn(),
     redo: vi.fn(),
     canUndo: vi.fn().mockReturnValue(false),

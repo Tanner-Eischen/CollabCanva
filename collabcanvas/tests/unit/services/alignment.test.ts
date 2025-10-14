@@ -159,7 +159,7 @@ describe('Alignment Service (PR-18)', () => {
       // Total space: 350 - 0 - 150 = 200
       // Spacing: 200 / 2 = 100
       // Middle shape should be at: 0 + 50 + 100 = 150
-      expect(result['2'].x).toBe(125)
+      expect(result['2'].x).toBe(150)
       // First and last shapes should not move
       expect(result['1']).toBeUndefined()
       expect(result['3']).toBeUndefined()
@@ -189,7 +189,7 @@ describe('Alignment Service (PR-18)', () => {
       // Total space: 350 - 0 - 150 = 200
       // Spacing: 200 / 2 = 100
       // Middle shape should be at: 0 + 50 + 100 = 150
-      expect(result['2'].y).toBe(125)
+      expect(result['2'].y).toBe(150)
       // First and last shapes should not move
       expect(result['1']).toBeUndefined()
       expect(result['3']).toBeUndefined()

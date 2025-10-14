@@ -163,9 +163,9 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
       </div>
 
       {/* Recent Colors */}
-      {recentColors.length > 0 && (
-        <div>
-          <div className="text-xs text-gray-600 mb-2">Recent</div>
+      <div>
+        <div className="text-xs text-gray-600 mb-2">Recent Colors</div>
+        {recentColors.length > 0 ? (
           <div className="flex gap-1">
             {recentColors.map((color, index) => (
               <button
@@ -187,8 +187,9 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({
               />
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="text-xs text-gray-400 italic">No recent colors</div>
+        )}</div>
     </div>
   )
 }

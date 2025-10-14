@@ -387,6 +387,8 @@ describe('Canvas Sync Service', () => {
         width: 100,
         height: 100,
         rotation: 0,
+        fill: '#3B82F6FF',
+        zIndex: expect.any(Number),
       })
     })
 
@@ -424,6 +426,8 @@ describe('Canvas Sync Service', () => {
         width: 100,
         height: 100,
         rotation: 0,
+        fill: '#3B82F6FF',
+        zIndex: expect.any(Number),
       })
     })
 
@@ -463,6 +467,8 @@ describe('Canvas Sync Service', () => {
         height: 30,
         text: 'Hello',
         rotation: 0,
+        fill: '#3B82F6FF',
+        zIndex: expect.any(Number),
       })
     })
   })
