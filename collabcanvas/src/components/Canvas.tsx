@@ -1,38 +1,92 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import { Stage, Layer, Line } from 'react-konva'
 import Konva from 'konva'
+import type { ViewportTransform, ToolType } from '../types/canvas'
 import {
-  ViewportTransform,
   DEFAULT_CANVAS_CONFIG,
   DEFAULT_CANVAS_BOUNDS,
 } from '../types/canvas'
 import { useAuth } from '../hooks/useAuth'
 import { usePresence } from '../hooks/usePresence'
+import { useCanvas } from '../hooks/useCanvas'
 import Cursor from './Cursor'
+import Rectangle from './shapes/Rectangle'
+import Circle from './shapes/Circle'
+import TextShape from './shapes/TextShape'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
 const CANVAS_ID = import.meta.env.VITE_CANVAS_ID || 'default-canvas'
 
-export default function Canvas() {
+interface CanvasProps {
+  selectedTool: ToolType
+  onShapeSelect: (id: string | null) => void
+  deleteTriggered?: number
+}
+
+export default function Canvas({
+  selectedTool,
+  onShapeSelect,
+  deleteTriggered,
+}: CanvasProps) {
   const stageRef = useRef<Konva.Stage>(null)
   const [viewport, setViewport] = useState<ViewportTransform>({
     x: 0,
     y: 0,
     scale: 1,
   })
+  const [textInput, setTextInput] = useState<{
+    x: number
+    y: number
+    value: string
+  } | null>(null)
 
-  // Auth and presence hooks
+  // Hooks
   const { user } = useAuth()
-  const { otherUsers, updateCursorPosition } = usePresence({
+  const { otherUsers, updateCursorPosition, updateSelection } = usePresence({
     userId: user?.uid || 'anonymous',
     userName: user?.displayName || user?.email || 'Anonymous',
     canvasId: CANVAS_ID,
   })
+  const {
+    shapes,
+    selectedId,
+    addShape,
+    addText,
+    updateShape,
+    deleteShape,
+    setSelection,
+  } = useCanvas()
 
   // Calculate container dimensions (full viewport)
   const containerWidth = window.innerWidth
   const containerHeight = window.innerHeight
+
+  // Sync selection to presence
+  useEffect(() => {
+    updateSelection(selectedId)
+    onShapeSelect(selectedId)
+  }, [selectedId, updateSelection, onShapeSelect])
+
+  // Handle delete from parent toolbar
+  useEffect(() => {
+    if (deleteTriggered && deleteTriggered > 0 && selectedId) {
+      deleteShape(selectedId)
+    }
+  }, [deleteTriggered, selectedId, deleteShape])
+
+  // Keyboard shortcut for delete
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        e.preventDefault()
+        deleteShape(selectedId)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedId, deleteShape])
 
   /**
    * Handle mouse wheel for zoom functionality
@@ -86,10 +140,6 @@ export default function Canvas() {
     const newY = stage.y()
     const scale = stage.scaleX()
 
-    // Calculate visible canvas boundaries
-    const visibleWidth = containerWidth / scale
-    const visibleHeight = containerHeight / scale
-
     // Enforce hard boundaries - prevent panning beyond canvas edges
     const clampedX = Math.min(
       0,
@@ -116,7 +166,7 @@ export default function Canvas() {
    * Handle mouse move for cursor position tracking
    */
   const handleMouseMove = useCallback(
-    (e: Konva.KonvaEventObject<MouseEvent>) => {
+    () => {
       const stage = stageRef.current
       if (!stage) return
 
@@ -134,10 +184,91 @@ export default function Canvas() {
   )
 
   /**
+   * Handle canvas click for shape creation
+   */
+  const handleCanvasClick = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      // Only create shapes if clicking on the stage itself (not on shapes)
+      if (e.target !== e.target.getStage()) {
+        return
+      }
+
+      const stage = stageRef.current
+      if (!stage) return
+
+      const pointer = stage.getPointerPosition()
+      if (!pointer) return
+
+      // Convert screen coordinates to canvas coordinates
+      const canvasX = (pointer.x - viewport.x) / viewport.scale
+      const canvasY = (pointer.y - viewport.y) / viewport.scale
+
+      // Handle shape creation based on selected tool
+      if (selectedTool === 'rectangle') {
+        addShape('rectangle', canvasX, canvasY)
+      } else if (selectedTool === 'circle') {
+        addShape('circle', canvasX, canvasY)
+      } else if (selectedTool === 'text') {
+        // Show text input for text tool
+        setTextInput({ x: canvasX, y: canvasY, value: '' })
+      } else if (selectedTool === 'select') {
+        // Clear selection when clicking empty space
+        setSelection(null)
+      }
+    },
+    [selectedTool, viewport, addShape, setSelection]
+  )
+
+  /**
+   * Handle text input submission
+   */
+  const handleTextSubmit = useCallback(() => {
+    if (textInput && textInput.value.trim()) {
+      addText(textInput.value, textInput.x, textInput.y)
+    }
+    setTextInput(null)
+  }, [textInput, addText])
+
+  /**
+   * Handle text input cancel
+   */
+  const handleTextCancel = useCallback(() => {
+    setTextInput(null)
+  }, [])
+
+  /**
+   * Handle shape selection
+   */
+  const handleShapeSelect = useCallback(
+    (shapeId: string) => {
+      setSelection(shapeId)
+    },
+    [setSelection]
+  )
+
+  /**
+   * Handle shape drag end
+   */
+  const handleShapeDragEnd = useCallback(
+    (shapeId: string, x: number, y: number) => {
+      updateShape(shapeId, { x, y })
+    },
+    [updateShape]
+  )
+
+  /**
+   * Get user color for selection indicator
+   */
+  const getUserColor = useCallback(() => {
+    // Return current user's color from presence (will be synced in PR-7)
+    return '#3B82F6' // Default blue for now
+  }, [])
+
+  /**
    * Generate grid lines for visual reference
    */
-  const generateGridLines = useCallback(() => {
-    const lines: JSX.Element[] = []
+  const generateGridLines = useCallback((): React.ReactNode[] => {
+    const lines: React.ReactNode[] = []
     const spacing = CANVAS_CONFIG.gridSpacing
 
     // Vertical lines
@@ -170,15 +301,16 @@ export default function Canvas() {
   }, [])
 
   return (
-    <div className="w-full h-screen bg-gray-100 overflow-hidden">
+    <div className="w-full h-screen bg-gray-100 overflow-hidden relative">
       <Stage
         ref={stageRef}
         width={containerWidth}
         height={containerHeight}
-        draggable
+        draggable={selectedTool === 'select'}
         onWheel={handleWheel}
         onDragEnd={handleDragEnd}
         onMouseMove={handleMouseMove}
+        onClick={handleCanvasClick}
         x={viewport.x}
         y={viewport.y}
         scaleX={viewport.scale}
@@ -189,9 +321,57 @@ export default function Canvas() {
           {generateGridLines()}
         </Layer>
 
-        {/* Shapes Layer - will be populated in future PRs */}
+        {/* Shapes Layer */}
         <Layer>
-          {/* Shapes will be added here in PR-6 */}
+          {shapes.map((shape) => {
+            const isSelected = shape.id === selectedId
+            const userColor = getUserColor()
+
+            if (shape.type === 'rectangle') {
+              return (
+                <Rectangle
+                  key={shape.id}
+                  id={shape.id}
+                  x={shape.x}
+                  y={shape.y}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={() => handleShapeSelect(shape.id)}
+                  onDragEnd={(x, y) => handleShapeDragEnd(shape.id, x, y)}
+                />
+              )
+            } else if (shape.type === 'circle') {
+              return (
+                <Circle
+                  key={shape.id}
+                  id={shape.id}
+                  x={shape.x}
+                  y={shape.y}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={() => handleShapeSelect(shape.id)}
+                  onDragEnd={(x, y) => handleShapeDragEnd(shape.id, x, y)}
+                />
+              )
+            } else if (shape.type === 'text' && shape.text) {
+              return (
+                <TextShape
+                  key={shape.id}
+                  id={shape.id}
+                  x={shape.x}
+                  y={shape.y}
+                  text={shape.text}
+                  width={shape.width}
+                  height={shape.height}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={() => handleShapeSelect(shape.id)}
+                  onDragEnd={(x, y) => handleShapeDragEnd(shape.id, x, y)}
+                />
+              )
+            }
+            return null
+          })}
         </Layer>
 
         {/* Cursors Layer - render other users' cursors */}
@@ -207,6 +387,41 @@ export default function Canvas() {
           ))}
         </Layer>
       </Stage>
+
+      {/* Text Input Overlay */}
+      {textInput && (
+        <div
+          className="absolute bg-white border-2 border-blue-500 rounded shadow-lg p-2"
+          style={{
+            left: textInput.x * viewport.scale + viewport.x,
+            top: textInput.y * viewport.scale + viewport.y,
+            zIndex: 1000,
+          }}
+        >
+          <input
+            type="text"
+            autoFocus
+            value={textInput.value}
+            onChange={(e) =>
+              setTextInput({ ...textInput, value: e.target.value })
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleTextSubmit()
+              } else if (e.key === 'Escape') {
+                handleTextCancel()
+              }
+            }}
+            onBlur={handleTextCancel}
+            placeholder="Type text..."
+            className="px-2 py-1 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
+            style={{ width: '200px' }}
+          />
+          <div className="text-xs text-gray-500 mt-1">
+            Press Enter to create, Esc to cancel
+          </div>
+        </div>
+      )}
     </div>
   )
 }
