@@ -1,4 +1,5 @@
-import { Text, Rect } from 'react-konva'
+import { useRef, useEffect } from 'react'
+import { Text, Transformer } from 'react-konva'
 import type Konva from 'konva'
 import { DEFAULT_CANVAS_CONFIG } from '../../types/canvas'
 
@@ -9,16 +10,19 @@ interface TextShapeProps {
   text: string
   width: number
   height: number
+  rotation?: number
   isSelected: boolean
   selectionColor?: string
   onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void
   onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
+  onTransformEnd: (width: number, height: number, rotation: number, x: number, y: number) => void
 }
 
 /**
  * Text shape component
  * Blue color (#3B82F6), auto-sized to content, NO editing after creation
+ * Resizable (width) but NO rotation
  * Supports multi-select highlighting
  */
 export default function TextShape({
@@ -28,12 +32,25 @@ export default function TextShape({
   text,
   width,
   height,
+  rotation = 0,
   isSelected,
   selectionColor,
   onSelect,
   onDragStart,
   onDragEnd,
+  onTransformEnd,
 }: TextShapeProps) {
+  const shapeRef = useRef<Konva.Text>(null)
+  const trRef = useRef<Konva.Transformer>(null)
+
+  // Attach transformer to shape when selected
+  useEffect(() => {
+    if (isSelected && trRef.current && shapeRef.current) {
+      trRef.current.nodes([shapeRef.current])
+      trRef.current.getLayer()?.batchDraw()
+    }
+  }, [isSelected])
+
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
     const node = e.target
     onDragStart(node.x(), node.y())
@@ -44,10 +61,31 @@ export default function TextShape({
     onDragEnd(node.x(), node.y())
   }
 
+  const handleTransformEnd = () => {
+    const node = shapeRef.current
+    if (!node) return
+
+    const scaleX = node.scaleX()
+
+    // Reset scale to 1 and apply to width instead
+    node.scaleX(1)
+    node.scaleY(1)
+
+    // Text height auto-adjusts based on content and width
+    onTransformEnd(
+      Math.max(50, node.width() * scaleX), // min width 50px
+      node.height(), // auto-calculated by Konva
+      0, // no rotation for text
+      node.x(),
+      node.y()
+    )
+  }
+
   return (
     <>
       {/* Main Text */}
       <Text
+        ref={shapeRef}
         x={x}
         y={y}
         text={text}
@@ -55,26 +93,35 @@ export default function TextShape({
         fontFamily="Arial, sans-serif"
         fill={DEFAULT_CANVAS_CONFIG.defaultColor}
         width={width}
-        height={height}
+        rotation={rotation}
         draggable
         onClick={onSelect}
         onTap={onSelect}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onTransformEnd={handleTransformEnd}
       />
 
-      {/* Selection Indicator (bounding box in user's color) */}
-      {isSelected && selectionColor && (
-        <Rect
-          x={x}
-          y={y}
-          width={width}
-          height={height}
-          stroke={selectionColor}
-          strokeWidth={3}
-          fill="transparent"
-          listening={false}
-          dash={[5, 5]}
+      {/* Transformer for width resize only (no rotation for text) */}
+      {isSelected && (
+        <Transformer
+          ref={trRef}
+          boundBoxFunc={(oldBox, newBox) => {
+            // Limit minimum width
+            if (newBox.width < 50) {
+              return oldBox
+            }
+            // Limit maximum width to canvas bounds
+            if (newBox.width > 5000) {
+              return oldBox
+            }
+            return newBox
+          }}
+          enabledAnchors={[
+            'middle-left',
+            'middle-right',
+          ]}
+          rotateEnabled={false}
         />
       )}
     </>

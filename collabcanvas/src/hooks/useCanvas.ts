@@ -134,7 +134,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   )
 
   /**
-   * Update shape properties (mainly position for MVP)
+   * Update shape properties (position, dimensions, rotation)
    */
   const updateShape = useCallback(
     (id: string, updates: Partial<Shape>): void => {
@@ -145,8 +145,15 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         )
       )
       
-      // Sync to Firebase (only position for MVP, and only if user is authenticated)
-      if (syncEnabled && userId && (updates.x !== undefined || updates.y !== undefined)) {
+      // Sync to Firebase if any syncable properties changed
+      const hasSyncableUpdate = 
+        updates.x !== undefined ||
+        updates.y !== undefined ||
+        updates.width !== undefined ||
+        updates.height !== undefined ||
+        updates.rotation !== undefined
+      
+      if (syncEnabled && userId && hasSyncableUpdate) {
         syncUpdateShape(canvasId, id, updates).catch((error) => {
           console.error('Failed to sync shape update:', error)
         })

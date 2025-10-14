@@ -37,6 +37,7 @@ function decompressShape(id: string, data: CanvasObject): Shape {
     y: data.y,
     width: data.w,
     height: data.h,
+    rotation: data.rot ?? 0, // default to 0 if not present (backward compatibility)
   }
 
   // Add text content for text shapes
@@ -67,7 +68,7 @@ export async function syncCreateShape(
 
 /**
  * Sync shape updates to Firebase
- * Only sends changed properties (position for MVP)
+ * Supports position, dimensions, and rotation updates
  */
 export async function syncUpdateShape(
   canvasId: string,
@@ -86,7 +87,15 @@ export async function syncUpdateShape(
     if (updates.y !== undefined) {
       compressed.y = Math.round(updates.y)
     }
-    // Note: width, height, and type should not change in MVP
+    if (updates.width !== undefined) {
+      compressed.w = Math.round(updates.width)
+    }
+    if (updates.height !== undefined) {
+      compressed.h = Math.round(updates.height)
+    }
+    if (updates.rotation !== undefined) {
+      compressed.rot = Math.round(updates.rotation)
+    }
     
     await update(shapeRef, compressed)
   } catch (error) {
@@ -217,14 +226,21 @@ export function subscribeToCanvas(
       } else {
         // Check if shape was updated
         const prevData = previousShapes.get(id)!
-        if (
+        const hasChanges =
           prevData.x !== shapeData.x ||
-          prevData.y !== shapeData.y
-        ) {
+          prevData.y !== shapeData.y ||
+          prevData.w !== shapeData.w ||
+          prevData.h !== shapeData.h ||
+          prevData.rot !== shapeData.rot
+        
+        if (hasChanges) {
           if (callbacks.onUpdate) {
             const updates: Partial<Shape> = {}
             if (prevData.x !== shapeData.x) updates.x = shapeData.x
             if (prevData.y !== shapeData.y) updates.y = shapeData.y
+            if (prevData.w !== shapeData.w) updates.width = shapeData.w
+            if (prevData.h !== shapeData.h) updates.height = shapeData.h
+            if (prevData.rot !== shapeData.rot) updates.rotation = shapeData.rot ?? 0
             callbacks.onUpdate(id, updates)
           }
         }

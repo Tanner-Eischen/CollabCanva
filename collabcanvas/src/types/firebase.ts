@@ -8,8 +8,9 @@ export interface CanvasObject {
   t: 'r' | 'c' | 't' // type: rectangle, circle, text
   x: number // x position
   y: number // y position
-  w: number // width (fixed 100 for rect/circle)
-  h: number // height (fixed 100 for rect/circle)
+  w: number // width (variable in Phase 2)
+  h: number // height (variable in Phase 2)
+  rot?: number // rotation in degrees (Phase 2)
   txt?: string // text content (text objects only)
   // NOTE: NO color property - all shapes blue #3B82F6
 }
@@ -22,7 +23,7 @@ export interface Presence {
   n: string // name
   cl: string // color (for cursor and selection indicators)
   c: [number, number] // cursor position [x, y]
-  sel: string | null // currently selected object ID (null if none)
+  sel: string[] | null // selected object IDs (array for multi-select, null if none)
 }
 
 /**

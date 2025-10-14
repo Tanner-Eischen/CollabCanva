@@ -436,6 +436,23 @@ export default function Canvas({
   )
 
   /**
+   * Handle shape transform end (resize/rotate)
+   */
+  const handleShapeTransformEnd = useCallback(
+    (
+      shapeId: string,
+      width: number,
+      height: number,
+      rotation: number,
+      x: number,
+      y: number
+    ) => {
+      updateShape(shapeId, { width, height, rotation, x, y })
+    },
+    [updateShape]
+  )
+
+  /**
    * Get user color for selection indicator
    */
   const getUserColor = useCallback(() => {
@@ -514,11 +531,15 @@ export default function Canvas({
                   id={shape.id}
                   x={shape.x}
                   y={shape.y}
+                  width={shape.width}
+                  height={shape.height}
+                  rotation={shape.rotation}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
                   onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
                   onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
                   onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
                 />
               )
             } else if (shape.type === 'circle') {
@@ -528,11 +549,15 @@ export default function Canvas({
                   id={shape.id}
                   x={shape.x}
                   y={shape.y}
+                  width={shape.width}
+                  height={shape.height}
+                  rotation={shape.rotation}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
                   onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
                   onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
                   onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
                 />
               )
             } else if (shape.type === 'text' && shape.text) {
@@ -545,11 +570,13 @@ export default function Canvas({
                   text={shape.text}
                   width={shape.width}
                   height={shape.height}
+                  rotation={shape.rotation}
                   isSelected={isSelected}
                   selectionColor={isSelected ? userColor : undefined}
                   onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
                   onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
                   onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
                 />
               )
             }

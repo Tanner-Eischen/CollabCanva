@@ -31,8 +31,9 @@ export interface Shape {
   type: ShapeType // shape type
   x: number // x position
   y: number // y position
-  width: number // width (fixed 100px in MVP)
-  height: number // height (fixed 100px in MVP)
+  width: number // width (now variable in Phase 2)
+  height: number // height (now variable in Phase 2)
+  rotation?: number // rotation in degrees (0-360) - Phase 2
   text?: string // text content (text shapes only)
   // NOTE: NO color property - all shapes blue #3B82F6 per MVP requirements
 }
