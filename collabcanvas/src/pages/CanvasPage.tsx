@@ -48,6 +48,23 @@ export default function CanvasPage() {
     setDeleteTriggered((prev) => prev + 1)
   }, [])
 
+  // PR-14: Undo/Redo state from Canvas
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const [undoFn, setUndoFn] = useState<(() => void) | null>(null)
+  const [redoFn, setRedoFn] = useState<(() => void) | null>(null)
+
+  // Handle undo/redo state changes from Canvas
+  const handleUndoRedoChange = useCallback(
+    (canUndo: boolean, canRedo: boolean, undo: () => void, redo: () => void) => {
+      setCanUndo(canUndo)
+      setCanRedo(canRedo)
+      setUndoFn(() => undo)
+      setRedoFn(() => redo)
+    },
+    []
+  )
+
   return (
     <div className="w-full h-screen overflow-hidden flex flex-col">
       {/* Top Header - Presence Bar */}
@@ -67,6 +84,10 @@ export default function CanvasPage() {
           onToolSelect={handleToolSelect}
           hasSelection={selectedShapeId !== null}
           onDelete={handleDelete}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={undoFn || undefined}
+          onRedo={redoFn || undefined}
         />
 
         {/* Canvas - offset by toolbar width (80px = w-20) */}
@@ -75,6 +96,7 @@ export default function CanvasPage() {
             selectedTool={selectedTool}
             onShapeSelect={handleShapeSelect}
             deleteTriggered={deleteTriggered}
+            onUndoRedoChange={handleUndoRedoChange}
           />
         </div>
       </div>

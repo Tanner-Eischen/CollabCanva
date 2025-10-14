@@ -28,12 +28,15 @@ interface CanvasProps {
   selectedTool: ToolType
   onShapeSelect: (id: string | null) => void
   deleteTriggered?: number
+  // PR-14: Expose undo/redo state to parent
+  onUndoRedoChange?: (canUndo: boolean, canRedo: boolean, undo: () => void, redo: () => void) => void
 }
 
 export default function Canvas({
   selectedTool,
   onShapeSelect,
   deleteTriggered,
+  onUndoRedoChange,
 }: CanvasProps) {
   const stageRef = useRef<Konva.Stage>(null)
   const [viewport, setViewport] = useState<ViewportTransform>({
@@ -82,6 +85,10 @@ export default function Canvas({
     copySelected,
     paste,
     duplicateSelected,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useCanvas({
     canvasId: CANVAS_ID,
     userId: user?.uid || '',
@@ -98,6 +105,13 @@ export default function Canvas({
     updateSelection(selectionArray.length > 0 ? selectionArray : null)
     onShapeSelect(selectedId) // backward compatibility
   }, [selectedIds, selectedId, updateSelection, onShapeSelect])
+
+  // Expose undo/redo to parent (PR-14)
+  useEffect(() => {
+    if (onUndoRedoChange) {
+      onUndoRedoChange(canUndo, canRedo, undo, redo)
+    }
+  }, [canUndo, canRedo, undo, redo, onUndoRedoChange])
 
   // Handle delete from parent toolbar
   useEffect(() => {
@@ -148,11 +162,23 @@ export default function Canvas({
         e.preventDefault()
         duplicateSelected()
       }
+      
+      // Cmd/Ctrl+Z - undo (PR-14)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'z' && canUndo) {
+        e.preventDefault()
+        undo()
+      }
+      
+      // Cmd/Ctrl+Shift+Z - redo (PR-14)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'z' && canRedo) {
+        e.preventDefault()
+        redo()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, bulkDelete, clearSelection, selectAll, copySelected, paste, duplicateSelected])
+  }, [selectedIds, bulkDelete, clearSelection, selectAll, copySelected, paste, duplicateSelected, undo, redo, canUndo, canRedo])
 
   /**
    * Handle mouse wheel for zoom functionality

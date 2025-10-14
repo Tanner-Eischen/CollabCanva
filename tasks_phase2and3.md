@@ -371,7 +371,7 @@ canvas/objects/{id}: {
 ### Subtasks
 
 #### 14.1 Create Command History System
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/services/commandHistory.ts` (Command interface, HistoryManager class)
@@ -395,7 +395,7 @@ interface Command {
 - `clear()` - Clear both stacks
 
 #### 14.2 Implement Command Classes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/commands/CreateCommand.ts` (undo: delete shape, redo: recreate)
@@ -410,7 +410,7 @@ interface Command {
 - Commands update local state
 
 #### 14.3 Integrate Commands with Canvas Hook
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (use HistoryManager, wrap operations in commands)
@@ -428,7 +428,7 @@ interface Command {
 - `canRedo()` - Returns true if redoStack not empty
 
 #### 14.4 Add Keyboard Shortcuts for Undo/Redo
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Canvas.tsx` (add keyboard event listeners)
@@ -437,8 +437,8 @@ interface Command {
 - Cmd/Ctrl+Z → undo
 - Cmd/Ctrl+Shift+Z → redo
 
-#### 14.5 Add Undo/Redo Buttons to UI (Optional)
-- [ ] **Task Complete**
+#### 14.5 Add Undo/Redo Buttons to UI 
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Toolbar.tsx` (add undo/redo buttons at top)
@@ -449,7 +449,7 @@ interface Command {
 - Show keyboard shortcuts on hover
 
 #### 14.6 Handle Multi-User Conflicts
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/Toast.tsx` (toast notification component)
@@ -464,7 +464,7 @@ interface Command {
 - Toast auto-dismisses after 3 seconds
 
 #### 14.7 Clear History on Certain Actions
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (clear history on page refresh or major state changes)
@@ -474,7 +474,7 @@ interface Command {
 - Limit undo stack to 50 commands (remove oldest)
 
 #### 14.8 Unit Tests for Command History
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/unit/services/commandHistory.test.ts`
@@ -494,7 +494,7 @@ interface Command {
 - MoveCommand undo restores old position
 
 #### 14.9 Integration Tests for Undo/Redo UI
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/undoRedo.test.tsx`

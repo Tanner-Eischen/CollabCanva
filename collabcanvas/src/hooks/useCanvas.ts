@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { Shape } from '../types/canvas'
 import { DEFAULT_CANVAS_CONFIG } from '../types/canvas'
@@ -16,6 +16,9 @@ import {
   pasteShapes as pasteShapesFromClipboard,
   duplicateShapes as duplicateShapesInternal,
 } from '../services/clipboard'
+import { createHistoryManager } from '../services/commandHistory'
+import { CreateCommand } from '../commands/CreateCommand'
+import { DeleteCommand } from '../commands/DeleteCommand'
 
 interface UseCanvasOptions {
   canvasId: string
@@ -44,6 +47,11 @@ interface UseCanvasReturn {
   copySelected: () => void
   paste: () => void
   duplicateSelected: () => void
+  // NEW: Undo/Redo functions (PR-14)
+  undo: () => void
+  redo: () => void
+  canUndo: boolean
+  canRedo: boolean
 }
 
 /**
@@ -60,10 +68,66 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   
   // Track locally created shapes to avoid duplicate onCreate from Firebase
   const localShapesRef = useRef(new Set<string>())
+  
+  // Command history for undo/redo (PR-14)
+  const historyManager = useMemo(() => createHistoryManager(), [])
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+
+  /**
+   * Helper function to add shape to state (used by commands)
+   */
+  const addShapeToState = useCallback((shape: Shape): void => {
+    setShapes((prev) => [...prev, shape])
+    localShapesRef.current.add(shape.id)
+  }, [])
+
+  /**
+   * Helper function to remove shape from state (used by commands)
+   */
+  const removeShapeFromState = useCallback((id: string): void => {
+    setShapes((prev) => prev.filter((shape) => shape.id !== id))
+    localShapesRef.current.delete(id)
+  }, [])
+
+  /**
+   * Helper function to sync shape creation (used by commands)
+   */
+  const syncShapeCreate = useCallback(
+    (shape: Shape): Promise<void> => {
+      if (syncEnabled && userId) {
+        return syncCreateShape(canvasId, shape.id, shape)
+      }
+      return Promise.resolve()
+    },
+    [syncEnabled, userId, canvasId]
+  )
+
+  /**
+   * Helper function to sync shape deletion (used by commands)
+   */
+  const syncShapeDelete = useCallback(
+    (id: string): Promise<void> => {
+      if (syncEnabled && userId) {
+        return syncDeleteShape(canvasId, id)
+      }
+      return Promise.resolve()
+    },
+    [syncEnabled, userId, canvasId]
+  )
+
+  /**
+   * Update undo/redo availability after each command execution
+   */
+  const updateHistoryState = useCallback((): void => {
+    setCanUndo(historyManager.canUndo())
+    setCanRedo(historyManager.canRedo())
+  }, [historyManager])
 
   /**
    * Add a rectangle or circle shape
    * All shapes are fixed 100x100px, blue (#3B82F6)
+   * Uses command pattern for undo/redo (PR-14)
    */
   const addShape = useCallback(
     (type: 'rectangle' | 'circle', x: number, y: number): string => {
@@ -77,28 +141,29 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         height: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
       }
 
-      // Add to local state immediately
-      setShapes((prev) => [...prev, newShape])
+      // Create command for this operation
+      const command = new CreateCommand(
+        newShape,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
       
-      // Mark as locally created
-      localShapesRef.current.add(id)
-      
-      // Sync to Firebase (only if user is authenticated)
-      if (syncEnabled && userId) {
-        syncCreateShape(canvasId, id, newShape).catch((error) => {
-          console.error('Failed to sync shape creation:', error)
-        })
-      }
+      // Execute command and add to history
+      historyManager.executeCommand(command)
+      updateHistoryState()
       
       return id
     },
-    [syncEnabled, canvasId, userId]
+    [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState]
   )
 
   /**
    * Add a text shape
    * Validates that text is not empty (min 1 character)
    * Auto-calculates dimensions based on content
+   * Uses command pattern for undo/redo (PR-14)
    */
   const addText = useCallback(
     (text: string, x: number, y: number): string | null => {
@@ -125,22 +190,22 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         text,
       }
 
-      // Add to local state immediately
-      setShapes((prev) => [...prev, newShape])
+      // Create command for this operation
+      const command = new CreateCommand(
+        newShape,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
       
-      // Mark as locally created
-      localShapesRef.current.add(id)
-      
-      // Sync to Firebase (only if user is authenticated)
-      if (syncEnabled && userId) {
-        syncCreateShape(canvasId, id, newShape).catch((error) => {
-          console.error('Failed to sync text creation:', error)
-        })
-      }
+      // Execute command and add to history
+      historyManager.executeCommand(command)
+      updateHistoryState()
       
       return id
     },
-    [syncEnabled, canvasId, userId]
+    [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState]
   )
 
   /**
@@ -174,31 +239,36 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
 
   /**
    * Delete a shape and clear selection if it was selected
+   * Uses command pattern for undo/redo (PR-14)
    */
   const deleteShape = useCallback(
     (id: string): void => {
-      // Update local state immediately
-      setShapes((prev) => prev.filter((shape) => shape.id !== id))
+      // Find the shape to delete (need it for undo)
+      const shapeToDelete = shapes.find((shape) => shape.id === id)
+      if (!shapeToDelete) return
+
+      // Clear selection if this shape was selected
       setSelectedId((prev) => (prev === id ? null : prev))
-      
-      // Remove from selectedIds if it was selected
       setSelectedIds((prev) => {
         const next = new Set(prev)
         next.delete(id)
         return next
       })
+
+      // Create command for this operation
+      const command = new DeleteCommand(
+        shapeToDelete,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
       
-      // Remove from local shapes tracking
-      localShapesRef.current.delete(id)
-      
-      // Sync to Firebase (only if user is authenticated)
-      if (syncEnabled && userId) {
-        syncDeleteShape(canvasId, id).catch((error) => {
-          console.error('Failed to sync shape deletion:', error)
-        })
-      }
+      // Execute command and add to history
+      historyManager.executeCommand(command)
+      updateHistoryState()
     },
-    [syncEnabled, canvasId, userId]
+    [shapes, historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState]
   )
 
   /**
@@ -401,6 +471,26 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   }, [getSelectedShapes, syncEnabled, canvasId, userId, selectMultiple])
 
   /**
+   * Undo the last command (PR-14)
+   */
+  const undo = useCallback((): void => {
+    historyManager.undo()
+    // Update undo/redo availability
+    setCanUndo(historyManager.canUndo())
+    setCanRedo(historyManager.canRedo())
+  }, [historyManager])
+
+  /**
+   * Redo the last undone command (PR-14)
+   */
+  const redo = useCallback((): void => {
+    historyManager.redo()
+    // Update undo/redo availability
+    setCanUndo(historyManager.canUndo())
+    setCanRedo(historyManager.canRedo())
+  }, [historyManager])
+
+  /**
    * Subscribe to Firebase updates from other users
    */
   useEffect(() => {
@@ -464,6 +554,10 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     copySelected,
     paste,
     duplicateSelected,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   }
 }
 

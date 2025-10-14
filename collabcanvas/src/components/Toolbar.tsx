@@ -5,6 +5,11 @@ interface ToolbarProps {
   onToolSelect: (tool: ToolType) => void
   hasSelection: boolean
   onDelete: () => void
+  // PR-14: Undo/Redo
+  canUndo?: boolean
+  canRedo?: boolean
+  onUndo?: () => void
+  onRedo?: () => void
 }
 
 /**
@@ -16,6 +21,10 @@ export default function Toolbar({
   onToolSelect,
   hasSelection,
   onDelete,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
 }: ToolbarProps) {
   const tools: Array<{
     type: ToolType
@@ -50,8 +59,48 @@ export default function Toolbar({
         </button>
       ))}
 
-      {/* Spacer - pushes delete button to the section */}
+      {/* Spacer - pushes action buttons to the bottom */}
       <div className="flex-1" />
+
+      {/* Undo Button (PR-14) */}
+      {onUndo && (
+        <button
+          onClick={onUndo}
+          disabled={!canUndo}
+          className={`
+            w-14 h-14 rounded-lg flex items-center justify-center text-xl
+            transition-all duration-200
+            ${
+              canUndo
+                ? 'bg-gray-700 text-white hover:bg-gray-600 shadow-lg'
+                : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50'
+            }
+          `}
+          title={canUndo ? 'Undo (Ctrl+Z)' : 'Nothing to undo'}
+        >
+          ↶
+        </button>
+      )}
+
+      {/* Redo Button (PR-14) */}
+      {onRedo && (
+        <button
+          onClick={onRedo}
+          disabled={!canRedo}
+          className={`
+            w-14 h-14 rounded-lg flex items-center justify-center text-xl
+            transition-all duration-200
+            ${
+              canRedo
+                ? 'bg-gray-700 text-white hover:bg-gray-600 shadow-lg'
+                : 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50'
+            }
+          `}
+          title={canRedo ? 'Redo (Ctrl+Shift+Z)' : 'Nothing to redo'}
+        >
+          ↷
+        </button>
+      )}
 
       {/* Delete Button */}
       <button
