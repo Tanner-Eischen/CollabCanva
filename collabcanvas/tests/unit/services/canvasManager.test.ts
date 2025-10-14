@@ -26,6 +26,8 @@ describe('Canvas Manager Service (PR-22)', () => {
     vi.clearAllMocks()
     // Mock Date.now for consistent timestamps
     vi.spyOn(Date, 'now').mockReturnValue(1234567890)
+    // Mock ref to return a mock object
+    vi.mocked(ref).mockReturnValue({ _path: 'mock' } as any)
   })
 
   afterEach(() => {

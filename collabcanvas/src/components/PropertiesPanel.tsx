@@ -16,6 +16,7 @@ interface PropertiesPanelProps {
   ) => void
   onUpdateShapeProps?: (id: string, updates: Partial<Shape>) => void
   recentColors: string[]
+  onRequestColorSample?: (callback: (color: string) => void) => void // PR-24: Color sampling callback
 }
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
@@ -23,6 +24,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateColors,
   onUpdateShapeProps,
   recentColors,
+  onRequestColorSample,
 }) => {
   const [showFillPicker, setShowFillPicker] = useState(false)
   const [showStrokePicker, setShowStrokePicker] = useState(false)
@@ -131,6 +133,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 label=""
                 recentColors={recentColors}
                 showOpacity={true}
+                onRequestCanvasSample={
+                  onRequestColorSample
+                    ? () => onRequestColorSample(handleFillChange)
+                    : undefined
+                }
               />
             </div>
           )}
@@ -193,6 +200,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 label=""
                 recentColors={recentColors}
                 showOpacity={true}
+                onRequestCanvasSample={
+                  onRequestColorSample
+                    ? () => onRequestColorSample(handleStrokeChange)
+                    : undefined
+                }
               />
               {commonStroke && commonStroke !== 'multiple' && (
                 <button

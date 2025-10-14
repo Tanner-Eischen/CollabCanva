@@ -4,7 +4,6 @@
  */
 
 import { useState, useMemo } from 'react'
-import { Layers, Settings } from 'lucide-react'
 import { LayerItem } from './LayerItem'
 import type { Layer, LayerTreeNode } from '../types/layer'
 import type { Shape } from '../types/canvas'
@@ -155,7 +154,7 @@ export function LayerPanel({
           }`}
           onClick={() => setActiveTab('layers')}
         >
-          <Layers size={16} />
+          <span className="text-base">📚</span>
           Layers
         </button>
         <button
@@ -166,7 +165,7 @@ export function LayerPanel({
           }`}
           onClick={() => setActiveTab('design')}
         >
-          <Settings size={16} />
+          <span className="text-base">🎨</span>
           Design
         </button>
       </div>

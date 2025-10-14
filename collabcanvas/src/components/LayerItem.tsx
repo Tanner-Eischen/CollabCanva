@@ -4,7 +4,6 @@
  */
 
 import { useState } from 'react'
-import { Eye, EyeOff, Lock, Unlock, ChevronDown, ChevronRight } from 'lucide-react'
 import type { Layer } from '../types/layer'
 
 interface LayerItemProps {
@@ -102,9 +101,9 @@ export function LayerItem({
             }}
           >
             {isExpanded ? (
-              <ChevronDown size={12} />
+              <span className="text-xs">▼</span>
             ) : (
-              <ChevronRight size={12} />
+              <span className="text-xs">▶</span>
             )}
           </button>
         )}
@@ -146,9 +145,9 @@ export function LayerItem({
           }}
         >
           {layer.locked ? (
-            <Lock size={14} className="text-red-500" />
+            <span className="text-sm text-red-500">🔒</span>
           ) : (
-            <Unlock size={14} className="text-gray-400" />
+            <span className="text-sm text-gray-400">🔓</span>
           )}
         </button>
 
@@ -161,9 +160,9 @@ export function LayerItem({
           }}
         >
           {layer.visible ? (
-            <Eye size={14} className="text-gray-600" />
+            <span className="text-sm text-gray-600">👁️</span>
           ) : (
-            <EyeOff size={14} className="text-gray-400" />
+            <span className="text-sm text-gray-400">👁️‍🗨️</span>
           )}
         </button>
       </div>

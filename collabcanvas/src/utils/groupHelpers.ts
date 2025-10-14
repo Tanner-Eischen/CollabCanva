@@ -215,8 +215,11 @@ export function updateGroupBounds(
   const memberShapes = shapes.filter((shape) =>
     group.memberIds.includes(shape.id)
   )
-  const childGroups = getChildGroups(group.id, groups)
+  // Get groups that are members of this group
+  const memberGroups = groups.filter((g) =>
+    group.memberIds.includes(g.id)
+  )
   
-  return calculateGroupBounds(memberShapes, childGroups)
+  return calculateGroupBounds(memberShapes, memberGroups)
 }
 

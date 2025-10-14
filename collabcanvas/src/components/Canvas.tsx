@@ -95,6 +95,63 @@ export default function Canvas({
     y: number
     visible: boolean
   }>({ x: 0, y: 0, visible: false })
+  
+  // NEW: Color sampling mode (PR-24: Task 24.3)
+  const [isColorSamplingMode, setIsColorSamplingMode] = useState(false)
+  const [colorSampleCallback, setColorSampleCallback] = useState<((color: string) => void) | null>(null)
+  
+  // Helper: Convert RGB to hex
+  const rgbToHex = (r: number, g: number, b: number): string => {
+    return '#' + [r, g, b].map(x => {
+      const hex = x.toString(16).toUpperCase()
+      return hex.length === 1 ? '0' + hex : hex
+    }).join('')
+  }
+  
+  // Helper: Sample color from stage at position
+  const sampleColorFromStage = (x: number, y: number) => {
+    const stage = stageRef.current
+    if (!stage) return null
+    
+    // Get the first shape layer (index 1, since 0 is grid)
+    const layers = stage.getLayers()
+    if (layers.length < 2) return null
+    
+    const layer = layers[1] // Shapes layer
+    const canvas = layer.getCanvas()._canvas as HTMLCanvasElement
+    const ctx = canvas.getContext('2d')
+    
+    if (!ctx) return null
+    
+    try {
+      // Sample pixel at the given position
+      const pixelData = ctx.getImageData(x, y, 1, 1).data
+      const r = pixelData[0]
+      const g = pixelData[1]
+      const b = pixelData[2]
+      const a = pixelData[3]
+      
+      const hex = rgbToHex(r, g, b)
+      const alpha = Math.round((a / 255) * 255).toString(16).padStart(2, '0').toUpperCase()
+      
+      return hex + alpha
+    } catch (error) {
+      console.error('Error sampling color:', error)
+      return null
+    }
+  }
+  
+  // Enable color sampling mode
+  const enableColorSampling = (callback: (color: string) => void) => {
+    setIsColorSamplingMode(true)
+    setColorSampleCallback(() => callback)
+  }
+  
+  // Cancel color sampling mode
+  const cancelColorSampling = () => {
+    setIsColorSamplingMode(false)
+    setColorSampleCallback(null)
+  }
 
   // Hooks
   const { user } = useAuth()
@@ -198,10 +255,14 @@ export default function Canvas({
         bulkDelete()
       }
       
-      // Escape - clear selection
+      // Escape - cancel color sampling or clear selection (PR-24)
       if (e.key === 'Escape') {
         e.preventDefault()
-        clearSelection()
+        if (isColorSamplingMode) {
+          cancelColorSampling()
+        } else {
+          clearSelection()
+        }
       }
       
       // Cmd/Ctrl+A - select all
@@ -352,16 +413,26 @@ export default function Canvas({
    */
   const handleStageMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
-      // Only handle if clicking on the stage itself (not on shapes)
-      if (e.target !== e.target.getStage()) {
-        return
-      }
-
       const stage = stageRef.current
       if (!stage) return
 
       const pointer = stage.getPointerPosition()
       if (!pointer) return
+
+      // PR-24: Handle color sampling mode first
+      if (isColorSamplingMode && colorSampleCallback) {
+        const sampledColor = sampleColorFromStage(pointer.x, pointer.y)
+        if (sampledColor) {
+          colorSampleCallback(sampledColor)
+        }
+        cancelColorSampling()
+        return
+      }
+      
+      // Only handle if clicking on the stage itself (not on shapes)
+      if (e.target !== e.target.getStage()) {
+        return
+      }
 
       // Convert screen coordinates to canvas coordinates
       const canvasX = (pointer.x - viewport.x) / viewport.scale
@@ -387,7 +458,7 @@ export default function Canvas({
         })
       }
     },
-    [selectedTool, viewport, clearSelection]
+    [selectedTool, viewport, clearSelection, isColorSamplingMode, colorSampleCallback, sampleColorFromStage, cancelColorSampling]
   )
 
   /**
@@ -1086,12 +1157,39 @@ export default function Canvas({
         </div>
       )}
 
+      {/* Color Sampling Banner (PR-24) */}
+      {isColorSamplingMode && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 bg-blue-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-4">
+          <svg 
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"
+            />
+          </svg>
+          <span className="font-medium">Click anywhere on the canvas to pick a color</span>
+          <button
+            onClick={cancelColorSampling}
+            className="px-3 py-1 bg-white text-blue-500 rounded hover:bg-gray-100 transition-colors font-medium"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Properties Panel (PR-15) */}
       <PropertiesPanel
         selectedShapes={Array.from(selectedIds).map(id => shapes.find(s => s.id === id)!).filter(Boolean)}
         onUpdateColors={(fill, stroke, strokeWidth) => updateColors(fill, stroke, strokeWidth)}
         onUpdateShapeProps={(id, updates) => updateShape(id, updates)}
         recentColors={getRecentColors()}
+        onRequestColorSample={(callback: (color: string) => void) => enableColorSampling(callback)}
       />
 
         {/* Context Menu (PR-17, PR-18) */}

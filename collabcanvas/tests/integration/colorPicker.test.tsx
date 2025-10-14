@@ -1,53 +1,317 @@
-// Integration tests for Color Picker UI (PR-15)
-
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ColorPicker } from '../../src/components/ColorPicker'
 
-describe('Color Picker Integration Tests (PR-15)', () => {
+/**
+ * Integration Tests for Enhanced ColorPicker (PR-24)
+ * Tests expanded palette, eyedropper functionality, and canvas sampling
+ */
+
+describe('Enhanced ColorPicker Integration Tests', () => {
   const mockOnChange = vi.fn()
+  const mockOnRequestCanvasSample = vi.fn()
 
   beforeEach(() => {
-    vi.clearAllMocks()
+    mockOnChange.mockClear()
+    mockOnRequestCanvasSample.mockClear()
   })
 
-  describe('Component Rendering', () => {
-    it('should render color picker with label', () => {
-      render(
+  describe('Expanded Color Palette', () => {
+    it('displays 80+ preset colors', () => {
+      const { container } = render(
         <ColorPicker
-          value="#FF0000FF"
+          value="#3B82F6FF"
           onChange={mockOnChange}
           label="Fill"
           recentColors={[]}
         />
       )
 
-      expect(screen.getByText('Fill')).toBeTruthy()
+      // Count color buttons in the preset section
+      const presetButtons = container.querySelectorAll('button[title]')
+      expect(presetButtons.length).toBeGreaterThanOrEqual(80)
     })
 
-    it('should show current color as hex input value', () => {
-      render(
+    it('selects color from expanded palette', () => {
+      const { container } = render(
         <ColorPicker
-          value="#FF0000FF"
+          value="#3B82F6FF"
           onChange={mockOnChange}
-          label="Fill Color"
+          label="Fill"
           recentColors={[]}
         />
       )
 
-      const hexInput = screen.getByDisplayValue('#FF0000') as HTMLInputElement
+      // Find and click the first red color (Red 100)
+      const redButton = Array.from(
+        container.querySelectorAll('button[title]')
+      ).find((btn) => btn.getAttribute('title')?.includes('Red'))
+
+      expect(redButton).toBeTruthy()
+      fireEvent.click(redButton!)
+
+      expect(mockOnChange).toHaveBeenCalled()
+      const calledColor = mockOnChange.mock.calls[0][0]
+      expect(calledColor).toMatch(/^#[0-9A-F]{8}$/) // Valid RGBA hex
+    })
+
+    it('scrolls through color palette', () => {
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      // Find the scrollable container
+      const scrollContainer = container.querySelector('.overflow-y-auto')
+      expect(scrollContainer).toBeTruthy()
+      expect(scrollContainer).toHaveClass('max-h-60')
+    })
+
+    it('shows color tooltips on hover', () => {
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      // Check that buttons have title attributes for tooltips
+      const whiteButton = Array.from(
+        container.querySelectorAll('button[title]')
+      ).find((btn) => btn.getAttribute('title') === 'White')
+
+      expect(whiteButton).toBeTruthy()
+      expect(whiteButton?.getAttribute('title')).toBe('White')
+    })
+  })
+
+  describe('Eyedropper Tool', () => {
+    it('renders eyedropper button', () => {
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+          onRequestCanvasSample={mockOnRequestCanvasSample}
+        />
+      )
+
+      // Find the eyedropper button (has SVG with path)
+      const eyedropperButton = container.querySelector('button svg')
+      expect(eyedropperButton).toBeTruthy()
+    })
+
+    it('calls eyedropper when supported', async () => {
+      // Mock EyeDropper API
+      const mockEyeDropper = {
+        open: vi.fn().mockResolvedValue({ sRGBHex: '#FF0000' }),
+      }
+      window.EyeDropper = vi.fn(() => mockEyeDropper) as any
+
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      // Click eyedropper button
+      const eyedropperButton = container.querySelector('button svg')?.parentElement
+      expect(eyedropperButton).toBeTruthy()
+      fireEvent.click(eyedropperButton!)
+
+      await waitFor(() => {
+        expect(mockEyeDropper.open).toHaveBeenCalled()
+      })
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalledWith('#FF0000FF')
+      })
+
+      // Clean up
+      delete (window as any).EyeDropper
+    })
+
+    it('falls back to canvas sampler if no API', () => {
+      // Ensure EyeDropper API is not available
+      delete (window as any).EyeDropper
+
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+          onRequestCanvasSample={mockOnRequestCanvasSample}
+        />
+      )
+
+      // Click eyedropper button
+      const eyedropperButton = container.querySelector('button svg')?.parentElement
+      expect(eyedropperButton).toBeTruthy()
+      fireEvent.click(eyedropperButton!)
+
+      // Should call fallback
+      expect(mockOnRequestCanvasSample).toHaveBeenCalled()
+    })
+
+    it('preserves opacity when picking colors', async () => {
+      // Mock EyeDropper API
+      const mockEyeDropper = {
+        open: vi.fn().mockResolvedValue({ sRGBHex: '#FF0000' }),
+      }
+      window.EyeDropper = vi.fn(() => mockEyeDropper) as any
+
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F680" // 50% opacity
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      // Click eyedropper button
+      const eyedropperButton = container.querySelector('button svg')?.parentElement
+      fireEvent.click(eyedropperButton!)
+
+      await waitFor(() => {
+        expect(mockOnChange).toHaveBeenCalled()
+      })
+
+      // Should preserve opacity (80 = 50%)
+      const calledColor = mockOnChange.mock.calls[0][0]
+      expect(calledColor).toBe('#FF000080')
+
+      // Clean up
+      delete (window as any).EyeDropper
+    })
+
+    it('shows loading state during eyedropper', async () => {
+      // Mock EyeDropper API with delay
+      const mockEyeDropper = {
+        open: vi.fn().mockImplementation(
+          () => new Promise((resolve) => setTimeout(() => resolve({ sRGBHex: '#FF0000' }), 100))
+        ),
+      }
+      window.EyeDropper = vi.fn(() => mockEyeDropper) as any
+
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      const eyedropperButton = container.querySelector('button svg')?.parentElement
+      fireEvent.click(eyedropperButton!)
+
+      // Should show loading indicator
+      await waitFor(() => {
+        const loadingIcon = container.querySelector('button span')
+        expect(loadingIcon?.textContent).toBe('⏳')
+      })
+
+      // Clean up
+      delete (window as any).EyeDropper
+    })
+  })
+
+  describe('Hex Input', () => {
+    it('accepts valid hex color input', () => {
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      const hexInput = container.querySelector('input[type="text"]') as HTMLInputElement
       expect(hexInput).toBeTruthy()
-      expect(hexInput.value).toBe('#FF0000')
+
+      fireEvent.change(hexInput, { target: { value: '#FF0000' } })
+
+      expect(mockOnChange).toHaveBeenCalled()
+      const calledColor = mockOnChange.mock.calls[0][0]
+      expect(calledColor).toMatch(/^#FF0000[0-9A-F]{2}$/)
+    })
+
+    it('ignores invalid hex input', () => {
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      const hexInput = container.querySelector('input[type="text"]') as HTMLInputElement
+
+      fireEvent.change(hexInput, { target: { value: 'invalid' } })
+
+      expect(mockOnChange).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Opacity Slider', () => {
+    it('updates opacity when slider moved', () => {
+      const { container } = render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+          showOpacity={true}
+        />
+      )
+
+      const opacitySlider = container.querySelector('input[type="range"]') as HTMLInputElement
+      expect(opacitySlider).toBeTruthy()
+
+      fireEvent.change(opacitySlider, { target: { value: '0.5' } })
+
+      expect(mockOnChange).toHaveBeenCalled()
+      const calledColor = mockOnChange.mock.calls[0][0]
+      // Should end with 80 (hex for 128 = 50% of 255)
+      expect(calledColor).toMatch(/80$/)
+    })
+
+    it('displays opacity percentage', () => {
+      render(
+        <ColorPicker
+          value="#3B82F680" // 50% opacity
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+          showOpacity={true}
+        />
+      )
+
+      expect(screen.getByText('50%')).toBeTruthy()
     })
   })
 
   describe('Recent Colors', () => {
-    it('should display recent colors', () => {
+    it('displays recent colors when provided', () => {
       const recentColors = ['#FF0000FF', '#00FF00FF', '#0000FFFF']
-      
-      render(
+
+      const { container } = render(
         <ColorPicker
-          value="#FF0000FF"
+          value="#3B82F6FF"
           onChange={mockOnChange}
           label="Fill"
           recentColors={recentColors}
@@ -55,259 +319,44 @@ describe('Color Picker Integration Tests (PR-15)', () => {
       )
 
       expect(screen.getByText('Recent Colors')).toBeTruthy()
+
+      // Should have recent color buttons
+      const recentSection = container.querySelectorAll('.flex.gap-1 button')
+      expect(recentSection.length).toBeGreaterThanOrEqual(3)
     })
 
-    it('should select color from recent colors', () => {
-      const recentColors = ['#FF0000FF', '#00FF00FF']
-      
+    it('shows message when no recent colors', () => {
+      render(
+        <ColorPicker
+          value="#3B82F6FF"
+          onChange={mockOnChange}
+          label="Fill"
+          recentColors={[]}
+        />
+      )
+
+      expect(screen.getByText('No recent colors')).toBeTruthy()
+    })
+
+    it('selects color from recent colors', () => {
+      const recentColors = ['#FF0000FF']
+
       const { container } = render(
         <ColorPicker
-          value="#FFFFFFFF"
+          value="#3B82F6FF"
           onChange={mockOnChange}
           label="Fill"
           recentColors={recentColors}
         />
       )
 
-      // Find all color buttons (presets + recent)
-      const allColorButtons = container.querySelectorAll('button[style*="background"]')
-      expect(allColorButtons.length).toBeGreaterThan(20) // Should have presets (20) + recent (2)
+      // Find recent color button
+      const recentButtons = container.querySelectorAll('.flex.gap-1 button')
+      expect(recentButtons.length).toBeGreaterThan(0)
 
-      // Click first recent color button (after the 20 preset buttons)
-      const firstRecentColorButton = allColorButtons[20]
-      if (firstRecentColorButton) {
-        fireEvent.click(firstRecentColorButton)
-        expect(mockOnChange).toHaveBeenCalled()
-      }
-    })
+      fireEvent.click(recentButtons[0])
 
-    it('should show Recent Colors section even when empty', () => {
-      render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      const recentSection = screen.queryByText('Recent Colors')
-      expect(recentSection).toBeTruthy()
-    })
-  })
-
-  describe('Color Input Methods', () => {
-    it('should accept hex color input', () => {
-      render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      const hexInput = screen.getByDisplayValue('#FF0000') as HTMLInputElement
-      
-      // Change hex value
-      fireEvent.change(hexInput, { target: { value: '#00FF00' } })
-      fireEvent.blur(hexInput)
-
-      // Should call onChange with new color
-      expect(mockOnChange).toHaveBeenCalledWith('#00FF00FF')
-    })
-
-    it('should handle opacity/alpha slider', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      // Find opacity slider (input type="range")
-      const sliders = container.querySelectorAll('input[type="range"]')
-      expect(sliders.length).toBeGreaterThan(0)
-
-      if (sliders.length > 0) {
-        const opacitySlider = sliders[sliders.length - 1] as HTMLInputElement
-        
-        // Change opacity to 50%
-        fireEvent.change(opacitySlider, { target: { value: '0.5' } })
-        
-        // Should update color with new alpha
-        expect(mockOnChange).toHaveBeenCalled()
-      }
-    })
-  })
-
-  describe('Preset Colors', () => {
-    it('should display preset color palette', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      // Should have preset color buttons
-      const buttons = container.querySelectorAll('button')
-      expect(buttons.length).toBeGreaterThan(0)
-    })
-
-    it('should select preset color', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      // Click a preset color button
-      const colorButtons = container.querySelectorAll('button[style*="background"]')
-      if (colorButtons.length > 0) {
-        fireEvent.click(colorButtons[0])
-        expect(mockOnChange).toHaveBeenCalled()
-      }
-    })
-  })
-
-  describe('Color Format Conversion', () => {
-    it('should handle 8-digit hex colors (with alpha)', () => {
-      render(
-        <ColorPicker
-          value="#FF000080" // 50% opacity
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      // Should display color correctly
-      const hexDisplay = screen.queryByDisplayValue('#FF0000')
-      expect(hexDisplay).toBeTruthy()
-    })
-
-    it('should handle 6-digit hex colors (no alpha)', () => {
-      render(
-        <ColorPicker
-          value="#FF0000" // No alpha
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      const hexDisplay = screen.queryByDisplayValue('#FF0000')
-      expect(hexDisplay).toBeTruthy()
-    })
-  })
-
-  describe('User Experience', () => {
-    it('should have accessible color picker interface', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      // Should have input elements
-      const inputs = container.querySelectorAll('input')
-      expect(inputs.length).toBeGreaterThan(0)
-    })
-
-    it('should show visual feedback for current color', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      // Should have element showing current color
-      const colorPreview = container.querySelector('[style*="rgb(255, 0, 0)"], [style*="#FF0000"], [style*="#ff0000"]')
-      expect(colorPreview || container.querySelector('input[type="color"]')).toBeTruthy()
-    })
-
-    it('should handle rapid color changes', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      const hexInput = screen.getByDisplayValue('#FF0000') as HTMLInputElement
-
-      // Rapidly change colors
-      for (let i = 0; i < 5; i++) {
-        fireEvent.change(hexInput, { target: { value: `#${i}${i}${i}${i}${i}${i}` } })
-      }
-
-      // Should handle all changes
-      expect(mockOnChange.mock.calls.length).toBeGreaterThan(0)
-    })
-  })
-
-  describe('Edge Cases', () => {
-    it('should handle max recent colors limit', () => {
-      const maxRecentColors = ['#FF0000FF', '#00FF00FF', '#0000FFFF', '#FFFF00FF', '#FF00FFFF']
-      
-      render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={maxRecentColors}
-        />
-      )
-
-      // Should display all recent colors (max 5)
-      expect(screen.getByText('Recent Colors')).toBeTruthy()
-    })
-
-    it('should render with default showOpacity=true', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-        />
-      )
-
-      // Should have opacity slider by default
-      const sliders = container.querySelectorAll('input[type="range"]')
-      expect(sliders.length).toBeGreaterThan(0)
-    })
-
-    it('should allow disabling opacity slider', () => {
-      const { container } = render(
-        <ColorPicker
-          value="#FF0000FF"
-          onChange={mockOnChange}
-          label="Fill"
-          recentColors={[]}
-          showOpacity={false}
-        />
-      )
-
-      // Component should render (opacity slider may or may not be present)
-      expect(container.querySelector('input[type="text"]')).toBeTruthy()
+      expect(mockOnChange).toHaveBeenCalledWith('#FF0000FF')
     })
   })
 })
-
