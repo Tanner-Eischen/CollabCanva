@@ -33,8 +33,9 @@ export default function Toolbar({
     label: string
     shortcut?: string
   }> = [
-    // Selection Tool
+    // Selection & Navigation Tools
     { type: 'select', icon: '⌖', label: 'Select', shortcut: 'V' },
+    { type: 'hand', icon: '✋', label: 'Hand', shortcut: 'H' },
     
     // Basic Shapes
     { type: 'rectangle', icon: '▭', label: 'Rectangle', shortcut: 'R' },
@@ -45,6 +46,10 @@ export default function Toolbar({
     { type: 'polygon', icon: '⬡', label: 'Polygon' },
     { type: 'star', icon: '★', label: 'Star' },
     { type: 'line', icon: '/', label: 'Line', shortcut: 'L' },
+    
+    // Drawing Tools
+    { type: 'pencil', icon: '✏️', label: 'Pencil', shortcut: 'P' },
+    { type: 'pen', icon: '🖊️', label: 'Pen', shortcut: 'N' },
     
     // Text Tool
     { type: 'text', icon: 'T', label: 'Text', shortcut: 'T' },
@@ -63,8 +68,8 @@ export default function Toolbar({
             onClick={() => onToolSelect(tool.type)}
           />
           
-          {/* Separator after select tool and after shapes */}
-          {(index === 0 || index === 6) && (
+          {/* Separators between tool groups */}
+          {(index === 1 || index === 7 || index === 9) && (
             <div className="w-9 h-px bg-neutral-200 my-1" />
           )}
         </div>

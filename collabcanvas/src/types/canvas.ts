@@ -20,8 +20,9 @@ export interface ViewportTransform {
 /**
  * Shape types supported by the canvas
  * Phase 3 PR-16: Added line, polygon, star, roundRect
+ * Phase 4 PR-21: Added path for freehand drawing
  */
-export type ShapeType = 'rectangle' | 'circle' | 'text' | 'line' | 'polygon' | 'star' | 'roundRect'
+export type ShapeType = 'rectangle' | 'circle' | 'text' | 'line' | 'polygon' | 'star' | 'roundRect' | 'path'
 
 /**
  * Client-side representation of a canvas shape
@@ -49,6 +50,9 @@ export interface Shape {
   cornerRadius?: number // corner radius for rounded rectangles (0-50px)
   // Phase 3: Z-Index for layering (PR-17)
   zIndex?: number // z-index for layer ordering (higher = on top, default: creation timestamp)
+  // Phase 4: Path properties for freehand drawing (PR-21)
+  tension?: number // 0 = sharp (pencil), 0.5 = smooth (pen)
+  closed?: boolean // whether the path is closed
 }
 
 /**
@@ -67,8 +71,9 @@ export interface CanvasConfig {
 /**
  * Tool types for the canvas toolbar
  * Phase 3 PR-16: Added line, polygon, star, roundRect
+ * Phase 4 PR-21: Added pencil, pen, hand tools
  */
-export type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'delete' | 'line' | 'polygon' | 'star' | 'roundRect'
+export type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'delete' | 'line' | 'polygon' | 'star' | 'roundRect' | 'pencil' | 'pen' | 'hand'
 
 /**
  * Canvas bounds for enforcing hard boundaries

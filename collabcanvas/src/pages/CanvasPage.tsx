@@ -3,8 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Canvas from '../components/Canvas'
 import PresenceBar from '../components/PresenceBar'
 import Toolbar from '../components/Toolbar'
+import { LayerPanel } from '../components/LayerPanel'
 import { useAuth } from '../hooks/useAuth'
 import { usePresence } from '../hooks/usePresence'
+import { useCanvas } from '../hooks/useCanvas'
+import { useGroups } from '../hooks/useGroups'
+import { useLayers } from '../hooks/useLayers'
 import { getCanvas, updateCanvas, generateThumbnail } from '../services/canvasManager'
 import type { ToolType } from '../types/canvas'
 import type { CanvasMetadata } from '../services/canvasManager'
@@ -30,6 +34,24 @@ export default function CanvasPage() {
     navigate('/')
     return null
   }
+
+  // Canvas, Groups, and Layers hooks (PR-19)
+  const { shapes, selectedIds, setSelection } = useCanvas({
+    canvasId: canvasId,
+    userId: user?.uid || '',
+    enableSync: true,
+  })
+
+  const { groups } = useGroups({
+    canvasId: canvasId,
+    userId: user?.uid || '',
+    enableSync: true,
+  })
+
+  const { toggleVisibility, toggleLock } = useLayers({
+    canvasId: canvasId,
+    enableSync: true,
+  })
   
   // Load canvas metadata
   useEffect(() => {
@@ -152,6 +174,18 @@ export default function CanvasPage() {
     [canvasId, user?.uid]
   )
 
+  // Layer panel handlers (PR-19)
+  const handleSelectLayer = useCallback((layerId: string) => {
+    setSelection(layerId)
+    setSelectedShapeId(layerId)
+  }, [setSelection])
+
+  const handleRenameLayer = useCallback((layerId: string, newName: string) => {
+    // For shapes, we don't store custom names in this MVP
+    // For groups, this would update the group name via Firebase
+    console.log(`Rename layer ${layerId} to ${newName}`)
+  }, [])
+
   return (
     <div className="w-full h-screen overflow-hidden flex flex-col bg-neutral-50">
       {/* Top Header - Presence Bar (PR-20: 64px height, z-index 50) */}
@@ -172,7 +206,7 @@ export default function CanvasPage() {
         onBack={handleBack}
       />
 
-      {/* Main Content Area - Toolbar + Canvas (PR-20: proper sizing) */}
+      {/* Main Content Area - Toolbar + Canvas + LayerPanel (PR-19/20: proper sizing) */}
       <div className="flex flex-row h-[calc(100vh-64px)]">
         {/* Left Toolbar (PR-20: 48px width, from top 64px) */}
         <Toolbar
@@ -186,8 +220,8 @@ export default function CanvasPage() {
           onRedo={redoFn || undefined}
         />
 
-        {/* Canvas Container (PR-20: calc(100vw - 48px) width, calc(100vh - 64px) height) */}
-        <div className="flex-1 w-[calc(100vw-48px)] h-full">
+        {/* Canvas Container (PR-19: calc(100vw - 48px - 256px) width, calc(100vh - 64px) height) */}
+        <div className="flex-1 w-[calc(100vw-48px-256px)] h-full">
           <Canvas
             selectedTool={selectedTool}
             onShapeSelect={handleShapeSelect}
@@ -196,6 +230,17 @@ export default function CanvasPage() {
             canvasId={canvasId}
           />
         </div>
+
+        {/* Right Layer Panel (PR-19: 256px width, from top 64px) */}
+        <LayerPanel
+          shapes={shapes}
+          groups={groups}
+          selectedIds={selectedIds}
+          onSelectLayer={handleSelectLayer}
+          onToggleVisibility={toggleVisibility}
+          onToggleLock={toggleLock}
+          onRenameLayer={handleRenameLayer}
+        />
       </div>
     </div>
   )

@@ -75,6 +75,8 @@ interface UseCanvasReturn {
   addPolygon: (x: number, y: number, sides?: number) => string
   addStar: (x: number, y: number, points?: number) => string
   addRoundedRect: (x: number, y: number, cornerRadius?: number) => string
+  // NEW: Freehand drawing function (PR-21)
+  addPath: (points: number[], tension?: number, strokeColor?: string, strokeWidth?: number) => string
   // NEW: Z-index manipulation functions (PR-17)
   bringToFront: (ids?: string[]) => void
   sendToBack: (ids?: string[]) => void
@@ -378,6 +380,46 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         height: size,
         fill: DEFAULT_FILL,
         cornerRadius: Math.max(0, Math.min(50, cornerRadius)),
+        zIndex: Date.now(), // PR-17: Set z-index to current timestamp
+      }
+
+      const command = new CreateCommand(
+        newShape,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+      
+      return id
+    },
+    [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState, DEFAULT_FILL]
+  )
+
+  /**
+   * Add a path shape for freehand drawing (PR-21)
+   * Creates a path with points array and tension for smooth/sharp rendering
+   */
+  const addPath = useCallback(
+    (points: number[], tension: number = 0, strokeColor?: string, strokeWidth: number = 2): string => {
+      const id = uuidv4()
+      
+      const newShape: Shape = {
+        id,
+        type: 'path',
+        x: 0,
+        y: 0,
+        width: 0, // Path doesn't use width/height
+        height: 0,
+        points,
+        stroke: strokeColor || DEFAULT_FILL,
+        strokeWidth,
+        fill: 'transparent', // Paths don't have fill
+        tension,
+        closed: false,
         zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
@@ -1160,6 +1202,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     addPolygon,
     addStar,
     addRoundedRect,
+    addPath,
     bringToFront,
     sendToBack,
     bringForward,

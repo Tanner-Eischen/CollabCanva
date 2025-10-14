@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { Stage, Layer, Line as KonvaLine, Circle as KonvaCircle } from 'react-konva'
+import { Stage, Layer, Circle as KonvaCircle, Line as KonvaLine } from 'react-konva'
 import Konva from 'konva'
 import type { ViewportTransform, ToolType } from '../types/canvas'
 import {
@@ -14,6 +14,8 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { usePresence } from '../hooks/usePresence'
 import { useCanvas } from '../hooks/useCanvas'
+import { useGroups } from '../hooks/useGroups'
+import { simplifyPath } from '../utils/pathHelpers'
 import Cursor from './Cursor'
 import Rectangle from './shapes/Rectangle'
 import Circle from './shapes/Circle'
@@ -24,6 +26,8 @@ import Line from './shapes/Line'
 import Polygon from './shapes/Polygon'
 import Star from './shapes/Star'
 import RoundedRect from './shapes/RoundedRect'
+import Path from './shapes/Path'
+import Group from './Group'
 import { ContextMenu } from './ContextMenu'
 import { AlignmentToolbar } from './AlignmentToolbar'
 
@@ -81,6 +85,10 @@ export default function Canvas({
   const isDraggingShapeRef = useRef(false)
   const dragStartPosRef = useRef<{ x: number; y: number } | null>(null)
   
+  // NEW: Drawing state for freehand paths (PR-21)
+  const [isDrawingPath, setIsDrawingPath] = useState(false)
+  const [currentPathPoints, setCurrentPathPoints] = useState<number[]>([])
+  
   // NEW: Context menu state (PR-17)
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -123,6 +131,7 @@ export default function Canvas({
     addPolygon,
     addStar,
     addRoundedRect,
+    addPath,
     bringToFront,
     sendToBack,
     bringForward,
@@ -133,6 +142,19 @@ export default function Canvas({
     distributeSelectedVertically,
     centerSelectedInCanvas,
   } = useCanvas({
+    canvasId: canvasId,
+    userId: user?.uid || '',
+    enableSync: true,
+  })
+
+  // Groups hook (PR-19)
+  const {
+    groups,
+    createGroup,
+    ungroup,
+    isShapeInGroup,
+    calculateBounds,
+  } = useGroups({
     canvasId: canvasId,
     userId: user?.uid || '',
     enableSync: true,
@@ -217,11 +239,38 @@ export default function Canvas({
         e.preventDefault()
         redo()
       }
+      
+      // Cmd/Ctrl+G - create group from selected shapes (PR-19)
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'g' && selectedIds.size >= 2) {
+        e.preventDefault()
+        const shapeIds = Array.from(selectedIds)
+        createGroup(shapeIds).then((groupId) => {
+          if (groupId) {
+            console.log(`Group created: ${groupId}`)
+            clearSelection()
+          }
+        })
+      }
+      
+      // Cmd/Ctrl+Shift+G - ungroup selected group (PR-19)
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'g' && selectedIds.size === 1) {
+        e.preventDefault()
+        const selectedArray = Array.from(selectedIds)
+        const selectedId = selectedArray[0]
+        // Check if the selected item is a group
+        const group = groups.find((g) => g.id === selectedId)
+        if (group) {
+          ungroup(selectedId).then(() => {
+            console.log(`Group ungrouped: ${selectedId}`)
+            clearSelection()
+          })
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, bulkDelete, clearSelection, selectAll, copySelected, paste, duplicateSelected, undo, redo, canUndo, canRedo])
+  }, [selectedIds, bulkDelete, clearSelection, selectAll, copySelected, paste, duplicateSelected, undo, redo, canUndo, canRedo, createGroup, ungroup, groups])
 
   /**
    * Handle mouse wheel for zoom functionality
@@ -297,26 +346,6 @@ export default function Canvas({
     })
   }, [])
 
-  /**
-   * Handle mouse move for cursor position tracking
-   */
-  const handleMouseMove = useCallback(
-    () => {
-      const stage = stageRef.current
-      if (!stage) return
-
-      const pointer = stage.getPointerPosition()
-      if (!pointer) return
-
-      // Convert screen coordinates to canvas coordinates
-      const canvasX = (pointer.x - viewport.x) / viewport.scale
-      const canvasY = (pointer.y - viewport.y) / viewport.scale
-
-      // Update cursor position (throttled to 20Hz in usePresence)
-      updateCursorPosition(canvasX, canvasY)
-    },
-    [viewport, updateCursorPosition]
-  )
 
   /**
    * Handle mouse down on stage - start selection box or shape creation
@@ -338,6 +367,14 @@ export default function Canvas({
       const canvasX = (pointer.x - viewport.x) / viewport.scale
       const canvasY = (pointer.y - viewport.y) / viewport.scale
 
+      // Handle freehand drawing start (pencil or pen tool) (PR-21)
+      if (selectedTool === 'pencil' || selectedTool === 'pen') {
+        setIsDrawingPath(true)
+        setCurrentPathPoints([canvasX, canvasY])
+        clearSelection() // Clear any selection when starting to draw
+        return
+      }
+
       // Handle selection box start (only in select mode)
       if (selectedTool === 'select') {
         setIsDrawingSelection(true)
@@ -350,7 +387,7 @@ export default function Canvas({
         })
       }
     },
-    [selectedTool, viewport]
+    [selectedTool, viewport, clearSelection]
   )
 
   /**
@@ -358,17 +395,39 @@ export default function Canvas({
    */
   const handleStageMouseMove = useCallback(
     (_e: Konva.KonvaEventObject<MouseEvent>) => {
+      const stage = stageRef.current
+      if (!stage) return
+
+      const pointer = stage.getPointerPosition()
+      if (!pointer) return
+
+      const canvasX = (pointer.x - viewport.x) / viewport.scale
+      const canvasY = (pointer.y - viewport.y) / viewport.scale
+
+      // Update path if drawing (PR-21)
+      if (isDrawingPath && (selectedTool === 'pencil' || selectedTool === 'pen')) {
+        setCurrentPathPoints((prev) => {
+          // Pencil: add every point (freehand, many points)
+          if (selectedTool === 'pencil') {
+            return [...prev, canvasX, canvasY]
+          }
+          // Pen: add points with minimum spacing (smoother, fewer points)
+          else {
+            const lastX = prev[prev.length - 2]
+            const lastY = prev[prev.length - 1]
+            const distance = Math.sqrt((canvasX - lastX) ** 2 + (canvasY - lastY) ** 2)
+            
+            if (distance >= 5) {
+              return [...prev, canvasX, canvasY]
+            }
+            return prev
+          }
+        })
+        return
+      }
+
       // Update selection box if drawing
       if (isDrawingSelection && selectedTool === 'select') {
-        const stage = stageRef.current
-        if (!stage) return
-
-        const pointer = stage.getPointerPosition()
-        if (!pointer) return
-
-        const canvasX = (pointer.x - viewport.x) / viewport.scale
-        const canvasY = (pointer.y - viewport.y) / viewport.scale
-
         setSelectionBox((prev) => ({
           ...prev,
           currentX: canvasX,
@@ -376,17 +435,37 @@ export default function Canvas({
         }))
       }
 
-      // Also update cursor position
-      handleMouseMove()
+      // Also update cursor position for presence
+      updateCursorPosition(canvasX, canvasY)
     },
-    [isDrawingSelection, selectedTool, viewport, handleMouseMove]
+    [isDrawingPath, isDrawingSelection, selectedTool, viewport, updateCursorPosition]
   )
 
   /**
-   * Handle mouse up on stage - complete selection box or shape creation
+   * Handle mouse up on stage - complete drawing or selection
    */
   const handleStageMouseUp = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
+      // Finalize path drawing (PR-21)
+      if (isDrawingPath && (selectedTool === 'pencil' || selectedTool === 'pen')) {
+        setIsDrawingPath(false)
+        
+        if (currentPathPoints.length >= 4) { // At least 2 points
+          // Simplify the path to reduce point count
+          const simplified = simplifyPath(currentPathPoints, 2)
+          
+          // Determine tension based on tool
+          const tension = selectedTool === 'pen' ? 0.5 : 0 // Pen is smooth, pencil is sharp
+          
+          // Create the path shape
+          addPath(simplified, tension)
+        }
+        
+        // Reset path points
+        setCurrentPathPoints([])
+        return
+      }
+      
       const stage = stageRef.current
       if (!stage) return
 
@@ -449,13 +528,16 @@ export default function Canvas({
       }
     },
     [
+      isDrawingPath,
       isDrawingSelection,
       selectedTool,
       viewport,
+      currentPathPoints,
       selectionBox,
       shapes,
       selectMultiple,
       addShape,
+      addPath,
       clearSelection,
     ]
   )
@@ -633,7 +715,7 @@ export default function Canvas({
           ref={stageRef}
         width={containerWidth}
         height={containerHeight}
-        draggable={selectedTool === 'select' && !isDrawingSelection}
+        draggable={selectedTool === 'hand' || (selectedTool === 'select' && !isDrawingSelection)}
         onWheel={handleWheel}
         onDragEnd={handleDragEnd}
         onMouseMove={handleStageMouseMove}
@@ -653,7 +735,9 @@ export default function Canvas({
         {/* Shapes Layer */}
         <Layer>
           {/* PR-17: Render shapes sorted by z-index (lowest first, highest last) */}
-          {sortShapesByZIndex().map((shape) => {
+          {sortShapesByZIndex()
+            .filter((shape) => !isShapeInGroup(shape.id)) // Don't render grouped shapes here
+            .map((shape) => {
             const isSelected = selectedIds.has(shape.id)
             const userColor = getUserColor()
 
@@ -805,8 +889,148 @@ export default function Canvas({
                   onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
                 />
               )
+            } else if (shape.type === 'path' && shape.points) {
+              return (
+                <Path
+                  key={shape.id}
+                  id={shape.id}
+                  points={shape.points}
+                  stroke={shape.stroke || '#3B82F6'}
+                  strokeWidth={shape.strokeWidth || 2}
+                  tension={shape.tension}
+                  closed={shape.closed}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(pts: number[], x: number, y: number) => {
+                    updateShape(shape.id, { points: pts, x, y })
+                  }}
+                />
+              )
             }
             return null
+          })}
+          
+          {/* Path preview while drawing (PR-21) */}
+          {isDrawingPath && currentPathPoints.length >= 2 && (
+            <KonvaLine
+              points={currentPathPoints}
+              stroke="#6366F1"
+              strokeWidth={2}
+              tension={selectedTool === 'pen' ? 0.5 : 0}
+              lineCap="round"
+              lineJoin="round"
+              listening={false}
+              opacity={0.7}
+            />
+          )}
+          
+          {/* Render groups (PR-19) */}
+          {groups.map((group) => {
+            const isSelected = selectedIds.has(group.id)
+            const userColor = getUserColor()
+            const bounds = calculateBounds(group.id, shapes)
+            
+            if (!bounds) return null
+            
+            // Render group with its member shapes as children
+            const renderGroupMember = (shapeId: string) => {
+              const shape = shapes.find((s) => s.id === shapeId)
+              if (!shape) return null
+              
+              // Render shape relative to group position
+              const relativeX = shape.x - bounds.x
+              const relativeY = shape.y - bounds.y
+              
+              if (shape.type === 'rectangle') {
+                return (
+                  <Rectangle
+                    key={shape.id}
+                    id={shape.id}
+                    x={relativeX}
+                    y={relativeY}
+                    width={shape.width}
+                    height={shape.height}
+                    rotation={shape.rotation}
+                    fill={shape.fill}
+                    stroke={shape.stroke}
+                    strokeWidth={shape.strokeWidth}
+                    isSelected={false} // Don't show individual selection in group
+                    onSelect={() => {}} // Group handles selection
+                    onDragStart={() => {}}
+                    onDragEnd={() => {}}
+                    onTransformEnd={() => {}}
+                  />
+                )
+              } else if (shape.type === 'circle') {
+                return (
+                  <Circle
+                    key={shape.id}
+                    id={shape.id}
+                    x={relativeX}
+                    y={relativeY}
+                    width={shape.width}
+                    height={shape.height}
+                    rotation={shape.rotation}
+                    fill={shape.fill}
+                    stroke={shape.stroke}
+                    strokeWidth={shape.strokeWidth}
+                    isSelected={false}
+                    onSelect={() => {}}
+                    onDragStart={() => {}}
+                    onDragEnd={() => {}}
+                    onTransformEnd={() => {}}
+                  />
+                )
+              }
+              // Add other shape types as needed
+              return null
+            }
+            
+            return (
+              <Group
+                key={group.id}
+                id={group.id}
+                x={bounds.x}
+                y={bounds.y}
+                width={bounds.width}
+                height={bounds.height}
+                rotation={group.rotation}
+                isSelected={isSelected}
+                selectionColor={isSelected ? userColor : undefined}
+                locked={group.locked}
+                visible={group.visible}
+                onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(group.id, e.evt.shiftKey)}
+                onDragStart={() => {
+                  // Track original position for calculating delta
+                  dragStartPosRef.current = { x: bounds.x, y: bounds.y }
+                }}
+                onDragEnd={(x: number, y: number) => {
+                  // Calculate delta and move all group members
+                  if (dragStartPosRef.current) {
+                    const deltaX = x - dragStartPosRef.current.x
+                    const deltaY = y - dragStartPosRef.current.y
+                    
+                    // Update each member's position
+                    group.memberIds.forEach((memberId) => {
+                      const shape = shapes.find((s) => s.id === memberId)
+                      if (shape) {
+                        updateShape(memberId, {
+                          x: shape.x + deltaX,
+                          y: shape.y + deltaY,
+                        })
+                      }
+                    })
+                    
+                    dragStartPosRef.current = null
+                  }
+                }}
+              >
+                {group.memberIds.map(renderGroupMember)}
+              </Group>
+            )
           })}
           
           {/* Selection Box for drag-to-select */}
