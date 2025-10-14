@@ -30,10 +30,18 @@ export default function Toolbar({
     type: ToolType
     icon: string
     label: string
-    isSpacer?: boolean
+    isSeparator?: boolean
   }> = [
+    // Basic Shapes
     { type: 'rectangle', icon: '▭', label: 'Rectangle' },
     { type: 'circle', icon: '●', label: 'Circle' },
+    { type: 'roundRect', icon: '▢', label: 'Rounded Rectangle' },
+    // Advanced Shapes (PR-16)
+    { type: 'polygon', icon: '⬡', label: 'Polygon' },
+    { type: 'star', icon: '★', label: 'Star' },
+    // Line Tool (PR-16)
+    { type: 'line', icon: '/', label: 'Line' },
+    // Text Tool
     { type: 'text', icon: 'T', label: 'Text' },
   ]
 

@@ -60,6 +60,11 @@ interface UseCanvasReturn {
   updateColors: (fill?: string, stroke?: string, strokeWidth?: number) => void
   getRecentColors: () => string[]
   addRecentColor: (color: string) => void
+  // NEW: Advanced shape creation functions (PR-16)
+  addLine: (x1: number, y1: number, x2: number, y2: number, arrows?: { start?: boolean; end?: boolean }) => string
+  addPolygon: (x: number, y: number, sides?: number) => string
+  addStar: (x: number, y: number, points?: number) => string
+  addRoundedRect: (x: number, y: number, cornerRadius?: number) => string
 }
 
 /**
@@ -220,6 +225,149 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       return id
     },
     [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState]
+  )
+
+  /**
+   * Add a line shape (PR-16)
+   * Creates a line with two endpoints and optional arrows
+   */
+  const addLine = useCallback(
+    (x1: number, y1: number, x2: number, y2: number, arrows?: { start?: boolean; end?: boolean }): string => {
+      const id = uuidv4()
+      const newShape: Shape = {
+        id,
+        type: 'line',
+        x: Math.min(x1, x2),
+        y: Math.min(y1, y2),
+        width: Math.abs(x2 - x1),
+        height: Math.abs(y2 - y1),
+        points: [x1, y1, x2, y2],
+        fill: DEFAULT_FILL,
+        arrows: arrows || { start: false, end: false },
+      }
+
+      const command = new CreateCommand(
+        newShape,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+      
+      return id
+    },
+    [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState, DEFAULT_FILL]
+  )
+
+  /**
+   * Add a polygon shape (PR-16)
+   * Creates a regular polygon with specified number of sides (default: 5)
+   */
+  const addPolygon = useCallback(
+    (x: number, y: number, sides: number = 5): string => {
+      const id = uuidv4()
+      const size = DEFAULT_CANVAS_CONFIG.defaultShapeSize
+      
+      const newShape: Shape = {
+        id,
+        type: 'polygon',
+        x,
+        y,
+        width: size,
+        height: size,
+        fill: DEFAULT_FILL,
+        sides: Math.max(3, Math.min(12, sides)),
+      }
+
+      const command = new CreateCommand(
+        newShape,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+      
+      return id
+    },
+    [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState, DEFAULT_FILL]
+  )
+
+  /**
+   * Add a star shape (PR-16)
+   * Creates a star with specified number of points (default: 5)
+   */
+  const addStar = useCallback(
+    (x: number, y: number, points: number = 5): string => {
+      const id = uuidv4()
+      const size = DEFAULT_CANVAS_CONFIG.defaultShapeSize
+      
+      const newShape: Shape = {
+        id,
+        type: 'star',
+        x,
+        y,
+        width: size,
+        height: size,
+        fill: DEFAULT_FILL,
+        sides: Math.max(3, Math.min(12, points)),
+      }
+
+      const command = new CreateCommand(
+        newShape,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+      
+      return id
+    },
+    [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState, DEFAULT_FILL]
+  )
+
+  /**
+   * Add a rounded rectangle shape (PR-16)
+   * Creates a rectangle with rounded corners (default: 10px radius)
+   */
+  const addRoundedRect = useCallback(
+    (x: number, y: number, cornerRadius: number = 10): string => {
+      const id = uuidv4()
+      const size = DEFAULT_CANVAS_CONFIG.defaultShapeSize
+      
+      const newShape: Shape = {
+        id,
+        type: 'roundRect',
+        x,
+        y,
+        width: size,
+        height: size,
+        fill: DEFAULT_FILL,
+        cornerRadius: Math.max(0, Math.min(50, cornerRadius)),
+      }
+
+      const command = new CreateCommand(
+        newShape,
+        addShapeToState,
+        removeShapeFromState,
+        syncShapeCreate,
+        syncShapeDelete
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+      
+      return id
+    },
+    [historyManager, addShapeToState, removeShapeFromState, syncShapeCreate, syncShapeDelete, updateHistoryState, DEFAULT_FILL]
   )
 
   /**
@@ -633,6 +781,10 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     updateColors,
     getRecentColors,
     addRecentColor,
+    addLine,
+    addPolygon,
+    addStar,
+    addRoundedRect,
   }
 }
 

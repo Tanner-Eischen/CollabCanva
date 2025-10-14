@@ -686,7 +686,7 @@ canvas/objects/{id}: {
 ### Subtasks
 
 #### 16.1 Update Canvas Types for New Shapes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/types/canvas.ts` (add new shape types)
@@ -717,7 +717,7 @@ interface Shape {
 ```
 
 #### 16.2 Create Line Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/Line.tsx` (Konva Line with drag endpoints and arrow options)
@@ -730,7 +730,7 @@ interface Shape {
 - Transform handles on endpoints
 
 #### 16.3 Create Polygon Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/Polygon.tsx` (Konva RegularPolygon)
@@ -743,7 +743,7 @@ interface Shape {
 - Resizable and rotatable
 
 #### 16.4 Create Star Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/Star.tsx` (Konva Star)
@@ -756,7 +756,7 @@ interface Shape {
 - Resizable and rotatable
 
 #### 16.5 Create Rounded Rectangle Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/RoundedRect.tsx` (Konva Rect with cornerRadius)
@@ -768,7 +768,7 @@ interface Shape {
 - Resizable and rotatable
 
 #### 16.6 Add New Shape Buttons to Toolbar
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Toolbar.tsx` (add buttons for line, polygon, star, roundRect)
@@ -782,7 +782,7 @@ interface Shape {
   - Delete button
 
 #### 16.7 Update Canvas Hook for New Shapes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (add creation functions for new shapes)
@@ -794,7 +794,7 @@ interface Shape {
 - `createRoundedRect(x, y, cornerRadius)` - Create rounded rectangle
 
 #### 16.8 Update Canvas Component for New Tools
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Canvas.tsx` (handle creation modes for new shapes)
@@ -805,7 +805,7 @@ interface Shape {
 - RoundedRect: Click to place (default size)
 
 #### 16.9 Update Properties Panel for New Shapes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/PropertiesPanel.tsx` (show shape-specific properties)
@@ -817,7 +817,7 @@ interface Shape {
 - RoundedRect: Corner radius slider (0-50)
 
 #### 16.10 Update Firebase Sync for New Shapes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/services/canvasSync.ts` (sync new shape data)

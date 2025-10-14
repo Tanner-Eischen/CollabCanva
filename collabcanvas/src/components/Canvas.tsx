@@ -20,6 +20,10 @@ import Circle from './shapes/Circle'
 import TextShape from './shapes/TextShape'
 import { SelectionBox } from './shapes/SelectionBox'
 import { PropertiesPanel } from './PropertiesPanel'
+import Line from './shapes/Line'
+import Polygon from './shapes/Polygon'
+import Star from './shapes/Star'
+import RoundedRect from './shapes/RoundedRect'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
@@ -93,6 +97,10 @@ export default function Canvas({
     updateColors,
     getRecentColors,
     addRecentColor,
+    addLine,
+    addPolygon,
+    addStar,
+    addRoundedRect,
   } = useCanvas({
     canvasId: CANVAS_ID,
     userId: user?.uid || '',
@@ -389,6 +397,18 @@ export default function Canvas({
           addShape('circle', canvasX, canvasY)
         } else if (selectedTool === 'text') {
           setTextInput({ x: canvasX, y: canvasY, value: '' })
+        } else if (selectedTool === 'roundRect') {
+          // PR-16: Create rounded rectangle
+          addRoundedRect(canvasX, canvasY, 10)
+        } else if (selectedTool === 'polygon') {
+          // PR-16: Create polygon with 5 sides
+          addPolygon(canvasX, canvasY, 5)
+        } else if (selectedTool === 'star') {
+          // PR-16: Create star with 5 points
+          addStar(canvasX, canvasY, 5)
+        } else if (selectedTool === 'line') {
+          // PR-16: Create line (simple 100px line for now)
+          addLine(canvasX, canvasY, canvasX + 100, canvasY + 100)
         } else if (selectedTool === 'select') {
           // Clear selection when clicking empty space (if not shift key)
           if (!e.evt.shiftKey) {
@@ -637,6 +657,92 @@ export default function Canvas({
                   onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
                 />
               )
+            } else if (shape.type === 'line' && shape.points) {
+              return (
+                <Line
+                  key={shape.id}
+                  id={shape.id}
+                  points={shape.points}
+                  fill={shape.fill}
+                  stroke={shape.stroke}
+                  strokeWidth={shape.strokeWidth}
+                  arrows={shape.arrows}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(pts: number[], x: number, y: number) => {
+                    updateShape(shape.id, { points: pts, x, y })
+                  }}
+                />
+              )
+            } else if (shape.type === 'polygon' && shape.sides) {
+              return (
+                <Polygon
+                  key={shape.id}
+                  id={shape.id}
+                  x={shape.x}
+                  y={shape.y}
+                  width={shape.width}
+                  height={shape.height}
+                  rotation={shape.rotation}
+                  fill={shape.fill}
+                  stroke={shape.stroke}
+                  strokeWidth={shape.strokeWidth}
+                  sides={shape.sides}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
+                />
+              )
+            } else if (shape.type === 'star' && shape.sides) {
+              return (
+                <Star
+                  key={shape.id}
+                  id={shape.id}
+                  x={shape.x}
+                  y={shape.y}
+                  width={shape.width}
+                  height={shape.height}
+                  rotation={shape.rotation}
+                  fill={shape.fill}
+                  stroke={shape.stroke}
+                  strokeWidth={shape.strokeWidth}
+                  sides={shape.sides}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
+                />
+              )
+            } else if (shape.type === 'roundRect' && shape.cornerRadius !== undefined) {
+              return (
+                <RoundedRect
+                  key={shape.id}
+                  id={shape.id}
+                  x={shape.x}
+                  y={shape.y}
+                  width={shape.width}
+                  height={shape.height}
+                  rotation={shape.rotation}
+                  fill={shape.fill}
+                  stroke={shape.stroke}
+                  strokeWidth={shape.strokeWidth}
+                  cornerRadius={shape.cornerRadius}
+                  isSelected={isSelected}
+                  selectionColor={isSelected ? userColor : undefined}
+                  onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
+                  onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
+                  onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
+                  onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
+                />
+              )
             }
             return null
           })}
@@ -698,6 +804,7 @@ export default function Canvas({
       <PropertiesPanel
         selectedShapes={Array.from(selectedIds).map(id => shapes.find(s => s.id === id)!).filter(Boolean)}
         onUpdateColors={(fill, stroke, strokeWidth) => updateColors(fill, stroke, strokeWidth)}
+        onUpdateShapeProps={(id, updates) => updateShape(id, updates)}
         recentColors={getRecentColors()}
       />
     </div>

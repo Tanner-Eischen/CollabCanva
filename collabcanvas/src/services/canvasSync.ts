@@ -1,7 +1,7 @@
 import { ref, set, update, remove, onValue, off } from 'firebase/database'
 import { db } from './firebase'
 import type { CanvasObject } from '../types/firebase'
-import type { Shape } from '../types/canvas'
+import type { Shape, ShapeType } from '../types/canvas'
 
 /**
  * Compress shape data for Firebase storage
@@ -9,8 +9,20 @@ import type { Shape } from '../types/canvas'
  * Phase 3: Now includes color properties (fill, stroke, strokeWidth)
  */
 function compressShape(shape: Shape): CanvasObject {
+  // Determine type code (PR-16: Added new shape types)
+  let typeCode: 'r' | 'c' | 't' | 'l' | 'pg' | 'st' | 'rr' = 'r'
+  switch (shape.type) {
+    case 'rectangle': typeCode = 'r'; break
+    case 'circle': typeCode = 'c'; break
+    case 'text': typeCode = 't'; break
+    case 'line': typeCode = 'l'; break
+    case 'polygon': typeCode = 'pg'; break
+    case 'star': typeCode = 'st'; break
+    case 'roundRect': typeCode = 'rr'; break
+  }
+
   const compressed: CanvasObject = {
-    t: shape.type === 'rectangle' ? 'r' : shape.type === 'circle' ? 'c' : 't',
+    t: typeCode,
     x: Math.round(shape.x),
     y: Math.round(shape.y),
     w: Math.round(shape.width),
@@ -36,6 +48,29 @@ function compressShape(shape: Shape): CanvasObject {
     compressed.sw = Math.round(shape.strokeWidth)
   }
 
+  // PR-16: Add line-specific properties
+  if (shape.type === 'line') {
+    if (shape.points) {
+      compressed.pts = shape.points.map(Math.round)
+    }
+    if (shape.arrows) {
+      compressed.arr = {
+        s: shape.arrows.start,
+        e: shape.arrows.end,
+      }
+    }
+  }
+
+  // PR-16: Add polygon/star sides
+  if ((shape.type === 'polygon' || shape.type === 'star') && shape.sides !== undefined) {
+    compressed.sides = shape.sides
+  }
+
+  // PR-16: Add rounded rect corner radius
+  if (shape.type === 'roundRect' && shape.cornerRadius !== undefined) {
+    compressed.cr = Math.round(shape.cornerRadius)
+  }
+
   return compressed
 }
 
@@ -45,9 +80,21 @@ function compressShape(shape: Shape): CanvasObject {
  * Phase 3: Includes color properties with defaults for backward compatibility
  */
 function decompressShape(id: string, data: CanvasObject): Shape {
+  // Determine type from code (PR-16: Added new shape types)
+  let type: ShapeType = 'rectangle'
+  switch (data.t) {
+    case 'r': type = 'rectangle'; break
+    case 'c': type = 'circle'; break
+    case 't': type = 'text'; break
+    case 'l': type = 'line'; break
+    case 'pg': type = 'polygon'; break
+    case 'st': type = 'star'; break
+    case 'rr': type = 'roundRect'; break
+  }
+
   const shape: Shape = {
     id,
-    type: data.t === 'r' ? 'rectangle' : data.t === 'c' ? 'circle' : 'text',
+    type,
     x: data.x,
     y: data.y,
     width: data.w,
@@ -67,6 +114,27 @@ function decompressShape(id: string, data: CanvasObject): Shape {
   }
   if (data.sw !== undefined) {
     shape.strokeWidth = data.sw
+  }
+
+  // PR-16: Add line-specific properties
+  if (data.pts) {
+    shape.points = data.pts
+  }
+  if (data.arr) {
+    shape.arrows = {
+      start: data.arr.s,
+      end: data.arr.e,
+    }
+  }
+
+  // PR-16: Add polygon/star sides
+  if (data.sides !== undefined) {
+    shape.sides = data.sides
+  }
+
+  // PR-16: Add rounded rect corner radius
+  if (data.cr !== undefined) {
+    shape.cornerRadius = data.cr
   }
 
   return shape

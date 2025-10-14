@@ -5,7 +5,7 @@
  * Path: canvas/objects/{objectId}
  */
 export interface CanvasObject {
-  t: 'r' | 'c' | 't' // type: rectangle, circle, text
+  t: 'r' | 'c' | 't' | 'l' | 'pg' | 'st' | 'rr' // type: rectangle, circle, text, line, polygon, star, roundRect (Phase 3 PR-16)
   x: number // x position
   y: number // y position
   w: number // width (variable in Phase 2)
@@ -15,6 +15,11 @@ export interface CanvasObject {
   f?: string // fill color (RGBA hex, Phase 3)
   s?: string // stroke color (RGBA hex, Phase 3, optional)
   sw?: number // stroke width (Phase 3, optional)
+  // Phase 3 PR-16: Advanced shapes
+  pts?: number[] // [x1, y1, x2, y2] for line shapes
+  arr?: { s?: boolean; e?: boolean } // arrows for lines (s=start, e=end)
+  sides?: number // sides for polygon/star (3-12)
+  cr?: number // corner radius for rounded rectangles (0-50)
 }
 
 /**

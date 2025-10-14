@@ -14,12 +14,14 @@ interface PropertiesPanelProps {
     stroke?: string,
     strokeWidth?: number
   ) => void
+  onUpdateShapeProps?: (id: string, updates: Partial<Shape>) => void
   recentColors: string[]
 }
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedShapes,
   onUpdateColors,
+  onUpdateShapeProps,
   recentColors,
 }) => {
   const [showFillPicker, setShowFillPicker] = useState(false)
@@ -233,6 +235,147 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <span>20px</span>
             </div>
           </div>
+        )}
+
+        {/* Shape-Specific Controls (PR-16) */}
+        {selectedShapes.length === 1 && onUpdateShapeProps && (
+          <>
+            {/* Line: Arrow Controls */}
+            {selectedShapes[0].type === 'line' && selectedShapes[0].arrows && (
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-semibold text-gray-800 mb-3">
+                  Arrows
+                </h4>
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedShapes[0].arrows.start || false}
+                      onChange={(e) =>
+                        onUpdateShapeProps(selectedShapes[0].id, {
+                          arrows: {
+                            ...selectedShapes[0].arrows,
+                            start: e.target.checked,
+                          },
+                        })
+                      }
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm text-gray-700">Start Arrow</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedShapes[0].arrows.end || false}
+                      onChange={(e) =>
+                        onUpdateShapeProps(selectedShapes[0].id, {
+                          arrows: {
+                            ...selectedShapes[0].arrows,
+                            end: e.target.checked,
+                          },
+                        })
+                      }
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm text-gray-700">End Arrow</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* Polygon: Sides Control */}
+            {selectedShapes[0].type === 'polygon' && selectedShapes[0].sides !== undefined && (
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-semibold text-gray-800">
+                    Sides
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {selectedShapes[0].sides}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="3"
+                  max="12"
+                  step="1"
+                  value={selectedShapes[0].sides}
+                  onChange={(e) =>
+                    onUpdateShapeProps(selectedShapes[0].id, {
+                      sides: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>3</span>
+                  <span>12</span>
+                </div>
+              </div>
+            )}
+
+            {/* Star: Points Control */}
+            {selectedShapes[0].type === 'star' && selectedShapes[0].sides !== undefined && (
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-semibold text-gray-800">
+                    Points
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {selectedShapes[0].sides}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="3"
+                  max="12"
+                  step="1"
+                  value={selectedShapes[0].sides}
+                  onChange={(e) =>
+                    onUpdateShapeProps(selectedShapes[0].id, {
+                      sides: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>3</span>
+                  <span>12</span>
+                </div>
+              </div>
+            )}
+
+            {/* Rounded Rectangle: Corner Radius Control */}
+            {selectedShapes[0].type === 'roundRect' && selectedShapes[0].cornerRadius !== undefined && (
+              <div className="pt-4 border-t">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-semibold text-gray-800">
+                    Corner Radius
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {selectedShapes[0].cornerRadius}px
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  step="1"
+                  value={selectedShapes[0].cornerRadius}
+                  onChange={(e) =>
+                    onUpdateShapeProps(selectedShapes[0].id, {
+                      cornerRadius: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>0px</span>
+                  <span>50px</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Shape Info */}

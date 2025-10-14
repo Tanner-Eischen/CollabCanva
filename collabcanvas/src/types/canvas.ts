@@ -19,8 +19,9 @@ export interface ViewportTransform {
 
 /**
  * Shape types supported by the canvas
+ * Phase 3 PR-16: Added line, polygon, star, roundRect
  */
-export type ShapeType = 'rectangle' | 'circle' | 'text'
+export type ShapeType = 'rectangle' | 'circle' | 'text' | 'line' | 'polygon' | 'star' | 'roundRect'
 
 /**
  * Client-side representation of a canvas shape
@@ -35,10 +36,17 @@ export interface Shape {
   height: number // height (now variable in Phase 2)
   rotation?: number // rotation in degrees (0-360) - Phase 2
   text?: string // text content (text shapes only)
-  // Phase 3: Color properties
+  // Phase 3: Color properties (PR-15)
   fill: string // fill color (RGBA hex format, e.g., #3B82F6FF)
   stroke?: string // stroke color (RGBA hex format, optional)
   strokeWidth?: number // stroke width in pixels (0-20, optional)
+  // Phase 3: Line shape properties (PR-16)
+  points?: number[] // [x1, y1, x2, y2] for line shapes
+  arrows?: { start?: boolean; end?: boolean } // arrow options for lines
+  // Phase 3: Polygon/Star properties (PR-16)
+  sides?: number // number of sides for polygon (3-12) or points for star (3-12)
+  // Phase 3: Rounded rectangle properties (PR-16)
+  cornerRadius?: number // corner radius for rounded rectangles (0-50px)
 }
 
 /**
@@ -56,8 +64,9 @@ export interface CanvasConfig {
 
 /**
  * Tool types for the canvas toolbar
+ * Phase 3 PR-16: Added line, polygon, star, roundRect
  */
-export type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'delete'
+export type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'delete' | 'line' | 'polygon' | 'star' | 'roundRect'
 
 /**
  * Canvas bounds for enforcing hard boundaries
