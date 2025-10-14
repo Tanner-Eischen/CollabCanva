@@ -647,10 +647,11 @@ canvas/objects/{id}: {
 - Max 5 colors in recent list
 
 #### 15.10 Unit Tests for Color System
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
-- `tests/unit/hooks/useCanvas-colors.test.ts`
+- `tests/unit/services/colorStorage.test.ts`
+- `tests/unit/commands/ColorCommand.test.ts`
 
 **Tests to verify:**
 - `updateColors()` updates fill/stroke/strokeWidth
@@ -660,7 +661,7 @@ canvas/objects/{id}: {
 - ColorCommand undo restores old colors
 
 #### 15.11 Integration Tests for Color Picker UI
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/colorPicker.test.tsx`
@@ -838,10 +839,10 @@ interface Shape {
 ```
 
 #### 16.11 Unit Tests for New Shapes
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
-- `tests/unit/hooks/useCanvas-advancedShapes.test.ts`
+- `tests/unit/shapes/advancedShapes.test.tsx` (all shapes tested together)
 
 **Tests to verify:**
 - `createLine()` creates line with correct endpoints
@@ -851,7 +852,7 @@ interface Shape {
 - All new shapes have default fill/stroke
 
 #### 16.12 Integration Tests for New Shape Tools
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/advancedShapes.test.tsx`
@@ -989,10 +990,11 @@ canvas/objects/{id}: {
 - Send to back → set all selected to min-1, min-2, min-3, etc. (maintain relative order)
 
 #### 17.10 Unit Tests for Z-Index Logic
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/unit/hooks/useCanvas-zindex.test.ts`
+- `tests/unit/commands/ZIndexCommand.test.ts`
 
 **Tests to verify:**
 - `bringToFront()` sets zIndex to max+1
@@ -1003,7 +1005,7 @@ canvas/objects/{id}: {
 - `sortShapesByZIndex()` returns correctly ordered array
 
 #### 17.11 Integration Tests for Z-Index UI
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/zindex.test.tsx`
