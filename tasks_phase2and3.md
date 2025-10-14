@@ -13,7 +13,7 @@
 ### Subtasks
 
 #### 11.1 Update Canvas Types for Multi-Select
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/types/selection.ts` (interfaces: SelectionState, SelectionBox)
@@ -22,7 +22,7 @@
 - `src/types/canvas.ts` (add SelectionBox interface)
 
 #### 11.2 Create Selection Box Component
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/components/SelectionBox.tsx` (Konva Rect for drag-to-select visual indicator)
@@ -34,7 +34,7 @@
 - Calculates intersection with shapes
 
 #### 11.3 Update Canvas Hook for Multi-Select
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (add selectedIds array, toggleSelection, selectMultiple, clearSelection)
@@ -47,7 +47,7 @@
 - `getSelectedShapes()` - Return array of selected shape objects
 
 #### 11.4 Update Canvas Component with Drag-to-Select
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Canvas.tsx` (add mousedown/mousemove/mouseup handlers for selection box)
@@ -61,7 +61,7 @@
 - Escape → clear selection
 
 #### 11.5 Update Shape Components for Multi-Select
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Rectangle.tsx` (support multi-select highlighting)
@@ -73,7 +73,7 @@
 - Different visual for multi-select (e.g., blue outline for all selected)
 
 #### 11.6 Implement Bulk Move
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (add bulkMove function)
@@ -85,7 +85,7 @@
 - Sync all moves to Firebase on drag end
 
 #### 11.7 Implement Bulk Delete
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (add bulkDelete function)
@@ -99,7 +99,7 @@
 - Sync all deletions to Firebase
 
 #### 11.8 Update Firebase Sync for Multi-Select
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/services/canvasSync.ts` (add syncBulkDelete, syncBulkMove)
@@ -109,7 +109,7 @@
 - `syncBulkMove(updates: Record<string, {x: number, y: number}>)` - Move multiple objects
 
 #### 11.9 Unit Tests for Multi-Select Logic
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/unit/hooks/useCanvas-multiselect.test.ts`
@@ -125,7 +125,7 @@
 - Selection persists after operations
 
 #### 11.10 Integration Tests for Multi-Select UI
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/multiSelect.test.tsx`
@@ -152,7 +152,7 @@
 ### Subtasks
 
 #### 12.1 Add Transformer to Shape Components
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Rectangle.tsx` (add Konva Transformer for resize/rotate)
@@ -167,7 +167,7 @@
 - Text: no rotation, auto-height based on width
 
 #### 12.2 Update Canvas Types for Transform
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/types/canvas.ts` (add rotation property to Shape interface)
@@ -176,7 +176,7 @@
 - `rotation?: number` (degrees, 0-360)
 
 #### 12.3 Handle Transform Events
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Rectangle.tsx` (onTransformEnd → update w, h, rotation)
@@ -189,7 +189,7 @@
 - Sync to Firebase
 
 #### 12.4 Update Canvas Hook for Transform
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (updateShape supports rotation, w, h changes)
@@ -199,7 +199,7 @@
 - Validate dimensions (min 10px, max 5000px)
 
 #### 12.5 Update Firebase Sync for Transform
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/services/canvasSync.ts` (sync rotation, width, height)
@@ -221,7 +221,7 @@ canvas/objects/{id}: {
 - Migration script to add default values to existing shapes
 
 #### 12.6 Multi-Select Transform
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Canvas.tsx` (show single transformer for multi-select)
@@ -234,7 +234,7 @@ canvas/objects/{id}: {
 - Sync all transforms to Firebase
 
 #### 12.7 Unit Tests for Transform Logic
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/unit/hooks/useCanvas-transform.test.ts`
@@ -246,7 +246,7 @@ canvas/objects/{id}: {
 - Multi-select transform updates all selected shapes proportionally
 
 #### 12.8 Integration Tests for Transform UI
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/transform.test.tsx`
@@ -271,7 +271,7 @@ canvas/objects/{id}: {
 ### Subtasks
 
 #### 13.1 Create Clipboard Service
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `src/services/clipboard.ts` (copyShapes, pasteShapes functions)
@@ -288,7 +288,7 @@ canvas/objects/{id}: {
 - Preserve all properties (size, color, rotation, text)
 
 #### 13.2 Update Canvas Hook with Copy/Paste/Duplicate
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/hooks/useCanvas.ts` (add copy, paste, duplicate functions)
@@ -299,7 +299,7 @@ canvas/objects/{id}: {
 - `duplicateSelected()` - Duplicate selected shapes with small offset
 
 #### 13.3 Add Keyboard Shortcuts
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Canvas.tsx` (add keyboard event listeners)
@@ -310,7 +310,7 @@ canvas/objects/{id}: {
 - Cmd/Ctrl+D → duplicate selected
 
 #### 13.4 Update Firebase Sync for Batch Create
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/services/canvasSync.ts` (add syncBatchCreate)
@@ -323,7 +323,7 @@ canvas/objects/{id}: {
 - Broadcast all creates to other users
 
 #### 13.5 Visual Feedback for Copy/Paste
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Modified:**
 - `src/components/Canvas.tsx` (flash selection indicator on paste)
@@ -333,7 +333,7 @@ canvas/objects/{id}: {
 - Auto-select newly pasted shapes
 
 #### 13.6 Unit Tests for Clipboard Logic
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/unit/services/clipboard.test.ts`
@@ -346,7 +346,7 @@ canvas/objects/{id}: {
 - All shape properties preserved (size, rotation, color, text)
 
 #### 13.7 Integration Tests for Copy/Paste UI
-- [ ] **Task Complete**
+- [x] **Task Complete**
 
 **Files Created:**
 - `tests/integration/copyPaste.test.tsx`

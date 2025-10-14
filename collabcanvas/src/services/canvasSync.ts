@@ -172,6 +172,32 @@ export async function syncBulkDelete(
 }
 
 /**
+ * Sync batch create operation to Firebase (PR-13)
+ * Creates multiple shapes at once for paste/duplicate operations
+ */
+export async function syncBatchCreate(
+  canvasId: string,
+  shapes: Shape[]
+): Promise<void> {
+  try {
+    // Build a flat update object for all shapes
+    const firebaseUpdates: Record<string, CanvasObject> = {}
+    
+    shapes.forEach((shape) => {
+      const compressed = compressShape(shape)
+      firebaseUpdates[`canvas/${canvasId}/objects/${shape.id}`] = compressed
+    })
+    
+    // Perform atomic multi-path create
+    const dbRef = ref(db)
+    await update(dbRef, firebaseUpdates)
+  } catch (error) {
+    console.error('Failed to sync batch create:', error)
+    throw error
+  }
+}
+
+/**
  * Sync selection state to presence
  * Selection is stored per-user in presence/${userId}/sel as an array
  */

@@ -79,6 +79,9 @@ export default function Canvas({
     selectAll,
     bulkMove,
     bulkDelete,
+    copySelected,
+    paste,
+    duplicateSelected,
   } = useCanvas({
     canvasId: CANVAS_ID,
     userId: user?.uid || '',
@@ -127,11 +130,29 @@ export default function Canvas({
         e.preventDefault()
         selectAll()
       }
+      
+      // Cmd/Ctrl+C - copy selected shapes (PR-13)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selectedIds.size > 0) {
+        e.preventDefault()
+        copySelected()
+      }
+      
+      // Cmd/Ctrl+V - paste shapes (PR-13)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+        e.preventDefault()
+        paste()
+      }
+      
+      // Cmd/Ctrl+D - duplicate selected shapes (PR-13)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'd' && selectedIds.size > 0) {
+        e.preventDefault()
+        duplicateSelected()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, bulkDelete, clearSelection, selectAll])
+  }, [selectedIds, bulkDelete, clearSelection, selectAll, copySelected, paste, duplicateSelected])
 
   /**
    * Handle mouse wheel for zoom functionality

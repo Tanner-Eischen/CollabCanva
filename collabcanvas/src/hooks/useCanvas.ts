@@ -8,8 +8,14 @@ import {
   syncDeleteShape,
   syncBulkMove,
   syncBulkDelete,
+  syncBatchCreate,
   subscribeToCanvas,
 } from '../services/canvasSync'
+import {
+  copyShapes as copyShapesToClipboard,
+  pasteShapes as pasteShapesFromClipboard,
+  duplicateShapes as duplicateShapesInternal,
+} from '../services/clipboard'
 
 interface UseCanvasOptions {
   canvasId: string
@@ -34,6 +40,10 @@ interface UseCanvasReturn {
   getSelectedShapes: () => Shape[]
   bulkMove: (deltaX: number, deltaY: number) => void
   bulkDelete: () => void
+  // NEW: Copy/Paste/Duplicate functions (PR-13)
+  copySelected: () => void
+  paste: () => void
+  duplicateSelected: () => void
 }
 
 /**
@@ -318,6 +328,79 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   }, [selectedIds, syncEnabled, canvasId, userId, clearSelection])
 
   /**
+   * Copy selected shapes to in-memory clipboard (PR-13)
+   */
+  const copySelected = useCallback((): void => {
+    const selectedShapes = getSelectedShapes()
+    if (selectedShapes.length > 0) {
+      copyShapesToClipboard(selectedShapes)
+    }
+  }, [getSelectedShapes])
+
+  /**
+   * Paste shapes from clipboard with offset (PR-13)
+   * Auto-selects pasted shapes
+   */
+  const paste = useCallback((): void => {
+    const pastedShapes = pasteShapesFromClipboard()
+    
+    if (pastedShapes.length === 0) {
+      return
+    }
+
+    // Add to local state immediately
+    setShapes((prev) => [...prev, ...pastedShapes])
+    
+    // Mark all as locally created
+    pastedShapes.forEach((shape) => {
+      localShapesRef.current.add(shape.id)
+    })
+    
+    // Auto-select pasted shapes
+    selectMultiple(pastedShapes.map((s) => s.id))
+    
+    // Sync to Firebase (only if user is authenticated)
+    if (syncEnabled && userId) {
+      // Use batch create for efficient multi-shape sync
+      syncBatchCreate(canvasId, pastedShapes).catch((error) => {
+        console.error('Failed to sync pasted shapes:', error)
+      })
+    }
+  }, [syncEnabled, canvasId, userId, selectMultiple])
+
+  /**
+   * Duplicate selected shapes with offset (PR-13)
+   * Auto-selects duplicated shapes
+   */
+  const duplicateSelected = useCallback((): void => {
+    const selectedShapes = getSelectedShapes()
+    const duplicatedShapes = duplicateShapesInternal(selectedShapes)
+    
+    if (duplicatedShapes.length === 0) {
+      return
+    }
+
+    // Add to local state immediately
+    setShapes((prev) => [...prev, ...duplicatedShapes])
+    
+    // Mark all as locally created
+    duplicatedShapes.forEach((shape) => {
+      localShapesRef.current.add(shape.id)
+    })
+    
+    // Auto-select duplicated shapes
+    selectMultiple(duplicatedShapes.map((s) => s.id))
+    
+    // Sync to Firebase (only if user is authenticated)
+    if (syncEnabled && userId) {
+      // Use batch create for efficient multi-shape sync
+      syncBatchCreate(canvasId, duplicatedShapes).catch((error) => {
+        console.error('Failed to sync duplicated shapes:', error)
+      })
+    }
+  }, [getSelectedShapes, syncEnabled, canvasId, userId, selectMultiple])
+
+  /**
    * Subscribe to Firebase updates from other users
    */
   useEffect(() => {
@@ -378,6 +461,9 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     getSelectedShapes,
     bulkMove,
     bulkDelete,
+    copySelected,
+    paste,
+    duplicateSelected,
   }
 }
 
