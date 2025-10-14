@@ -47,6 +47,8 @@ export interface Shape {
   sides?: number // number of sides for polygon (3-12) or points for star (3-12)
   // Phase 3: Rounded rectangle properties (PR-16)
   cornerRadius?: number // corner radius for rounded rectangles (0-50px)
+  // Phase 3: Z-Index for layering (PR-17)
+  zIndex?: number // z-index for layer ordering (higher = on top, default: creation timestamp)
 }
 
 /**

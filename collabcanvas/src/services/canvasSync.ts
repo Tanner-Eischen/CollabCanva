@@ -71,6 +71,11 @@ function compressShape(shape: Shape): CanvasObject {
     compressed.cr = Math.round(shape.cornerRadius)
   }
 
+  // PR-17: Add z-index
+  if (shape.zIndex !== undefined) {
+    compressed.z = shape.zIndex
+  }
+
   return compressed
 }
 
@@ -137,6 +142,9 @@ function decompressShape(id: string, data: CanvasObject): Shape {
     shape.cornerRadius = data.cr
   }
 
+  // PR-17: Add z-index (default to current timestamp if not present)
+  shape.zIndex = data.z ?? Date.now()
+
   return shape
 }
 
@@ -197,6 +205,10 @@ export async function syncUpdateShape(
     }
     if (updates.strokeWidth !== undefined) {
       compressed.sw = Math.round(updates.strokeWidth)
+    }
+    // PR-17: Z-index
+    if (updates.zIndex !== undefined) {
+      compressed.z = updates.zIndex
     }
     
     await update(shapeRef, compressed)
@@ -300,6 +312,24 @@ export async function syncBatchCreate(
 }
 
 /**
+ * Sync z-index change to Firebase (PR-17)
+ * Updates z-index for a single shape
+ */
+export async function syncZIndex(
+  canvasId: string,
+  shapeId: string,
+  zIndex: number
+): Promise<void> {
+  try {
+    const zIndexRef = ref(db, `canvas/${canvasId}/objects/${shapeId}/z`)
+    await set(zIndexRef, zIndex)
+  } catch (error) {
+    console.error('Failed to sync z-index:', error)
+    throw error
+  }
+}
+
+/**
  * Sync selection state to presence
  * Selection is stored per-user in presence/${userId}/sel as an array
  */
@@ -362,7 +392,8 @@ export function subscribeToCanvas(
           prevData.rot !== shapeData.rot ||
           prevData.f !== shapeData.f ||
           prevData.s !== shapeData.s ||
-          prevData.sw !== shapeData.sw
+          prevData.sw !== shapeData.sw ||
+          prevData.z !== shapeData.z
         
         if (hasChanges) {
           if (callbacks.onUpdate) {
@@ -376,6 +407,8 @@ export function subscribeToCanvas(
             if (prevData.f !== shapeData.f) updates.fill = shapeData.f
             if (prevData.s !== shapeData.s) updates.stroke = shapeData.s
             if (prevData.sw !== shapeData.sw) updates.strokeWidth = shapeData.sw
+            // Phase 3 PR-17: Z-index changes
+            if (prevData.z !== shapeData.z) updates.zIndex = shapeData.z ?? Date.now()
             callbacks.onUpdate(id, updates)
           }
         }

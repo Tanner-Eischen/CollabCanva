@@ -5,7 +5,7 @@
  * All commands must implement execute, undo, and redo methods
  */
 export interface Command {
-  type: 'create' | 'delete' | 'move' | 'transform' | 'bulk' | 'color'
+  type: 'create' | 'delete' | 'move' | 'transform' | 'bulk' | 'color' | 'zindex'
   execute(): void
   undo(): void
   redo(): void
@@ -42,7 +42,12 @@ export type BulkCommandType = 'bulk'
 export type ColorCommandType = 'color'
 
 /**
+ * Command type for z-index changes (PR-17)
+ */
+export type ZIndexCommandType = 'zindex'
+
+/**
  * Union type of all command types
  */
-export type CommandType = CreateCommandType | DeleteCommandType | MoveCommandType | TransformCommandType | BulkCommandType | ColorCommandType
+export type CommandType = CreateCommandType | DeleteCommandType | MoveCommandType | TransformCommandType | BulkCommandType | ColorCommandType | ZIndexCommandType
 

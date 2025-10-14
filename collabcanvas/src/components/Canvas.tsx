@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { Stage, Layer, Line } from 'react-konva'
+import { Stage, Layer, Line as KonvaLine } from 'react-konva'
 import Konva from 'konva'
 import type { ViewportTransform, ToolType } from '../types/canvas'
 import {
@@ -24,6 +24,7 @@ import Line from './shapes/Line'
 import Polygon from './shapes/Polygon'
 import Star from './shapes/Star'
 import RoundedRect from './shapes/RoundedRect'
+import { ContextMenu } from './ContextMenu'
 
 const CANVAS_CONFIG = DEFAULT_CANVAS_CONFIG
 const CANVAS_BOUNDS = DEFAULT_CANVAS_BOUNDS
@@ -64,6 +65,13 @@ export default function Canvas({
   // NEW: Track drag state for bulk move
   const isDraggingShapeRef = useRef(false)
   const dragStartPosRef = useRef<{ x: number; y: number } | null>(null)
+  
+  // NEW: Context menu state (PR-17)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    visible: boolean
+  }>({ x: 0, y: 0, visible: false })
 
   // Hooks
   const { user } = useAuth()
@@ -96,11 +104,15 @@ export default function Canvas({
     canRedo,
     updateColors,
     getRecentColors,
-    addRecentColor,
     addLine,
     addPolygon,
     addStar,
     addRoundedRect,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+    sortShapesByZIndex,
   } = useCanvas({
     canvasId: CANVAS_ID,
     userId: user?.uid || '',
@@ -459,9 +471,36 @@ export default function Canvas({
         // Normal click: single select
         setSelection(shapeId)
       }
+      // Close context menu on shape select (PR-17)
+      setContextMenu({ x: 0, y: 0, visible: false })
     },
     [setSelection, toggleSelection]
   )
+
+  /**
+   * Handle right-click on canvas or shapes (PR-17)
+   * Shows context menu with z-index and clipboard operations
+   */
+  const handleContextMenu = useCallback(
+    (e: Konva.KonvaEventObject<PointerEvent>) => {
+      e.evt.preventDefault()
+
+      // Show context menu at mouse position
+      setContextMenu({
+        x: e.evt.clientX,
+        y: e.evt.clientY,
+        visible: true,
+      })
+    },
+    []
+  )
+
+  /**
+   * Close context menu (PR-17)
+   */
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({ x: 0, y: 0, visible: false })
+  }, [])
 
   /**
    * Handle shape drag start
@@ -541,7 +580,7 @@ export default function Canvas({
     // Vertical lines
     for (let x = 0; x <= CANVAS_BOUNDS.maxX; x += spacing) {
       lines.push(
-        <Line
+        <KonvaLine
           key={`v-${x}`}
           points={[x, 0, x, CANVAS_BOUNDS.maxY]}
           stroke="#E5E7EB"
@@ -554,7 +593,7 @@ export default function Canvas({
     // Horizontal lines
     for (let y = 0; y <= CANVAS_BOUNDS.maxY; y += spacing) {
       lines.push(
-        <Line
+        <KonvaLine
           key={`h-${y}`}
           points={[0, y, CANVAS_BOUNDS.maxX, y]}
           stroke="#E5E7EB"
@@ -579,6 +618,7 @@ export default function Canvas({
         onMouseMove={handleStageMouseMove}
         onMouseDown={handleStageMouseDown}
         onMouseUp={handleStageMouseUp}
+        onContextMenu={handleContextMenu}
         x={viewport.x}
         y={viewport.y}
         scaleX={viewport.scale}
@@ -591,7 +631,8 @@ export default function Canvas({
 
         {/* Shapes Layer */}
         <Layer>
-          {shapes.map((shape) => {
+          {/* PR-17: Render shapes sorted by z-index (lowest first, highest last) */}
+          {sortShapesByZIndex().map((shape) => {
             const isSelected = selectedIds.has(shape.id)
             const userColor = getUserColor()
 
@@ -806,6 +847,25 @@ export default function Canvas({
         onUpdateColors={(fill, stroke, strokeWidth) => updateColors(fill, stroke, strokeWidth)}
         onUpdateShapeProps={(id, updates) => updateShape(id, updates)}
         recentColors={getRecentColors()}
+      />
+
+      {/* Context Menu (PR-17) */}
+      <ContextMenu
+        x={contextMenu.x}
+        y={contextMenu.y}
+        visible={contextMenu.visible}
+        onClose={closeContextMenu}
+        hasSelection={selectedIds.size > 0}
+        canCopy={selectedIds.size > 0}
+        canPaste={true}
+        onBringToFront={() => bringToFront()}
+        onBringForward={() => bringForward()}
+        onSendBackward={() => sendBackward()}
+        onSendToBack={() => sendToBack()}
+        onCopy={copySelected}
+        onPaste={paste}
+        onDuplicate={duplicateSelected}
+        onDelete={bulkDelete}
       />
     </div>
   )

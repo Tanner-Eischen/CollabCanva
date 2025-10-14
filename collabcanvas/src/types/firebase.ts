@@ -20,6 +20,8 @@ export interface CanvasObject {
   arr?: { s?: boolean; e?: boolean } // arrows for lines (s=start, e=end)
   sides?: number // sides for polygon/star (3-12)
   cr?: number // corner radius for rounded rectangles (0-50)
+  // Phase 3 PR-17: Z-Index
+  z?: number // z-index for layering (timestamp)
 }
 
 /**

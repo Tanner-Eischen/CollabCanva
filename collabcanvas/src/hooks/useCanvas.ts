@@ -9,6 +9,7 @@ import {
   syncBulkMove,
   syncBulkDelete,
   syncBatchCreate,
+  syncZIndex,
   subscribeToCanvas,
 } from '../services/canvasSync'
 import {
@@ -19,6 +20,7 @@ import {
 import { createHistoryManager } from '../services/commandHistory'
 import { CreateCommand } from '../commands/CreateCommand'
 import { DeleteCommand } from '../commands/DeleteCommand'
+import { ZIndexCommand } from '../commands/ZIndexCommand'
 import {
   loadRecentColors,
   saveRecentColors,
@@ -65,6 +67,12 @@ interface UseCanvasReturn {
   addPolygon: (x: number, y: number, sides?: number) => string
   addStar: (x: number, y: number, points?: number) => string
   addRoundedRect: (x: number, y: number, cornerRadius?: number) => string
+  // NEW: Z-index manipulation functions (PR-17)
+  bringToFront: (ids?: string[]) => void
+  sendToBack: (ids?: string[]) => void
+  bringForward: (ids?: string[]) => void
+  sendBackward: (ids?: string[]) => void
+  sortShapesByZIndex: () => Shape[]
 }
 
 /**
@@ -157,6 +165,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         width: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
         height: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
         fill: DEFAULT_FILL, // PR-15: Default color
+        zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
       // Create command for this operation
@@ -207,6 +216,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         height,
         text,
         fill: DEFAULT_FILL, // PR-15: Default color
+        zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
       // Create command for this operation
@@ -244,6 +254,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         points: [x1, y1, x2, y2],
         fill: DEFAULT_FILL,
         arrows: arrows || { start: false, end: false },
+        zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
       const command = new CreateCommand(
@@ -280,6 +291,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         height: size,
         fill: DEFAULT_FILL,
         sides: Math.max(3, Math.min(12, sides)),
+        zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
       const command = new CreateCommand(
@@ -316,6 +328,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         height: size,
         fill: DEFAULT_FILL,
         sides: Math.max(3, Math.min(12, points)),
+        zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
       const command = new CreateCommand(
@@ -352,6 +365,7 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         height: size,
         fill: DEFAULT_FILL,
         cornerRadius: Math.max(0, Math.min(50, cornerRadius)),
+        zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
       const command = new CreateCommand(
@@ -391,7 +405,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         updates.rotation !== undefined ||
         updates.fill !== undefined ||
         updates.stroke !== undefined ||
-        updates.strokeWidth !== undefined
+        updates.strokeWidth !== undefined ||
+        updates.zIndex !== undefined
       
       if (syncEnabled && userId && hasSyncableUpdate) {
         syncUpdateShape(canvasId, id, updates).catch((error) => {
@@ -704,6 +719,202 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   }, [historyManager])
 
   /**
+   * Sort shapes by z-index (PR-17)
+   * Returns a new array sorted by z-index (lowest first, highest last)
+   */
+  const sortShapesByZIndex = useCallback((): Shape[] => {
+    return [...shapes].sort((a, b) => {
+      const aZ = a.zIndex ?? 0
+      const bZ = b.zIndex ?? 0
+      return aZ - bZ
+    })
+  }, [shapes])
+
+  /**
+   * Bring shapes to front (PR-17)
+   * Sets z-index to max+1 for all selected shapes (or provided ids)
+   * Multi-select: maintains relative order among selected shapes
+   */
+  const bringToFront = useCallback(
+    (ids?: string[]): void => {
+      const targetIds = ids || Array.from(selectedIds)
+      if (targetIds.length === 0) return
+
+      // Find max z-index
+      const maxZ = Math.max(...shapes.map((s) => s.zIndex ?? 0))
+      
+      // Create old/new z-index maps for undo
+      const oldZIndices = new Map<string, number>()
+      const newZIndices = new Map<string, number>()
+      
+      // Sort target shapes by current z-index to maintain relative order
+      const targetShapes = shapes.filter((s) => targetIds.includes(s.id))
+        .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
+      
+      // Assign new z-indices starting from maxZ + 1
+      targetShapes.forEach((shape, index) => {
+        oldZIndices.set(shape.id, shape.zIndex ?? 0)
+        newZIndices.set(shape.id, maxZ + 1 + index)
+      })
+
+      // Create command for this operation
+      const command = new ZIndexCommand(
+        targetIds,
+        oldZIndices,
+        newZIndices,
+        (id, updates) => updateShape(id, updates),
+        (id, zIndex) => syncEnabled && userId ? syncZIndex(canvasId, id, zIndex) : Promise.resolve()
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+    },
+    [selectedIds, shapes, historyManager, updateShape, syncEnabled, userId, canvasId, updateHistoryState]
+  )
+
+  /**
+   * Send shapes to back (PR-17)
+   * Sets z-index to min-1 for all selected shapes (or provided ids)
+   * Multi-select: maintains relative order among selected shapes
+   */
+  const sendToBack = useCallback(
+    (ids?: string[]): void => {
+      const targetIds = ids || Array.from(selectedIds)
+      if (targetIds.length === 0) return
+
+      // Find min z-index
+      const minZ = Math.min(...shapes.map((s) => s.zIndex ?? 0))
+      
+      // Create old/new z-index maps for undo
+      const oldZIndices = new Map<string, number>()
+      const newZIndices = new Map<string, number>()
+      
+      // Sort target shapes by current z-index to maintain relative order
+      const targetShapes = shapes.filter((s) => targetIds.includes(s.id))
+        .sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
+      
+      // Assign new z-indices starting from minZ - targetShapes.length
+      targetShapes.forEach((shape, index) => {
+        oldZIndices.set(shape.id, shape.zIndex ?? 0)
+        newZIndices.set(shape.id, minZ - targetShapes.length + index)
+      })
+
+      // Create command for this operation
+      const command = new ZIndexCommand(
+        targetIds,
+        oldZIndices,
+        newZIndices,
+        (id, updates) => updateShape(id, updates),
+        (id, zIndex) => syncEnabled && userId ? syncZIndex(canvasId, id, zIndex) : Promise.resolve()
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+    },
+    [selectedIds, shapes, historyManager, updateShape, syncEnabled, userId, canvasId, updateHistoryState]
+  )
+
+  /**
+   * Bring shapes forward by one layer (PR-17)
+   * Increments z-index by swapping with the shape above
+   */
+  const bringForward = useCallback(
+    (ids?: string[]): void => {
+      const targetIds = ids || Array.from(selectedIds)
+      if (targetIds.length === 0) return
+
+      // Sort all shapes by z-index
+      const sortedShapes = sortShapesByZIndex()
+      
+      // Create old/new z-index maps
+      const oldZIndices = new Map<string, number>()
+      const newZIndices = new Map<string, number>()
+      
+      // For each target shape, swap with the shape above it
+      targetIds.forEach((id) => {
+        const currentIndex = sortedShapes.findIndex((s) => s.id === id)
+        if (currentIndex < sortedShapes.length - 1) {
+          const currentShape = sortedShapes[currentIndex]
+          const nextShape = sortedShapes[currentIndex + 1]
+          
+          if (!targetIds.includes(nextShape.id)) {
+            // Only swap if the next shape is not also being moved
+            oldZIndices.set(currentShape.id, currentShape.zIndex ?? 0)
+            newZIndices.set(currentShape.id, nextShape.zIndex ?? 0)
+            oldZIndices.set(nextShape.id, nextShape.zIndex ?? 0)
+            newZIndices.set(nextShape.id, currentShape.zIndex ?? 0)
+          }
+        }
+      })
+
+      if (newZIndices.size === 0) return // Nothing to do
+
+      // Create command for this operation
+      const command = new ZIndexCommand(
+        Array.from(newZIndices.keys()),
+        oldZIndices,
+        newZIndices,
+        (id, updates) => updateShape(id, updates),
+        (id, zIndex) => syncEnabled && userId ? syncZIndex(canvasId, id, zIndex) : Promise.resolve()
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+    },
+    [selectedIds, shapes, sortShapesByZIndex, historyManager, updateShape, syncEnabled, userId, canvasId, updateHistoryState]
+  )
+
+  /**
+   * Send shapes backward by one layer (PR-17)
+   * Decrements z-index by swapping with the shape below
+   */
+  const sendBackward = useCallback(
+    (ids?: string[]): void => {
+      const targetIds = ids || Array.from(selectedIds)
+      if (targetIds.length === 0) return
+
+      // Sort all shapes by z-index
+      const sortedShapes = sortShapesByZIndex()
+      
+      // Create old/new z-index maps
+      const oldZIndices = new Map<string, number>()
+      const newZIndices = new Map<string, number>()
+      
+      // For each target shape, swap with the shape below it
+      targetIds.forEach((id) => {
+        const currentIndex = sortedShapes.findIndex((s) => s.id === id)
+        if (currentIndex > 0) {
+          const currentShape = sortedShapes[currentIndex]
+          const prevShape = sortedShapes[currentIndex - 1]
+          
+          if (!targetIds.includes(prevShape.id)) {
+            // Only swap if the previous shape is not also being moved
+            oldZIndices.set(currentShape.id, currentShape.zIndex ?? 0)
+            newZIndices.set(currentShape.id, prevShape.zIndex ?? 0)
+            oldZIndices.set(prevShape.id, prevShape.zIndex ?? 0)
+            newZIndices.set(prevShape.id, currentShape.zIndex ?? 0)
+          }
+        }
+      })
+
+      if (newZIndices.size === 0) return // Nothing to do
+
+      // Create command for this operation
+      const command = new ZIndexCommand(
+        Array.from(newZIndices.keys()),
+        oldZIndices,
+        newZIndices,
+        (id, updates) => updateShape(id, updates),
+        (id, zIndex) => syncEnabled && userId ? syncZIndex(canvasId, id, zIndex) : Promise.resolve()
+      )
+      
+      historyManager.executeCommand(command)
+      updateHistoryState()
+    },
+    [selectedIds, shapes, sortShapesByZIndex, historyManager, updateShape, syncEnabled, userId, canvasId, updateHistoryState]
+  )
+
+  /**
    * Persist recent colors to localStorage (PR-15)
    */
   useEffect(() => {
@@ -785,6 +996,11 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
     addPolygon,
     addStar,
     addRoundedRect,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+    sortShapesByZIndex,
   }
 }
 
