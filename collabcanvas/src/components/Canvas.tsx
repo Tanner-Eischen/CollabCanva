@@ -56,7 +56,11 @@ export default function Canvas({
     updateShape,
     deleteShape,
     setSelection,
-  } = useCanvas()
+  } = useCanvas({
+    canvasId: CANVAS_ID,
+    userId: user?.uid || 'anonymous',
+    enableSync: true,
+  })
 
   // Calculate container dimensions (full viewport)
   const containerWidth = window.innerWidth

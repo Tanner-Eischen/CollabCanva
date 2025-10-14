@@ -1,7 +1,19 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { Shape, ShapeType } from '../types/canvas'
+import type { Shape, ShapeType } from '../types/canvas'
 import { DEFAULT_CANVAS_CONFIG } from '../types/canvas'
+import {
+  syncCreateShape,
+  syncUpdateShape,
+  syncDeleteShape,
+  subscribeToCanvas,
+} from '../services/canvasSync'
+
+interface UseCanvasOptions {
+  canvasId: string
+  userId: string
+  enableSync?: boolean
+}
 
 interface UseCanvasReturn {
   shapes: Shape[]
@@ -14,12 +26,17 @@ interface UseCanvasReturn {
 }
 
 /**
- * Hook for managing canvas shapes state
+ * Hook for managing canvas shapes state with Firebase sync
  * Handles shape creation, updates, deletion, and selection
  */
-export function useCanvas(): UseCanvasReturn {
+export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   const [shapes, setShapes] = useState<Shape[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const syncEnabled = options?.enableSync ?? true
+  const canvasId = options?.canvasId ?? 'default-canvas'
+  
+  // Track locally created shapes to avoid duplicate onCreate from Firebase
+  const localShapesRef = useRef(new Set<string>())
 
   /**
    * Add a rectangle or circle shape
@@ -37,10 +54,22 @@ export function useCanvas(): UseCanvasReturn {
         height: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
       }
 
+      // Add to local state immediately
       setShapes((prev) => [...prev, newShape])
+      
+      // Mark as locally created
+      localShapesRef.current.add(id)
+      
+      // Sync to Firebase
+      if (syncEnabled) {
+        syncCreateShape(canvasId, id, newShape).catch((error) => {
+          console.error('Failed to sync shape creation:', error)
+        })
+      }
+      
       return id
     },
-    []
+    [syncEnabled, canvasId]
   )
 
   /**
@@ -73,10 +102,22 @@ export function useCanvas(): UseCanvasReturn {
         text,
       }
 
+      // Add to local state immediately
       setShapes((prev) => [...prev, newShape])
+      
+      // Mark as locally created
+      localShapesRef.current.add(id)
+      
+      // Sync to Firebase
+      if (syncEnabled) {
+        syncCreateShape(canvasId, id, newShape).catch((error) => {
+          console.error('Failed to sync text creation:', error)
+        })
+      }
+      
       return id
     },
-    []
+    [syncEnabled, canvasId]
   )
 
   /**
@@ -84,13 +125,21 @@ export function useCanvas(): UseCanvasReturn {
    */
   const updateShape = useCallback(
     (id: string, updates: Partial<Shape>): void => {
+      // Update local state immediately
       setShapes((prev) =>
         prev.map((shape) =>
           shape.id === id ? { ...shape, ...updates } : shape
         )
       )
+      
+      // Sync to Firebase (only position for MVP)
+      if (syncEnabled && (updates.x !== undefined || updates.y !== undefined)) {
+        syncUpdateShape(canvasId, id, updates).catch((error) => {
+          console.error('Failed to sync shape update:', error)
+        })
+      }
     },
-    []
+    [syncEnabled, canvasId]
   )
 
   /**
@@ -98,19 +147,68 @@ export function useCanvas(): UseCanvasReturn {
    */
   const deleteShape = useCallback(
     (id: string): void => {
+      // Update local state immediately
       setShapes((prev) => prev.filter((shape) => shape.id !== id))
       setSelectedId((prev) => (prev === id ? null : prev))
+      
+      // Remove from local shapes tracking
+      localShapesRef.current.delete(id)
+      
+      // Sync to Firebase
+      if (syncEnabled) {
+        syncDeleteShape(canvasId, id).catch((error) => {
+          console.error('Failed to sync shape deletion:', error)
+        })
+      }
     },
-    []
+    [syncEnabled, canvasId]
   )
 
   /**
    * Set selected shape ID
-   * Selection state will be synced via presence in PR-7
+   * Selection state is synced via presence (handled in Canvas component)
    */
   const setSelection = useCallback((id: string | null): void => {
     setSelectedId(id)
   }, [])
+
+  /**
+   * Subscribe to Firebase updates from other users
+   */
+  useEffect(() => {
+    if (!syncEnabled) return
+
+    const unsubscribe = subscribeToCanvas(canvasId, {
+      onCreate: (shape) => {
+        // Only add if not created locally
+        if (!localShapesRef.current.has(shape.id)) {
+          setShapes((prev) => {
+            // Avoid duplicates
+            if (prev.some((s) => s.id === shape.id)) {
+              return prev
+            }
+            return [...prev, shape]
+          })
+        }
+      },
+      onUpdate: (shapeId, updates) => {
+        setShapes((prev) =>
+          prev.map((shape) =>
+            shape.id === shapeId ? { ...shape, ...updates } : shape
+          )
+        )
+      },
+      onDelete: (shapeId) => {
+        setShapes((prev) => prev.filter((shape) => shape.id !== shapeId))
+        setSelectedId((prev) => (prev === shapeId ? null : prev))
+        localShapesRef.current.delete(shapeId)
+      },
+    })
+
+    return () => {
+      unsubscribe()
+    }
+  }, [syncEnabled, canvasId])
 
   return {
     shapes,
