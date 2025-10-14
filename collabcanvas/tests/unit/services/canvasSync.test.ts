@@ -386,6 +386,7 @@ describe('Canvas Sync Service', () => {
         y: 200,
         width: 100,
         height: 100,
+        rotation: 0,
       })
     })
 
@@ -422,6 +423,7 @@ describe('Canvas Sync Service', () => {
         y: 250,
         width: 100,
         height: 100,
+        rotation: 0,
       })
     })
 
@@ -460,6 +462,7 @@ describe('Canvas Sync Service', () => {
         width: 200,
         height: 30,
         text: 'Hello',
+        rotation: 0,
       })
     })
   })

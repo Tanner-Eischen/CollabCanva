@@ -196,7 +196,7 @@ describe('Undo/Redo Integration', () => {
       render(<CanvasPage />)
 
       // Test that component renders without errors
-      expect(screen.getByTestid('konva-stage')).toBeInTheDocument()
+      expect(screen.getByTestId('konva-stage')).toBeInTheDocument()
     })
 
     it('should preserve rotation after undo/redo', async () => {
