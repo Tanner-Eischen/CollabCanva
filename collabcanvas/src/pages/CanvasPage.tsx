@@ -22,10 +22,29 @@ export default function CanvasPage() {
   const { canvasId } = useParams<{ canvasId: string }>()
   const navigate = useNavigate()
   const [selectedTool, setSelectedTool] = useState<ToolType>('select')
-  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null)
   const [canvasMetadata, setCanvasMetadata] = useState<CanvasMetadata | null>(null)
   const [viewport, setViewport] = useState({ scale: 1 })
   const stageRef = useRef<Konva.Stage | null>(null)
+  
+  // UX: Snap control
+  const [snapToGrid, setSnapToGrid] = useState(false)
+  
+  // NEW: Tilemap mode toggle
+  const [isTilemapMode, setIsTilemapMode] = useState(false)
+  
+  // Zoom control functions (will be set by Canvas component)
+  const zoomControlsRef = useRef<{
+    zoomIn: () => void
+    zoomOut: () => void
+    zoomReset: () => void
+    zoomFit: () => void
+  } | null>(null)
+
+  // Tilemap export functions (will be set by Canvas component)
+  const exportFunctionsRef = useRef<{
+    exportJSON: () => void
+    exportPNG: () => void
+  } | null>(null)
 
   const { user } = useAuth()
 
@@ -36,11 +55,22 @@ export default function CanvasPage() {
   }
 
   // Canvas, Groups, and Layers hooks (PR-19)
-  const { shapes, selectedIds, setSelection } = useCanvas({
+  const { shapes, selectedIds, setSelection, updateColors, updateShape, getRecentColors, deleteShape } = useCanvas({
     canvasId: canvasId,
     userId: user?.uid || '',
     enableSync: true,
   })
+  
+  // Color sampling callback (passed from Canvas)
+  const [enableColorSampling, setEnableColorSampling] = useState<((callback: (color: string) => void) => void) | null>(null)
+  
+  // Wrap setEnableColorSampling to avoid setState during render
+  const handleColorSamplingReady = useCallback((fn: (callback: (color: string) => void) => void) => {
+    // Defer setState to next tick to avoid "setState during render" error
+    setTimeout(() => {
+      setEnableColorSampling(() => fn)
+    }, 0)
+  }, [])
 
   const { groups } = useGroups({
     canvasId: canvasId,
@@ -53,12 +83,15 @@ export default function CanvasPage() {
     enableSync: true,
   })
   
+  
   // Load canvas metadata
   useEffect(() => {
     if (!user?.uid || !canvasId) return
 
     const loadCanvas = async () => {
       try {
+        // Check if this is a collab space (public shared canvas)
+        // Load canvas from database
         const canvas = await getCanvas(canvasId, user.uid)
         if (!canvas) {
           alert('Canvas not found')
@@ -101,14 +134,14 @@ export default function CanvasPage() {
     setSelectedTool(tool)
     // Clear selection when switching to non-select tool
     if (tool !== 'select' && tool !== 'delete') {
-      setSelectedShapeId(null)
+      setSelection(null)
     }
-  }, [])
+  }, [setSelection])
 
-  // Handle shape selection from canvas
+  // Handle shape selection from canvas - use setSelection from useCanvas hook
   const handleShapeSelect = useCallback((id: string | null) => {
-    setSelectedShapeId(id)
-  }, [])
+    setSelection(id)
+  }, [setSelection])
 
   // Trigger delete from toolbar
   const [deleteTriggered, setDeleteTriggered] = useState(0)
@@ -136,28 +169,61 @@ export default function CanvasPage() {
     []
   )
 
-  // Zoom handlers (PR-20)
+  // Zoom handlers (PR-20) - now delegated to Canvas component
   const handleZoomIn = useCallback(() => {
-    setViewport((prev) => ({ scale: Math.min(prev.scale * 1.2, 5) }))
+    zoomControlsRef.current?.zoomIn()
   }, [])
 
   const handleZoomOut = useCallback(() => {
-    setViewport((prev) => ({ scale: Math.max(prev.scale / 1.2, 0.1) }))
+    zoomControlsRef.current?.zoomOut()
   }, [])
 
   const handleZoomReset = useCallback(() => {
-    setViewport({ scale: 1 })
+    zoomControlsRef.current?.zoomReset()
   }, [])
 
   const handleZoomFit = useCallback(() => {
-    // Fit canvas to viewport (simplified - actual implementation would calculate better)
-    setViewport({ scale: 0.5 })
+    zoomControlsRef.current?.zoomFit()
+  }, [])
+  
+  // Handle zoom controls ready from Canvas
+  const handleZoomControlsReady = useCallback((zoomIn: () => void, zoomOut: () => void, zoomReset: () => void, zoomFit: () => void) => {
+    zoomControlsRef.current = { zoomIn, zoomOut, zoomReset, zoomFit }
+  }, [])
+
+  // Handle export functions ready from Canvas
+  const handleExportFunctionsReady = useCallback((exportJSON: () => void, exportPNG: () => void) => {
+    exportFunctionsRef.current = { exportJSON, exportPNG }
+  }, [])
+
+  // Export handlers to pass to PresenceBar
+  const handleExportJSON = useCallback(() => {
+    exportFunctionsRef.current?.exportJSON()
+  }, [])
+
+  const handleExportPNG = useCallback(() => {
+    exportFunctionsRef.current?.exportPNG()
   }, [])
 
   // Back to dashboard (PR-22)
-  const handleBack = useCallback(() => {
-    navigate('/')
-  }, [navigate])
+  const handleBack = () => {
+    navigate('/', { replace: true })
+    
+    // Fallback with slight delay
+    setTimeout(() => {
+      if (window.location.pathname !== '/') {
+        window.location.href = '/'
+      }
+    }, 100)
+  }
+  
+  // Get display name for canvas
+  const getDisplayName = () => {
+    if (canvasId === 'public-board') {
+      return '🌍 Public Collaboration Board'
+    }
+    return canvasMetadata?.name || 'Loading...'
+  }
 
   // Update canvas name (PR-22)
   const handleCanvasNameChange = useCallback(
@@ -177,7 +243,6 @@ export default function CanvasPage() {
   // Layer panel handlers (PR-19)
   const handleSelectLayer = useCallback((layerId: string) => {
     setSelection(layerId)
-    setSelectedShapeId(layerId)
   }, [setSelection])
 
   const handleRenameLayer = useCallback((layerId: string, newName: string) => {
@@ -200,47 +265,68 @@ export default function CanvasPage() {
         onZoomOut={handleZoomOut}
         onZoomReset={handleZoomReset}
         onZoomFit={handleZoomFit}
-        canvasName={canvasMetadata?.name || 'Loading...'}
-        onCanvasNameChange={handleCanvasNameChange}
+        canvasName={getDisplayName()}
+        onCanvasNameChange={canvasId === 'public-board' ? undefined : handleCanvasNameChange}
         lastEdited="Just now"
         onBack={handleBack}
+        snapToGrid={snapToGrid}
+        onSnapToggle={() => setSnapToGrid(!snapToGrid)}
+        isTilemapMode={isTilemapMode}
+        onToggleTilemapMode={() => setIsTilemapMode(!isTilemapMode)}
+        onExportTilemapJSON={handleExportJSON}
+        onExportTilemapPNG={handleExportPNG}
       />
 
       {/* Main Content Area - Toolbar + Canvas + LayerPanel (PR-19/20: proper sizing) */}
       <div className="flex flex-row h-[calc(100vh-64px)]">
-        {/* Left Toolbar (PR-20: 48px width, from top 64px) */}
-        <Toolbar
-          selectedTool={selectedTool}
-          onToolSelect={handleToolSelect}
-          hasSelection={selectedShapeId !== null}
-          onDelete={handleDelete}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onUndo={undoFn || undefined}
-          onRedo={redoFn || undefined}
-        />
+        {/* Left Toolbar (PR-20: 48px width, from top 64px) - Hidden in tilemap mode */}
+        {!isTilemapMode && (
+          <Toolbar
+            selectedTool={selectedTool}
+            onToolSelect={handleToolSelect}
+            hasSelection={selectedIds.size > 0}
+            onDelete={handleDelete}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onUndo={undoFn || undefined}
+            onRedo={redoFn || undefined}
+          />
+        )}
 
-        {/* Canvas Container (PR-19: calc(100vw - 48px - 256px) width, calc(100vh - 64px) height) */}
-        <div className="flex-1 w-[calc(100vw-48px-256px)] h-full">
+        {/* Canvas Container - Flexible width, adjusts when layer panel is minimized */}
+        <div className="flex-1 h-full overflow-hidden">
           <Canvas
             selectedTool={selectedTool}
             onShapeSelect={handleShapeSelect}
             deleteTriggered={deleteTriggered}
             onUndoRedoChange={handleUndoRedoChange}
             canvasId={canvasId}
+            onZoomChange={(scale) => setViewport({ scale })}
+            onZoomControlsReady={handleZoomControlsReady}
+            snapToGrid={snapToGrid}
+            onColorSamplingReady={handleColorSamplingReady}
+            isTilemapMode={isTilemapMode}
+            onExportFunctionsReady={handleExportFunctionsReady}
           />
         </div>
 
-        {/* Right Layer Panel (PR-19: 256px width, from top 64px) */}
-        <LayerPanel
-          shapes={shapes}
-          groups={groups}
-          selectedIds={selectedIds}
-          onSelectLayer={handleSelectLayer}
-          onToggleVisibility={toggleVisibility}
-          onToggleLock={toggleLock}
-          onRenameLayer={handleRenameLayer}
-        />
+        {/* Right Layer Panel (PR-19: 256px width, from top 64px) - Hidden in tilemap mode */}
+        {!isTilemapMode && (
+          <LayerPanel
+            shapes={shapes}
+            groups={groups}
+            selectedIds={selectedIds}
+            onSelectLayer={handleSelectLayer}
+            onToggleVisibility={toggleVisibility}
+            onToggleLock={toggleLock}
+            onRenameLayer={handleRenameLayer}
+            onDelete={deleteShape}
+            onUpdateColors={(fill, stroke, strokeWidth) => updateColors(fill, stroke, strokeWidth)}
+            onUpdateShapeProps={(id, updates) => updateShape(id, updates)}
+            recentColors={getRecentColors()}
+            onRequestColorSample={enableColorSampling || undefined}
+          />
+        )}
       </div>
     </div>
   )

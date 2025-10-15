@@ -96,6 +96,7 @@ export async function deleteCanvas(
 
 /**
  * Update canvas metadata (name, thumbnail)
+ * Special handling for public-whiteboard
  */
 export async function updateCanvas(
   canvasId: string,
@@ -103,6 +104,23 @@ export async function updateCanvas(
   updates: Partial<Pick<CanvasMetadata, 'name' | 'thumbnail'>>
 ): Promise<void> {
   try {
+    // Collab Spaces: shared themed boards
+    const collabSpaces = [
+      'collab-art', 'collab-design', 'collab-education', 
+      'collab-content', 'collab-gamedev', 
+      'collab-architecture'
+    ]
+    
+    if (collabSpaces.includes(canvasId)) {
+      const publicRef = ref(db, `collab-spaces/${canvasId}/metadata`)
+      await update(publicRef, {
+        ...updates,
+        updatedAt: Date.now(),
+      })
+      console.log(`Collab space ${canvasId} updated`)
+      return
+    }
+    
     const userCanvasRef = ref(db, `users/${userId}/canvases/${canvasId}`)
 
     const updateData: any = {
@@ -243,6 +261,43 @@ export async function getCanvas(
   userId: string
 ): Promise<CanvasMetadata | null> {
   try {
+    // Collab Spaces: shared themed boards for all users
+    const collabSpaces = [
+      'public-board', // Main public collaboration board
+      'collab-art', 'collab-design', 'collab-education', 
+      'collab-content', 'collab-gamedev', 
+      'collab-architecture'
+    ]
+    
+    if (collabSpaces.includes(canvasId)) {
+      const publicRef = ref(db, `collab-spaces/${canvasId}/metadata`)
+      const snapshot = await get(publicRef)
+      
+      if (!snapshot.exists()) {
+        // Create themed board if it doesn't exist
+        let name: string
+        if (canvasId === 'public-board') {
+          name = '🌍 Public Collaboration Board'
+        } else {
+          const themeName = canvasId.replace('collab-', '')
+          name = `${themeName.charAt(0).toUpperCase() + themeName.slice(1)} Collab Space`
+        }
+        
+        const publicCanvas: CanvasMetadata = {
+          id: canvasId,
+          name,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          thumbnail: '',
+          ownerId: 'system',
+        }
+        await set(publicRef, publicCanvas)
+        return publicCanvas
+      }
+      
+      return snapshot.val() as CanvasMetadata
+    }
+    
     const userCanvasRef = ref(db, `users/${userId}/canvases/${canvasId}`)
     const snapshot = await get(userCanvasRef)
 
@@ -296,4 +351,5 @@ export async function getCanvasPermission(
     return null
   }
 }
+
 

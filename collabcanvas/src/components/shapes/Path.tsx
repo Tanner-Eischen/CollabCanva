@@ -99,6 +99,7 @@ export default function Path({
         closed={closed}
         lineCap="round"
         lineJoin="round"
+        bezier={tension > 0}
         draggable
         onClick={onSelect}
         onTap={onSelect}

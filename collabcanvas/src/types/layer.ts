@@ -27,3 +27,4 @@ export interface LayerTreeNode extends Layer {
   expanded?: boolean // For collapsible groups
 }
 
+

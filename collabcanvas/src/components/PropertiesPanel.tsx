@@ -17,6 +17,7 @@ interface PropertiesPanelProps {
   onUpdateShapeProps?: (id: string, updates: Partial<Shape>) => void
   recentColors: string[]
   onRequestColorSample?: (callback: (color: string) => void) => void // PR-24: Color sampling callback
+  onClose?: () => void // Performance: Close button callback
 }
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
@@ -25,6 +26,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateShapeProps,
   recentColors,
   onRequestColorSample,
+  onClose,
 }) => {
   const [showFillPicker, setShowFillPicker] = useState(false)
   const [showStrokePicker, setShowStrokePicker] = useState(false)
@@ -69,20 +71,181 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onUpdateColors(undefined, undefined, 0)
   }
 
+  // Check if text shape is selected (PR-25)
+  const isTextSelected = selectedShapes.length === 1 && selectedShapes[0].type === 'text'
+  
+  // Font family options
+  const FONT_FAMILIES = [
+    'Inter, sans-serif',
+    'Arial, sans-serif',
+    'Georgia, serif',
+    'Courier New, monospace',
+    'Comic Sans MS, cursive',
+    'Impact, fantasy',
+  ]
+
   return (
     <div className="absolute right-0 top-0 h-full w-64 bg-white border-l border-gray-200 shadow-lg overflow-y-auto z-10">
       <div className="p-4 space-y-6">
-        {/* Header */}
-        <div className="border-b pb-2">
-          <h3 className="text-sm font-semibold text-gray-800">
-            Properties
-          </h3>
-          <p className="text-xs text-gray-500 mt-1">
-            {selectedShapes.length === 1
-              ? '1 shape selected'
-              : `${selectedShapes.length} shapes selected`}
-          </p>
+        {/* Header with Close Button */}
+        <div className="border-b pb-2 flex justify-between items-start">
+          <div>
+            <h3 className="text-sm font-semibold text-purple-700 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+              Design Properties
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {selectedShapes.length === 1
+                ? '1 shape selected'
+                : `${selectedShapes.length} shapes selected`}
+            </p>
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded"
+              title="Close design panel (Esc)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
+
+        {/* Text Formatting Section (PR-25) */}
+        {isTextSelected && (
+          <div className="space-y-4 pb-4 border-b">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase">Text Formatting</h4>
+            
+            {/* Font Family */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">
+                Font Family
+              </label>
+              <select
+                value={selectedShapes[0].fontFamily || 'Inter, sans-serif'}
+                onChange={(e) => onUpdateShapeProps && onUpdateShapeProps(selectedShapes[0].id, {
+                  fontFamily: e.target.value
+                })}
+                className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                {FONT_FAMILIES.map(font => (
+                  <option key={font} value={font} style={{ fontFamily: font }}>
+                    {font.split(',')[0]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Font Size */}
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-sm font-medium text-gray-700">Font Size</label>
+                <span className="text-xs text-gray-500">{selectedShapes[0].fontSize || 20}px</span>
+              </div>
+              <input
+                type="range"
+                min="12"
+                max="72"
+                step="1"
+                value={selectedShapes[0].fontSize || 20}
+                onChange={(e) => onUpdateShapeProps && onUpdateShapeProps(selectedShapes[0].id, {
+                  fontSize: parseInt(e.target.value)
+                })}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>12px</span>
+                <span>72px</span>
+              </div>
+            </div>
+            
+            {/* Style Toggles */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Style</label>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => onUpdateShapeProps && onUpdateShapeProps(selectedShapes[0].id, {
+                    fontWeight: selectedShapes[0].fontWeight === 'bold' ? 'normal' : 'bold'
+                  })}
+                  className={`px-3 py-1 font-bold border rounded text-sm ${
+                    selectedShapes[0].fontWeight === 'bold'
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  title="Bold"
+                >
+                  B
+                </button>
+                <button
+                  onClick={() => onUpdateShapeProps && onUpdateShapeProps(selectedShapes[0].id, {
+                    fontStyle: selectedShapes[0].fontStyle === 'italic' ? 'normal' : 'italic'
+                  })}
+                  className={`px-3 py-1 italic border rounded text-sm ${
+                    selectedShapes[0].fontStyle === 'italic'
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  title="Italic"
+                >
+                  I
+                </button>
+                <button
+                  onClick={() => onUpdateShapeProps && onUpdateShapeProps(selectedShapes[0].id, {
+                    textDecoration: selectedShapes[0].textDecoration === 'underline' ? '' : 'underline'
+                  })}
+                  className={`px-3 py-1 underline border rounded text-sm ${
+                    selectedShapes[0].textDecoration === 'underline'
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  title="Underline"
+                >
+                  U
+                </button>
+                <button
+                  onClick={() => onUpdateShapeProps && onUpdateShapeProps(selectedShapes[0].id, {
+                    textDecoration: selectedShapes[0].textDecoration === 'line-through' ? '' : 'line-through'
+                  })}
+                  className={`px-3 py-1 line-through border rounded text-sm ${
+                    selectedShapes[0].textDecoration === 'line-through'
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  title="Strikethrough"
+                >
+                  S
+                </button>
+              </div>
+            </div>
+            
+            {/* Text Align */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Align</label>
+              <div className="flex gap-1">
+                {['left', 'center', 'right'].map(align => (
+                  <button
+                    key={align}
+                    onClick={() => onUpdateShapeProps && onUpdateShapeProps(selectedShapes[0].id, {
+                      textAlign: align as 'left' | 'center' | 'right'
+                    })}
+                    className={`flex-1 px-3 py-1 border rounded text-sm ${
+                      (selectedShapes[0].textAlign || 'left') === align
+                        ? 'bg-blue-500 text-white border-blue-500'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                    title={`Align ${align}`}
+                  >
+                    {align === 'left' ? '⬅' : align === 'center' ? '↔' : '➡'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Fill Color */}
         <div>

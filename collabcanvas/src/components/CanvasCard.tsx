@@ -199,3 +199,4 @@ export function CanvasCard({ canvas, onDelete, onDuplicate, onRename }: CanvasCa
   )
 }
 
+

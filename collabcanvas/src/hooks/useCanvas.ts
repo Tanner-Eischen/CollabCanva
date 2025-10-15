@@ -167,19 +167,23 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
   /**
    * Add a rectangle or circle shape
    * All shapes are fixed 100x100px, blue (#3B82F6)
+   * Shape is centered on the click point (not top-left corner)
    * Uses command pattern for undo/redo (PR-14)
    */
   const addShape = useCallback(
     (type: 'rectangle' | 'circle', x: number, y: number): string => {
       const id = uuidv4()
+      const size = DEFAULT_CANVAS_CONFIG.defaultShapeSize
       const newShape: Shape = {
         id,
         type,
-        x,
-        y,
-        width: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
-        height: DEFAULT_CANVAS_CONFIG.defaultShapeSize,
+        x: x - size / 2, // Center on click point
+        y: y - size / 2, // Center on click point
+        width: size,
+        height: size,
         fill: DEFAULT_FILL, // PR-15: Default color
+        stroke: '#000000FF', // Add default black stroke
+        strokeWidth: 2, // Add default stroke width
         zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
 
@@ -268,6 +272,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
         height: Math.abs(y2 - y1),
         points: [x1, y1, x2, y2],
         fill: DEFAULT_FILL,
+        stroke: '#000000FF', // Add default black stroke
+        strokeWidth: 2, // Add default stroke width
         arrows: arrows || { start: false, end: false },
         zIndex: Date.now(), // PR-17: Set z-index to current timestamp
       }
@@ -300,8 +306,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       const newShape: Shape = {
         id,
         type: 'polygon',
-        x,
-        y,
+        x: x - size / 2, // Center on click point
+        y: y - size / 2, // Center on click point
         width: size,
         height: size,
         fill: DEFAULT_FILL,
@@ -337,8 +343,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       const newShape: Shape = {
         id,
         type: 'star',
-        x,
-        y,
+        x: x - size / 2, // Center on click point
+        y: y - size / 2, // Center on click point
         width: size,
         height: size,
         fill: DEFAULT_FILL,
@@ -374,8 +380,8 @@ export function useCanvas(options?: UseCanvasOptions): UseCanvasReturn {
       const newShape: Shape = {
         id,
         type: 'roundRect',
-        x,
-        y,
+        x: x - size / 2, // Center on click point
+        y: y - size / 2, // Center on click point
         width: size,
         height: size,
         fill: DEFAULT_FILL,

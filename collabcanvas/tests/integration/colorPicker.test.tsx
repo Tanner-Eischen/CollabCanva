@@ -339,9 +339,9 @@ describe('Enhanced ColorPicker Integration Tests', () => {
     })
 
     it('selects color from recent colors', () => {
-      const recentColors = ['#FF0000FF']
+      const recentColors = ['#FF0000FF', '#00FF00FF']
 
-      const { container } = render(
+      render(
         <ColorPicker
           value="#3B82F6FF"
           onChange={mockOnChange}
@@ -350,8 +350,8 @@ describe('Enhanced ColorPicker Integration Tests', () => {
         />
       )
 
-      // Find recent color button
-      const recentButtons = container.querySelectorAll('.flex.gap-1 button')
+      // Find recent colors by title attribute
+      const recentButtons = screen.queryAllByTitle('#FF0000FF')
       expect(recentButtons.length).toBeGreaterThan(0)
 
       fireEvent.click(recentButtons[0])

@@ -34,8 +34,8 @@ export default function Toolbar({
     shortcut?: string
   }> = [
     // Selection & Navigation Tools
-    { type: 'select', icon: '⌖', label: 'Select', shortcut: 'V' },
-    { type: 'hand', icon: '✋', label: 'Hand', shortcut: 'H' },
+    { type: 'select', icon: '➤', label: 'Select', shortcut: 'V' },
+    { type: 'hand', icon: '✥', label: 'Hand', shortcut: 'H' },
     
     // Basic Shapes
     { type: 'rectangle', icon: '▭', label: 'Rectangle', shortcut: 'R' },
@@ -48,15 +48,31 @@ export default function Toolbar({
     { type: 'line', icon: '/', label: 'Line', shortcut: 'L' },
     
     // Drawing Tools
-    { type: 'pencil', icon: '✏️', label: 'Pencil', shortcut: 'P' },
-    { type: 'pen', icon: '🖊️', label: 'Pen', shortcut: 'N' },
+    { type: 'pencil', icon: '✎', label: 'Pencil', shortcut: 'P' },
+    { type: 'pen', icon: '✒', label: 'Pen', shortcut: 'N' },
     
     // Text Tool
     { type: 'text', icon: 'T', label: 'Text', shortcut: 'T' },
   ]
 
   return (
-    <div className="fixed left-0 top-header bottom-0 w-toolbar bg-white border-r border-neutral-200 shadow-soft z-40 flex flex-col items-center py-3 gap-1">
+    <div 
+      className="w-12 h-[calc(100%-16px)] my-2 ml-2 rounded-lg shadow-lg flex flex-col items-center py-3 gap-1 relative overflow-hidden"
+      style={{
+        background: 'linear-gradient(to bottom right, #475569, #374151)'
+      }}
+    >
+      {/* Dot pattern overlay */}
+      <div 
+        className="absolute inset-0" 
+        style={{
+          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)',
+          backgroundSize: '16px 16px'
+        }}
+      ></div>
+      
+      {/* Content */}
+      <div className="relative z-10 w-full flex flex-col items-center gap-1">
       {/* Tool Buttons */}
       {tools.map((tool, index) => (
         <div key={tool.type}>
@@ -66,11 +82,12 @@ export default function Toolbar({
             shortcut={tool.shortcut}
             active={selectedTool === tool.type}
             onClick={() => onToolSelect(tool.type)}
+            themed={true}
           />
           
           {/* Separators between tool groups */}
           {(index === 1 || index === 7 || index === 9) && (
-            <div className="w-9 h-px bg-neutral-200 my-1" />
+            <div className="w-9 h-px my-1 bg-white/20" />
           )}
         </div>
       ))}
@@ -86,6 +103,7 @@ export default function Toolbar({
           shortcut="Ctrl+Z"
           disabled={!canUndo}
           onClick={onUndo}
+          themed={true}
         />
       )}
 
@@ -96,11 +114,12 @@ export default function Toolbar({
           shortcut="Ctrl+Shift+Z"
           disabled={!canRedo}
           onClick={onRedo}
+          themed={true}
         />
       )}
 
       {/* Separator before delete */}
-      <div className="w-9 h-px bg-neutral-200 my-1" />
+      <div className="w-9 h-px my-1 bg-white/20" />
 
       {/* Delete Button */}
       <ToolButton
@@ -109,7 +128,9 @@ export default function Toolbar({
         shortcut="Del"
         disabled={!hasSelection}
         onClick={onDelete}
+        themed={true}
       />
+      </div>
     </div>
   )
 }

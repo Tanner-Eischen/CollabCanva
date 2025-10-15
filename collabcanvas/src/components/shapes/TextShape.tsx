@@ -13,15 +13,23 @@ interface TextShapeProps {
   fill: string
   isSelected: boolean
   selectionColor?: string
+  // PR-25: Text formatting properties
+  fontFamily?: string
+  fontSize?: number
+  fontWeight?: 'normal' | 'bold'
+  fontStyle?: 'normal' | 'italic'
+  textAlign?: 'left' | 'center' | 'right'
+  textDecoration?: '' | 'underline' | 'line-through'
   onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void
   onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (width: number, height: number, rotation: number, x: number, y: number) => void
+  onDoubleClick?: () => void // PR-25: Double-click to edit
 }
 
 /**
- * Text shape component
- * Customizable color (fill only, no stroke), auto-sized to content, NO editing after creation
+ * Text shape component (PR-25: Enhanced with text formatting)
+ * Customizable color, font properties, editable on double-click
  * Resizable (width) but NO rotation
  * Supports multi-select highlighting
  */
@@ -36,10 +44,17 @@ export default function TextShape({
   fill,
   isSelected,
   selectionColor: _selectionColor,
+  fontFamily = 'Inter, sans-serif',
+  fontSize = 20,
+  fontWeight = 'normal',
+  fontStyle = 'normal',
+  textAlign = 'left',
+  textDecoration = '',
   onSelect,
   onDragStart,
   onDragEnd,
   onTransformEnd,
+  onDoubleClick,
 }: TextShapeProps) {
   const shapeRef = useRef<Konva.Text>(null)
   const trRef = useRef<Konva.Transformer>(null)
@@ -84,20 +99,25 @@ export default function TextShape({
 
   return (
     <>
-      {/* Main Text */}
+      {/* Main Text - PR-25: Now with font properties and double-click */}
       <Text
         ref={shapeRef}
         x={x}
         y={y}
         text={text}
-        fontSize={20}
-        fontFamily="Arial, sans-serif"
+        fontSize={fontSize}
+        fontFamily={fontFamily}
+        fontStyle={`${fontStyle} ${fontWeight}`} // Konva combines style and weight
+        textDecoration={textDecoration}
+        align={textAlign}
         fill={fill}
         width={width}
         rotation={rotation}
         draggable
         onClick={onSelect}
         onTap={onSelect}
+        onDblClick={onDoubleClick}
+        onDblTap={onDoubleClick}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onTransformEnd={handleTransformEnd}

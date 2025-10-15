@@ -98,8 +98,8 @@ export default function Circle({
         radiusY={radiusY}
         rotation={rotation}
         fill={fill}
-        stroke={strokeWidth && strokeWidth > 0 ? stroke : undefined}
-        strokeWidth={strokeWidth}
+        stroke={stroke || '#000000'}
+        strokeWidth={strokeWidth || 0}
         draggable
         onClick={onSelect}
         onTap={onSelect}

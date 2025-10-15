@@ -106,10 +106,11 @@ export function ContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed bg-white border border-neutral-200 rounded-lg shadow-hard py-1 z-50 min-w-[192px]"
+      className="fixed bg-white border border-gray-300 rounded-md py-0.5 z-[9999]"
       style={{
         left: x,
         top: y,
+        boxShadow: '0 10px 40px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15)',
       }}
     >
       {/* Alignment Operations (PR-18) */}
@@ -117,7 +118,7 @@ export function ContextMenu({
         <>
           <div className="relative">
             <button
-              className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700 flex items-center justify-between"
+              className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 flex items-center justify-between gap-2"
               onMouseEnter={() => setShowAlignSubmenu(true)}
               onMouseLeave={() => setShowAlignSubmenu(false)}
             >
@@ -126,42 +127,45 @@ export function ContextMenu({
             </button>
             {showAlignSubmenu && (
               <div
-                className="absolute left-full top-0 bg-white border border-neutral-200 rounded-lg shadow-hard py-1 ml-1 min-w-[140px]"
+                className="absolute left-full top-0 bg-white border border-gray-300 rounded-md py-0.5 ml-1"
+                style={{
+                  boxShadow: '0 10px 40px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15)',
+                }}
                 onMouseEnter={() => setShowAlignSubmenu(true)}
                 onMouseLeave={() => setShowAlignSubmenu(false)}
               >
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                   onClick={() => handleMenuAction(() => onAlign('left'))}
                 >
                   Left
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                   onClick={() => handleMenuAction(() => onAlign('center'))}
                 >
                   Center
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                   onClick={() => handleMenuAction(() => onAlign('right'))}
                 >
                   Right
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                   onClick={() => handleMenuAction(() => onAlign('top'))}
                 >
                   Top
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                   onClick={() => handleMenuAction(() => onAlign('middle'))}
                 >
                   Middle
                 </button>
                 <button
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                  className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                   onClick={() => handleMenuAction(() => onAlign('bottom'))}
                 >
                   Bottom
@@ -176,7 +180,7 @@ export function ContextMenu({
       {canDistribute && onDistributeHorizontally && onDistributeVertically && (
         <div className="relative">
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700 flex items-center justify-between"
+            className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 flex items-center justify-between gap-2"
             onMouseEnter={() => setShowDistributeSubmenu(true)}
             onMouseLeave={() => setShowDistributeSubmenu(false)}
           >
@@ -185,18 +189,21 @@ export function ContextMenu({
           </button>
           {showDistributeSubmenu && (
             <div
-              className="absolute left-full top-0 bg-white border border-neutral-200 rounded-lg shadow-hard py-1 ml-1 min-w-[140px]"
+              className="absolute left-full top-0 bg-white border border-gray-300 rounded-md py-0.5 ml-1"
+              style={{
+                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15)',
+              }}
               onMouseEnter={() => setShowDistributeSubmenu(true)}
               onMouseLeave={() => setShowDistributeSubmenu(false)}
             >
               <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                 onClick={() => handleMenuAction(onDistributeHorizontally)}
               >
                 Horizontally
               </button>
               <button
-                className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+                className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
                 onClick={() => handleMenuAction(onDistributeVertically)}
               >
                 Vertically
@@ -209,7 +216,7 @@ export function ContextMenu({
       {/* Center in Canvas (PR-18) */}
       {hasSelection && onCenterInCanvas && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+          className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
           onClick={() => handleMenuAction(onCenterInCanvas)}
         >
           Center in Canvas
@@ -218,79 +225,79 @@ export function ContextMenu({
 
       {/* Divider */}
       {(canAlign || canDistribute || (hasSelection && onCenterInCanvas)) && (
-        <div className="border-t border-neutral-200 my-1" />
+        <div className="border-t border-neutral-200" />
       )}
 
       {/* Z-Index Operations */}
       {hasSelection && (
         <>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+            className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
             onClick={() => handleMenuAction(onBringToFront)}
           >
             Bring to Front
           </button>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+            className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
             onClick={() => handleMenuAction(onBringForward)}
           >
             Bring Forward
           </button>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+            className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
             onClick={() => handleMenuAction(onSendBackward)}
           >
             Send Backward
           </button>
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+            className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 whitespace-nowrap"
             onClick={() => handleMenuAction(onSendToBack)}
           >
             Send to Back
           </button>
-          <div className="border-t border-neutral-200 my-1" />
+          <div className="border-t border-neutral-200" />
         </>
       )}
 
       {/* Clipboard Operations */}
       {canCopy && onCopy && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+          className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 flex items-center justify-between gap-2"
           onClick={() => handleMenuAction(onCopy)}
         >
-          Copy
-          <span className="float-right text-neutral-400 text-xs ml-4">⌘C</span>
+          <span>Copy</span>
+          <span className="text-neutral-400">⌘C</span>
         </button>
       )}
       {canPaste && onPaste && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+          className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 flex items-center justify-between gap-2"
           onClick={() => handleMenuAction(onPaste)}
         >
-          Paste
-          <span className="float-right text-neutral-400 text-xs ml-4">⌘V</span>
+          <span>Paste</span>
+          <span className="text-neutral-400">⌘V</span>
         </button>
       )}
       {canCopy && onDuplicate && (
         <button
-          className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-100 text-neutral-700"
+          className="w-full text-left px-2 py-1 text-xs hover:bg-neutral-100 text-neutral-700 flex items-center justify-between gap-2"
           onClick={() => handleMenuAction(onDuplicate)}
         >
-          Duplicate
-          <span className="float-right text-neutral-400 text-xs ml-4">⌘D</span>
+          <span>Duplicate</span>
+          <span className="text-neutral-400">⌘D</span>
         </button>
       )}
 
       {/* Delete Operation */}
       {hasSelection && onDelete && (
         <>
-          <div className="border-t border-neutral-200 my-1" />
+          <div className="border-t border-neutral-200" />
           <button
-            className="w-full text-left px-4 py-2 text-sm hover:bg-red-50 text-red-600"
+            className="w-full text-left px-2 py-1 text-xs hover:bg-red-50 text-red-600 flex items-center justify-between gap-2"
             onClick={() => handleMenuAction(onDelete)}
           >
-            Delete
-            <span className="float-right text-red-400 text-xs ml-4">⌫</span>
+            <span>Delete</span>
+            <span className="text-red-400">⌫</span>
           </button>
         </>
       )}

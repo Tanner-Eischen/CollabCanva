@@ -16,7 +16,6 @@ import {
   syncRemoveFromGroup,
 } from '../services/groupSync'
 import {
-  calculateGroupBounds,
   isInAnyGroup,
   getAllGroupMembers,
   getGroupShapes,

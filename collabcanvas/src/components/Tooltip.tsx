@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, ReactNode } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 
 interface TooltipProps {
   content: string
@@ -19,12 +19,12 @@ export function Tooltip({
 }: TooltipProps) {
   const [visible, setVisible] = useState(false)
   const [position, setPosition] = useState({ x: 0, y: 0 })
-  const timeoutRef = useRef<number>()
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const triggerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
+      if (timeoutRef.current !== undefined) {
         clearTimeout(timeoutRef.current)
       }
     }
@@ -101,4 +101,5 @@ export function Tooltip({
     </>
   )
 }
+
 

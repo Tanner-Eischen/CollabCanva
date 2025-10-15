@@ -37,6 +37,13 @@ export interface Shape {
   height: number // height (now variable in Phase 2)
   rotation?: number // rotation in degrees (0-360) - Phase 2
   text?: string // text content (text shapes only)
+  // Phase 5: Text formatting properties (PR-25)
+  fontFamily?: string // font family (default: 'Inter, sans-serif')
+  fontSize?: number // font size in pixels (12-72, default: 20)
+  fontWeight?: 'normal' | 'bold' // font weight (default: 'normal')
+  fontStyle?: 'normal' | 'italic' // font style (default: 'normal')
+  textAlign?: 'left' | 'center' | 'right' // text alignment (default: 'left')
+  textDecoration?: '' | 'underline' | 'line-through' // text decoration (default: '')
   // Phase 3: Color properties (PR-15)
   fill: string // fill color (RGBA hex format, e.g., #3B82F6FF)
   stroke?: string // stroke color (RGBA hex format, optional)

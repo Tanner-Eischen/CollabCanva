@@ -65,15 +65,19 @@ export function usePresence({
   const updateCursorPosition = useCallback(
     throttle((x: number, y: number) => {
       // Don't update if user is not authenticated
-      if (!userId) return
+      if (!userId || !_canvasId) return
       
-      const presenceRef = ref(db, `presence/${userId}`)
+      // Collab Spaces use shared presence paths
+      const collabSpaces = ['collab-art', 'collab-design', 'collab-education', 'collab-content', 'collab-gamedev', 'collab-architecture']
+      const presencePath = collabSpaces.includes(_canvasId) ? `collab-presence/${_canvasId}/${userId}` : `presence/${_canvasId}/${userId}`
+      const presenceRef = ref(db, presencePath)
+      
       currentPresence.current.c = [x, y]
       set(presenceRef, currentPresence.current).catch((error) => {
         console.error('Failed to update cursor position:', error)
       })
     }, 50), // 20Hz = 50ms between updates
-    [userId]
+    [userId, _canvasId]
   )
 
   /**
@@ -83,27 +87,34 @@ export function usePresence({
   const updateSelection = useCallback(
     (objectIds: string[] | null) => {
       // Don't update if user is not authenticated
-      if (!userId) return
+      if (!userId || !_canvasId) return
       
-      const presenceRef = ref(db, `presence/${userId}`)
+      // Collab Spaces use shared presence paths
+      const collabSpaces = ['collab-art', 'collab-design', 'collab-education', 'collab-content', 'collab-gamedev', 'collab-architecture']
+      const presencePath = collabSpaces.includes(_canvasId) ? `collab-presence/${_canvasId}/${userId}` : `presence/${_canvasId}/${userId}`
+      const presenceRef = ref(db, presencePath)
+      
       currentPresence.current.sel = objectIds
       set(presenceRef, currentPresence.current).catch((error) => {
         console.error('Failed to update selection:', error)
       })
     },
-    [userId]
+    [userId, _canvasId]
   )
 
   /**
    * Initialize presence and listen to other users
    */
   useEffect(() => {
-    // Don't initialize presence if userId is empty (user not authenticated)
-    if (!userId) {
+    // Don't initialize presence if userId or canvasId is empty
+    if (!userId || !_canvasId) {
       return
     }
 
-    const presenceRef = ref(db, `presence/${userId}`)
+    // Collab Spaces use shared presence paths
+    const collabSpaces = ['collab-art', 'collab-design', 'collab-education', 'collab-brainstorm', 'collab-content', 'collab-gamedev', 'collab-architecture']
+    const presencePath = collabSpaces.includes(_canvasId) ? `collab-presence/${_canvasId}/${userId}` : `presence/${_canvasId}/${userId}`
+    const presenceRef = ref(db, presencePath)
 
     // Set initial presence
     const initialPresence: Presence = {
@@ -123,8 +134,9 @@ export function usePresence({
       console.error('Failed to set onDisconnect:', error)
     })
 
-    // Listen to all presence updates
-    const allPresenceRef = ref(db, 'presence')
+    // Listen to all presence updates for this canvas
+    const allPresencePath = collabSpaces.includes(_canvasId) ? `collab-presence/${_canvasId}` : `presence/${_canvasId}`
+    const allPresenceRef = ref(db, allPresencePath)
     const unsubscribe = onValue(
       allPresenceRef,
       (snapshot) => {
@@ -158,7 +170,7 @@ export function usePresence({
       // Unsubscribe from presence updates
       off(allPresenceRef, 'value', unsubscribe)
     }
-  }, [userId, userName])
+  }, [userId, userName, _canvasId])
 
   return {
     otherUsers,

@@ -12,7 +12,7 @@
  * presence/{canvasId}/{userId}/ - presence per canvas
  */
 
-import { ref, get, set, remove } from 'firebase/database'
+import { ref, get, set } from 'firebase/database'
 import { db } from '../services/firebase'
 
 const OLD_CANVAS_PATH = 'canvas/objects'
@@ -167,4 +167,5 @@ export async function autoMigrateIfNeeded(userId: string): Promise<void> {
     console.error('Auto-migration failed:', error)
   }
 }
+
 

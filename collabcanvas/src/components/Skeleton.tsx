@@ -1,5 +1,3 @@
-import { ReactNode } from 'react'
-
 interface SkeletonProps {
   width?: string | number
   height?: string | number
@@ -118,4 +116,5 @@ export function LoadingSpinner({ size = 24 }: { size?: number }) {
     />
   )
 }
+
 

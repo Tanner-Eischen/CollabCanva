@@ -10,28 +10,44 @@
     },
     "canvases": {
       "$canvasId": {
-        "objects": {
-          ".read": "auth != null && root.child('canvases').child($canvasId).child('permissions').child(auth.uid).exists()",
-          ".write": "auth != null && (root.child('canvases').child($canvasId).child('permissions').child(auth.uid).child('role').val() === 'owner' || root.child('canvases').child($canvasId).child('permissions').child(auth.uid).child('role').val() === 'editor')"
-        },
-        "groups": {
-          ".read": "auth != null && root.child('canvases').child($canvasId).child('permissions').child(auth.uid).exists()",
-          ".write": "auth != null && (root.child('canvases').child($canvasId).child('permissions').child(auth.uid).child('role').val() === 'owner' || root.child('canvases').child($canvasId).child('permissions').child(auth.uid).child('role').val() === 'editor')"
-        },
-        "permissions": {
-          ".read": "auth != null",
-          "$userId": {
-            ".write": "root.child('canvases').child($canvasId).child('permissions').child(auth.uid).child('role').val() === 'owner'"
-          }
-        }
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "canvas": {
+      "$canvasId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "collab-spaces": {
+      "$spaceId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     },
     "presence": {
       "$canvasId": {
         ".read": "auth != null",
+        ".write": "auth != null",
         "$userId": {
           ".write": "$userId === auth.uid"
         }
+      }
+    },
+    "collab-presence": {
+      "$canvasId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$userId": {
+          ".write": "$userId === auth.uid"
+        }
+      }
+    },
+    "tilemaps": {
+      "$canvasId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     }
   }

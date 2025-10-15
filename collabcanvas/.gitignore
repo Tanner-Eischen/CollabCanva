@@ -39,3 +39,8 @@ firebase-debug.*.log
 coverage/
 *.lcov
 
+.tests/*
+.context/*
+.cursor/*
+context/*
+tests/*

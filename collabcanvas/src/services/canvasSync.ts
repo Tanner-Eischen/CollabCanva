@@ -9,8 +9,8 @@ import type { Shape, ShapeType } from '../types/canvas'
  * Phase 3: Now includes color properties (fill, stroke, strokeWidth)
  */
 function compressShape(shape: Shape): CanvasObject {
-  // Determine type code (PR-16: Added new shape types)
-  let typeCode: 'r' | 'c' | 't' | 'l' | 'pg' | 'st' | 'rr' = 'r'
+  // Determine type code (PR-16: Added new shape types, PR-21: Added path)
+  let typeCode: 'r' | 'c' | 't' | 'l' | 'pg' | 'st' | 'rr' | 'p' = 'r'
   switch (shape.type) {
     case 'rectangle': typeCode = 'r'; break
     case 'circle': typeCode = 'c'; break
@@ -19,6 +19,7 @@ function compressShape(shape: Shape): CanvasObject {
     case 'polygon': typeCode = 'pg'; break
     case 'star': typeCode = 'st'; break
     case 'roundRect': typeCode = 'rr'; break
+    case 'path': typeCode = 'p'; break
   }
 
   const compressed: CanvasObject = {
@@ -33,6 +34,13 @@ function compressShape(shape: Shape): CanvasObject {
   // Add text content for text shapes
   if (shape.type === 'text' && shape.text) {
     compressed.txt = shape.text
+    // PR-25: Add text formatting properties
+    if (shape.fontFamily) compressed.ff = shape.fontFamily
+    if (shape.fontSize) compressed.fs = shape.fontSize
+    if (shape.fontWeight && shape.fontWeight !== 'normal') compressed.fw = shape.fontWeight
+    if (shape.fontStyle && shape.fontStyle !== 'normal') compressed.fst = shape.fontStyle
+    if (shape.textAlign && shape.textAlign !== 'left') compressed.ta = shape.textAlign
+    if (shape.textDecoration) compressed.td = shape.textDecoration
   }
 
   // Add rotation if present (backward compatibility)
@@ -76,6 +84,19 @@ function compressShape(shape: Shape): CanvasObject {
     compressed.z = shape.zIndex
   }
 
+  // PR-21: Add path-specific properties
+  if (shape.type === 'path') {
+    if (shape.points) {
+      compressed.pts = shape.points.map(Math.round)
+    }
+    if (shape.tension !== undefined) {
+      compressed.ten = shape.tension
+    }
+    if (shape.closed !== undefined) {
+      compressed.cls = shape.closed
+    }
+  }
+
   return compressed
 }
 
@@ -85,12 +106,13 @@ function compressShape(shape: Shape): CanvasObject {
  * Phase 3: Includes color properties with defaults for backward compatibility
  */
 function decompressShape(id: string, data: CanvasObject): Shape {
-  // Determine type from code (PR-16: Added new shape types)
+  // Determine type from code (PR-16: Added new shape types, PR-21: Added path)
   let type: ShapeType = 'rectangle'
   switch (data.t) {
     case 'r': type = 'rectangle'; break
     case 'c': type = 'circle'; break
     case 't': type = 'text'; break
+    case 'p': type = 'path'; break
     case 'l': type = 'line'; break
     case 'pg': type = 'polygon'; break
     case 'st': type = 'star'; break
@@ -111,6 +133,13 @@ function decompressShape(id: string, data: CanvasObject): Shape {
   // Add text content for text shapes
   if (data.txt) {
     shape.text = data.txt
+    // PR-25: Add text formatting properties with defaults
+    shape.fontFamily = data.ff || 'Inter, sans-serif'
+    shape.fontSize = data.fs || 20
+    shape.fontWeight = data.fw || 'normal'
+    shape.fontStyle = data.fst || 'normal'
+    shape.textAlign = data.ta || 'left'
+    shape.textDecoration = data.td || ''
   }
 
   // Add stroke properties if present
@@ -144,6 +173,14 @@ function decompressShape(id: string, data: CanvasObject): Shape {
 
   // PR-17: Add z-index (default to current timestamp if not present)
   shape.zIndex = data.z ?? Date.now()
+
+  // PR-21: Add path-specific properties
+  if (data.ten !== undefined) {
+    shape.tension = data.ten
+  }
+  if (data.cls !== undefined) {
+    shape.closed = data.cls
+  }
 
   return shape
 }

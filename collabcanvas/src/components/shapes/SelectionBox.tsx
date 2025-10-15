@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Rect } from 'react-konva'
 import { getSelectionBoxBounds } from '../../types/selection'
 import type { SelectionBox as SelectionBoxType } from '../../types/selection'
@@ -11,8 +12,9 @@ interface SelectionBoxProps {
  * 
  * Visual indicator for drag-to-select (marquee selection)
  * Shows a dashed rectangle with semi-transparent fill while dragging
+ * Optimized with React.memo to prevent unnecessary re-renders
  */
-export function SelectionBox({ selectionBox }: SelectionBoxProps) {
+export const SelectionBox = memo(function SelectionBox({ selectionBox }: SelectionBoxProps) {
   // Only render if selection box is visible
   if (!selectionBox.visible) {
     return null
@@ -32,7 +34,8 @@ export function SelectionBox({ selectionBox }: SelectionBoxProps) {
       strokeWidth={1}
       dash={[5, 5]} // dashed border (5px dash, 5px gap)
       listening={false} // don't capture mouse events
+      perfectDrawEnabled={false} // optimize rendering
     />
   )
-}
+})
 

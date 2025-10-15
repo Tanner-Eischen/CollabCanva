@@ -231,3 +231,4 @@ export function getShortcutsByCategory(): Record<string, KeyboardShortcut[]> {
   return grouped
 }
 
+

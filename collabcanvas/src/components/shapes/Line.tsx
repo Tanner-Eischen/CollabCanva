@@ -98,6 +98,9 @@ export default function Line({
   // Determine if we should use Arrow or Line component
   const hasArrows = arrows?.start || arrows?.end
 
+  // Use stroke prop if provided, otherwise fall back to fill
+  const lineColor = _stroke || fill
+
   return (
     <>
       {hasArrows ? (
@@ -106,9 +109,9 @@ export default function Line({
           x={x}
           y={y}
           points={relativePoints}
-          stroke={fill}
+          stroke={lineColor}
           strokeWidth={strokeWidth}
-          fill={fill}
+          fill={lineColor}
           pointerAtBeginning={arrows.start}
           pointerAtEnding={arrows.end}
           pointerLength={10}
@@ -126,7 +129,7 @@ export default function Line({
           x={x}
           y={y}
           points={relativePoints}
-          stroke={fill}
+          stroke={lineColor}
           strokeWidth={strokeWidth}
           lineCap="round"
           lineJoin="round"
