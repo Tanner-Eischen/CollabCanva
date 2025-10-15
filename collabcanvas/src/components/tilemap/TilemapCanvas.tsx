@@ -639,14 +639,15 @@ export default function TilemapCanvas({
         onToggleGrid={() => setShowGrid(!showGrid)}
         canUndo={historyManager.canUndo()}
         canRedo={historyManager.canRedo()}
-        onUndo={() => {
-          const command = historyManager.undo()
-          if (command) command.undo()
-        }}
-        onRedo={() => {
-          const command = historyManager.redo()
-          if (command) command.execute()
-        }}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        palette={DEFAULT_PALETTE}
+        selectedIndex={selectedPaletteIndex}
+        onSelectIndex={setSelectedPaletteIndex}
+        selectedVariant={selectedVariant}
+        onVariantChange={setSelectedVariant}
+        plainColor={plainColor}
+        onPlainColorChange={setPlainColor}
       />
 
       <div className="flex-1 relative" style={{ cursor: lastPanPosition ? 'grabbing' : (isSpacePressed ? 'grab' : 'default') }}>
