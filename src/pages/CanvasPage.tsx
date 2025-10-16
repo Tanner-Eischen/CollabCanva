@@ -5,12 +5,14 @@ import PresenceBar from '../components/PresenceBar'
 import Toolbar from '../components/Toolbar'
 import { LayerPanel } from '../components/LayerPanel'
 import ShapeStatusBar from '../components/canvas/ShapeStatusBar'
+import { AIChatPanel } from '../components/ai/AIChatPanel'
 import { useAuth } from '../hooks/useAuth'
 import { usePresence } from '../hooks/usePresence'
 import { useCanvas } from '../hooks/useCanvas'
 import { useGroups } from '../hooks/useGroups'
 import { useLayers } from '../hooks/useLayers'
 import { getCanvas, updateCanvas, generateThumbnail } from '../services/canvasManager'
+import { isAIEnabled } from '../services/ai'
 import type { ToolType } from '../types/canvas'
 import type { CanvasMetadata } from '../services/canvasManager'
 import type Konva from 'konva'
@@ -31,6 +33,9 @@ export default function CanvasPage() {
   
   // Tilemap mode toggle
   const [isTilemapMode, setIsTilemapMode] = useState(false)
+  
+  // AI Assistant state
+  const [showAIChat, setShowAIChat] = useState(false)
   
   // Tilemap state
   const [tileMode, setTileMode] = useState<'stamp' | 'erase' | 'fill' | 'pick'>('stamp')
@@ -334,6 +339,35 @@ export default function CanvasPage() {
           />
         )}
       </div>
+
+      {/* AI Assistant Button - Fixed bottom-right */}
+      {isAIEnabled() && !showAIChat && (
+        <button
+          onClick={() => setShowAIChat(true)}
+          className="fixed bottom-4 right-4 w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center z-50"
+          title="AI Assistant"
+        >
+          <span className="text-2xl">🤖</span>
+        </button>
+      )}
+
+      {/* AI Chat Panel */}
+      {showAIChat && user && (
+        <AIChatPanel
+          canvasId={canvasId}
+          userId={user.uid}
+          selectedShapes={Array.from(selectedIds)}
+          viewport={{
+            x: 0,
+            y: 0,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            zoom: viewport.scale,
+          }}
+          mode={isTilemapMode ? 'tilemap' : 'shapes'}
+          onClose={() => setShowAIChat(false)}
+        />
+      )}
     </div>
   )
 }
