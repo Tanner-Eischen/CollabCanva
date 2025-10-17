@@ -8,13 +8,22 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import OpenAI from 'openai';
 import { ToolRegistry } from './ai/toolRegistry';
-import { buildSystemPrompt } from './ai/contextBuilder';
-import { executeToolChain } from './ai/toolExecutor';
+import { buildSystemPrompt } from './ai/contextBuilder.js';
+import { executeToolChain } from './ai/toolExecutor.js';
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || functions.config().openai?.key,
-});
+// OpenAI client - initialized lazily
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    const apiKey = process.env.OPENAI_API_KEY || functions.config().openai?.key;
+    if (!apiKey) {
+      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY environment variable.');
+    }
+    openaiClient = new OpenAI({ apiKey });
+  }
+  return openaiClient;
+}
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview';
 const MAX_TOKENS = parseInt(process.env.OPENAI_MAX_TOKENS || '2000');
@@ -126,7 +135,7 @@ export const aiCanvasCommand = functions.https.onCall(
       const { moveShapesTool, resizeShapeTool, rotateShapesTool } = await import('./ai/tools/transformTools');
       const { arrangeShapesTool, distributeShapesTool, alignShapesTool } = await import('./ai/tools/layoutTools');
       const { getCanvasStateTool, getSelectedShapesTool } = await import('./ai/tools/queryTools');
-      const { paintTileRegionTool, eraseTileRegionTool, generateTilemapTool } = await import('./ai/tools/tilemapTools');
+      const { paintTileRegionTool, eraseTileRegionTool, eraseAllTilesTool, generateTilemapTool } = await import('./ai/tools/tilemapTools');
       
       // Register all tools
       toolRegistry.register(createShapeTool);
@@ -142,7 +151,30 @@ export const aiCanvasCommand = functions.https.onCall(
       toolRegistry.register(getSelectedShapesTool);
       toolRegistry.register(paintTileRegionTool);
       toolRegistry.register(eraseTileRegionTool);
+      toolRegistry.register(eraseAllTilesTool);
       toolRegistry.register(generateTilemapTool);
+      
+      // PR-32: Analysis and optimization tools
+      const { analyzeTilemapTool, detectPatternsTool, suggestImprovementTool } = await import('./ai/tools/analysisTools');
+      const { analyzePerformanceTool, estimateExportSizeTool } = await import('./ai/tools/optimizationTools');
+      
+      toolRegistry.register(analyzeTilemapTool);
+      toolRegistry.register(detectPatternsTool);
+      toolRegistry.register(suggestImprovementTool);
+      toolRegistry.register(analyzePerformanceTool);
+      toolRegistry.register(estimateExportSizeTool);
+      
+      // PR-32: Asset management tools
+      const { listAssetsTool, analyzeAssetTool, suggestSlicingTool, recommendAssetTool, createAnimationTool, exportCanvasTool, selectTilesetTool, listTilesetsTool } = await import('./ai/tools/assetTools');
+      
+      toolRegistry.register(listAssetsTool);
+      toolRegistry.register(analyzeAssetTool);
+      toolRegistry.register(suggestSlicingTool);
+      toolRegistry.register(recommendAssetTool);
+      toolRegistry.register(createAnimationTool);
+      toolRegistry.register(exportCanvasTool);
+      toolRegistry.register(selectTilesetTool);  // NEW: AI-aware tileset selection
+      toolRegistry.register(listTilesetsTool);   // NEW: Catalog-based tileset listing
       
       // 5. Build system prompt with canvas context
       const systemPrompt = buildSystemPrompt(data.context);
@@ -196,13 +228,20 @@ export const aiCanvasCommand = functions.https.onCall(
 async function callOpenAIWithRetry(
   userMessage: string,
   systemPrompt: string,
-  functions: any[],
+  toolFunctions: any[],
   maxRetries = 3
 ): Promise<{ message: string; function_calls: any[] }> {
   let lastError: Error | null = null;
   
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      const openai = getOpenAIClient();
+      
+      // Convert functions to tools format (supports parallel function calling)
+      const tools = toolFunctions.length > 0 
+        ? toolFunctions.map(fn => ({ type: 'function' as const, function: fn }))
+        : undefined;
+
       const completion = await openai.chat.completions.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
@@ -211,21 +250,31 @@ async function callOpenAIWithRetry(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
         ],
-        functions: functions.length > 0 ? functions : undefined,
-        function_call: functions.length > 0 ? 'auto' : undefined,
+        tools,
+        tool_choice: tools ? 'auto' : undefined,
+        parallel_tool_calls: true, // Enable parallel function calling
       });
 
       const choice = completion.choices[0];
       const message = choice.message;
 
-      // Extract function calls if any
+      // Extract tool calls (supports multiple parallel calls)
       const function_calls: any[] = [];
-      if (message.function_call) {
-        function_calls.push({
-          name: message.function_call.name,
-          arguments: JSON.parse(message.function_call.arguments),
-        });
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        for (const toolCall of message.tool_calls) {
+          if (toolCall.type === 'function') {
+            function_calls.push({
+              name: toolCall.function.name,
+              arguments: JSON.parse(toolCall.function.arguments),
+            });
+          }
+        }
       }
+
+      functions.logger.info('OpenAI response', {
+        toolCallsCount: function_calls.length,
+        toolNames: function_calls.map(fc => fc.name),
+      });
 
       return {
         message: message.content || 'Done.',
@@ -234,9 +283,7 @@ async function callOpenAIWithRetry(
 
     } catch (error: any) {
       lastError = error;
-      functions.logger.warn(`OpenAI API call failed (attempt ${attempt + 1})`, {
-        error: error.message,
-      });
+      functions.logger.warn(`OpenAI API call failed (attempt ${attempt + 1})`, error.message);
 
       // Exponential backoff
       if (attempt < maxRetries - 1) {
