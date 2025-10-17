@@ -49,6 +49,18 @@
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "assets": {
+      "$userId": {
+        ".read": "$userId === auth.uid",
+        ".write": "$userId === auth.uid"
+      }
+    },
+    "animations": {
+      "$canvasId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
     }
   }
 }

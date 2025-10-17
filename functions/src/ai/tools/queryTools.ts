@@ -15,7 +15,7 @@ import { compressCanvasState } from '../contextBuilder';
  */
 export const getCanvasStateTool: ToolDefinition = {
   name: 'getCanvasState',
-  description: 'Get current canvas state including shapes, tilemap info, and metadata',
+  description: 'Get current canvas state including shapes in visible area, tilemap info, and metadata. Use this to check for existing content before placing new shapes/tiles.',
   parameters: {
     type: 'object',
     properties: {
@@ -26,6 +26,10 @@ export const getCanvasStateTool: ToolDefinition = {
       includeTilemap: {
         type: 'boolean',
         description: 'Include tilemap information (default: true)',
+      },
+      visibleOnly: {
+        type: 'boolean',
+        description: 'Only return shapes/tiles in the visible viewport (default: true)',
       },
     },
   },
@@ -48,6 +52,14 @@ export const getCanvasStateTool: ToolDefinition = {
       const canvas = snapshot.val();
       const includeShapes = params.includeShapes !== false;
       const includeTilemap = params.includeTilemap !== false;
+      const visibleOnly = params.visibleOnly !== false;
+
+      // Calculate visible bounds if filtering by visibility
+      const viewport = context.viewport || { x: 0, y: 0, width: 1920, height: 1080, zoom: 1 };
+      const visibleLeft = -viewport.x / viewport.zoom;
+      const visibleTop = -viewport.y / viewport.zoom;
+      const visibleRight = (-viewport.x + viewport.width) / viewport.zoom;
+      const visibleBottom = (-viewport.y + viewport.height) / viewport.zoom;
 
       // Build response data
       const data: any = {
@@ -55,12 +67,37 @@ export const getCanvasStateTool: ToolDefinition = {
         name: canvas.name || 'Untitled Canvas',
         createdAt: canvas.createdAt,
         mode: context.mode,
+        viewport: visibleOnly ? {
+          left: Math.round(visibleLeft),
+          top: Math.round(visibleTop),
+          right: Math.round(visibleRight),
+          bottom: Math.round(visibleBottom),
+        } : undefined,
       };
 
       // Add shape information
       if (includeShapes && canvas.shapes) {
-        const shapes = Object.values(canvas.shapes);
-        data.shapeCount = shapes.length;
+        let shapes = Object.values(canvas.shapes);
+        
+        // Filter to visible area if requested
+        if (visibleOnly) {
+          shapes = shapes.filter((shape: any) => {
+            // Check if shape overlaps with visible area
+            const shapeLeft = shape.x;
+            const shapeTop = shape.y;
+            const shapeRight = shape.x + (shape.width || 100);
+            const shapeBottom = shape.y + (shape.height || 100);
+            
+            return !(shapeRight < visibleLeft || shapeLeft > visibleRight ||
+                     shapeBottom < visibleTop || shapeTop > visibleBottom);
+          });
+          
+          data.visibleShapeCount = shapes.length;
+          data.totalShapeCount = Object.keys(canvas.shapes).length;
+        } else {
+          data.shapeCount = shapes.length;
+        }
+        
         data.shapesSummary = compressCanvasState(shapes as any[]);
         
         // Include type breakdown
@@ -69,6 +106,17 @@ export const getCanvasStateTool: ToolDefinition = {
           typeCounts[shape.type] = (typeCounts[shape.type] || 0) + 1;
         });
         data.shapeTypes = typeCounts;
+        
+        // Add detailed visible shapes info for positioning
+        if (visibleOnly && shapes.length > 0 && shapes.length <= 20) {
+          data.visibleShapes = shapes.map((s: any) => ({
+            type: s.type,
+            x: s.x,
+            y: s.y,
+            width: s.width || 100,
+            height: s.height || 100,
+          }));
+        }
       } else {
         data.shapeCount = 0;
       }
@@ -90,9 +138,13 @@ export const getCanvasStateTool: ToolDefinition = {
         data.layerCount = canvas.layerOrder.length;
       }
 
+      const message = visibleOnly && data.visibleShapeCount !== undefined
+        ? `${data.visibleShapeCount} shape(s) visible in viewport (${data.totalShapeCount} total on canvas)`
+        : `Canvas has ${data.shapeCount || 0} shape(s)`;
+
       return {
         success: true,
-        message: `Canvas has ${data.shapeCount} shape(s)`,
+        message,
         data,
       };
 
@@ -137,7 +189,7 @@ export const getSelectedShapesTool: ToolDefinition = {
 
       // Fetch each selected shape
       for (const shapeId of context.selectedShapes) {
-        const snapshot = await db.ref(`canvases/${context.canvasId}/shapes/${shapeId}`).once('value');
+        const snapshot = await db.ref(`canvas/${context.canvasId}/objects/${shapeId}`).once('value');
         if (snapshot.exists()) {
           shapes.push(snapshot.val());
         }

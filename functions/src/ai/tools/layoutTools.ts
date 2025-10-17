@@ -70,7 +70,7 @@ export const arrangeShapesTool: ToolDefinition = {
       // Fetch all shapes
       const shapes: any[] = [];
       for (const shapeId of params.shapeIds) {
-        const snapshot = await db.ref(`canvases/${context.canvasId}/shapes/${shapeId}`).once('value');
+        const snapshot = await db.ref(`canvas/${context.canvasId}/objects/${shapeId}`).once('value');
         if (snapshot.exists()) {
           shapes.push({ id: shapeId, ...snapshot.val() });
         }
@@ -89,20 +89,20 @@ export const arrangeShapesTool: ToolDefinition = {
       switch (params.layout) {
         case 'row':
           for (const shape of shapes) {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/x`] = currentX;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/y`] = startY;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/x`] = currentX;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/y`] = startY;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
             currentX += shape.width + spacing;
           }
           break;
 
         case 'column':
           for (const shape of shapes) {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/x`] = startX;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/y`] = currentY;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/x`] = startX;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/y`] = currentY;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
             currentY += shape.height + spacing;
           }
           break;
@@ -112,10 +112,10 @@ export const arrangeShapesTool: ToolDefinition = {
           let col = 0;
           
           for (const shape of shapes) {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/x`] = currentX;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/y`] = currentY;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/x`] = currentX;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/y`] = currentY;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
             
             maxRowHeight = Math.max(maxRowHeight, shape.height);
             currentX += shape.width + spacing;
@@ -191,7 +191,7 @@ export const distributeShapesTool: ToolDefinition = {
       // Fetch all shapes
       const shapes: any[] = [];
       for (const shapeId of params.shapeIds) {
-        const snapshot = await db.ref(`canvases/${context.canvasId}/shapes/${shapeId}`).once('value');
+        const snapshot = await db.ref(`canvas/${context.canvasId}/objects/${shapeId}`).once('value');
         if (snapshot.exists()) {
           shapes.push({ id: shapeId, ...snapshot.val() });
         }
@@ -240,15 +240,15 @@ export const distributeShapesTool: ToolDefinition = {
 
         // Update middle shapes
         if (params.direction === 'horizontal') {
-          updates[`canvases/${context.canvasId}/shapes/${shape.id}/x`] = currentPos;
+          updates[`canvas/${context.canvasId}/objects/${shape.id}/x`] = currentPos;
           currentPos += shape.width + spacing;
         } else {
-          updates[`canvases/${context.canvasId}/shapes/${shape.id}/y`] = currentPos;
+          updates[`canvas/${context.canvasId}/objects/${shape.id}/y`] = currentPos;
           currentPos += shape.height + spacing;
         }
 
-        updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-        updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+        updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+        updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
       }
 
       await db.ref().update(updates);
@@ -310,7 +310,7 @@ export const alignShapesTool: ToolDefinition = {
       // Fetch all shapes
       const shapes: any[] = [];
       for (const shapeId of params.shapeIds) {
-        const snapshot = await db.ref(`canvases/${context.canvasId}/shapes/${shapeId}`).once('value');
+        const snapshot = await db.ref(`canvas/${context.canvasId}/objects/${shapeId}`).once('value');
         if (snapshot.exists()) {
           shapes.push({ id: shapeId, ...snapshot.val() });
         }
@@ -328,54 +328,54 @@ export const alignShapesTool: ToolDefinition = {
         case 'left':
           referenceValue = Math.min(...shapes.map(s => s.x));
           shapes.forEach(shape => {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/x`] = referenceValue;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/x`] = referenceValue;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
           });
           break;
 
         case 'right':
           referenceValue = Math.max(...shapes.map(s => s.x + s.width));
           shapes.forEach(shape => {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/x`] = referenceValue - shape.width;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/x`] = referenceValue - shape.width;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
           });
           break;
 
         case 'top':
           referenceValue = Math.min(...shapes.map(s => s.y));
           shapes.forEach(shape => {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/y`] = referenceValue;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/y`] = referenceValue;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
           });
           break;
 
         case 'bottom':
           referenceValue = Math.max(...shapes.map(s => s.y + s.height));
           shapes.forEach(shape => {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/y`] = referenceValue - shape.height;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/y`] = referenceValue - shape.height;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
           });
           break;
 
         case 'center-horizontal':
           const avgCenterX = shapes.reduce((sum, s) => sum + (s.x + s.width / 2), 0) / shapes.length;
           shapes.forEach(shape => {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/x`] = avgCenterX - shape.width / 2;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/x`] = avgCenterX - shape.width / 2;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
           });
           break;
 
         case 'center-vertical':
           const avgCenterY = shapes.reduce((sum, s) => sum + (s.y + s.height / 2), 0) / shapes.length;
           shapes.forEach(shape => {
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/y`] = avgCenterY - shape.height / 2;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedBy`] = context.userId;
-            updates[`canvases/${context.canvasId}/shapes/${shape.id}/modifiedAt`] = Date.now();
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/y`] = avgCenterY - shape.height / 2;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedBy`] = context.userId;
+            updates[`canvas/${context.canvasId}/objects/${shape.id}/modifiedAt`] = Date.now();
           });
           break;
       }

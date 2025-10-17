@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { useEffect } from 'react'
-import { autoMigrateIfNeeded } from './utils/migrationScript'
+import { autoMigrateIfNeeded } from './utils/migration/migrationScript'
 import CanvasPage from './pages/CanvasPage'
 import Login from './components/Login'
 import ProtectedRoute from './components/ProtectedRoute'

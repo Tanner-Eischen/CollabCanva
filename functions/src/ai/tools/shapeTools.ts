@@ -14,7 +14,7 @@ import {
   validateShapeIds,
   sanitizeString,
 } from '../validation';
-import { checkShapeLimit, checkBulkShapeLimit, checkUserPermission } from '../safety';
+import { checkShapeLimit, checkUserPermission } from '../safety';
 
 /**
  * Generate unique shape ID
@@ -117,61 +117,66 @@ export const createShapeTool: ToolDefinition = {
         return { success: false, error: `Invalid color: ${params.color}` };
       }
 
-      // Build shape data
+      // Build compressed shape data (matches client format)
       const shapeId = generateShapeId();
+      
+      // Map type to type code
+      let typeCode: 'r' | 'c' | 't' | 'l' | 'pg' | 'st' | 'rr' = 'r';
+      switch (params.type) {
+        case 'rectangle': typeCode = 'r'; break;
+        case 'circle': typeCode = 'c'; break;
+        case 'text': typeCode = 't'; break;
+        case 'line': typeCode = 'l'; break;
+        case 'polygon': typeCode = 'pg'; break;
+        case 'star': typeCode = 'st'; break;
+        case 'rounded-rect': typeCode = 'rr'; break;
+      }
+
       const shapeData: any = {
-        id: shapeId,
-        type: params.type,
-        x: params.x,
-        y: params.y,
-        width,
-        height,
-        fill: params.color || '#3B82F6', // Default blue
-        stroke: params.strokeColor || '#000000',
-        strokeWidth: params.strokeWidth || 2,
-        rotation: params.rotation || 0,
-        opacity: 1,
-        visible: true,
-        locked: false,
-        createdBy: context.userId,
-        createdAt: Date.now(),
-        modifiedBy: context.userId,
-        modifiedAt: Date.now(),
+        t: typeCode,
+        x: Math.round(params.x),
+        y: Math.round(params.y),
+        w: Math.round(width),
+        h: Math.round(height),
+        f: params.color || '#3B82F6FF', // Default blue with alpha
+        z: Date.now(), // z-index
       };
+
+      // Add rotation if present
+      if (params.rotation) {
+        shapeData.rot = Math.round(params.rotation);
+      }
+
+      // Add stroke properties if present
+      if (params.strokeColor) {
+        shapeData.s = params.strokeColor;
+      }
+      if (params.strokeWidth) {
+        shapeData.sw = Math.round(params.strokeWidth);
+      }
 
       // Add type-specific properties
       if (params.type === 'text') {
-        shapeData.text = sanitizeString(params.text || 'Text', 500);
-        shapeData.fontSize = 24;
-        shapeData.fontFamily = 'Arial';
+        shapeData.txt = sanitizeString(params.text || 'Text', 500);
+        shapeData.fs = 24; // fontSize
+        shapeData.ff = 'Inter, sans-serif'; // fontFamily
       }
 
       if (params.type === 'rounded-rect') {
-        shapeData.cornerRadius = 10;
+        shapeData.cr = 10; // cornerRadius
       }
 
       if (params.type === 'star') {
-        shapeData.points = 5;
-        shapeData.innerRadius = 0.5;
+        shapeData.pts = 5; // points
       }
 
       if (params.type === 'polygon') {
         shapeData.sides = 6;
       }
 
-      // Write to Firebase
+      // Write to Firebase (canvas/objects path to match client)
       const db = admin.database();
-      const updates: any = {};
-      updates[`canvases/${context.canvasId}/shapes/${shapeId}`] = shapeData;
-      
-      // Add to layer order (top layer)
-      const layerOrderRef = db.ref(`canvases/${context.canvasId}/layerOrder`);
-      const layerSnapshot = await layerOrderRef.once('value');
-      const layerOrder = layerSnapshot.val() || [];
-      layerOrder.push(shapeId);
-      updates[`canvases/${context.canvasId}/layerOrder`] = layerOrder;
-
-      await db.ref().update(updates);
+      await db.ref(`canvas/${context.canvasId}/objects/${shapeId}`).set(shapeData);
 
       return {
         success: true,
@@ -235,17 +240,10 @@ export const deleteShapesTool: ToolDefinition = {
       const db = admin.database();
       const updates: any = {};
 
-      // Delete each shape
+      // Delete each shape from canvas/objects
       for (const shapeId of params.shapeIds) {
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}`] = null;
+        updates[`canvas/${context.canvasId}/objects/${shapeId}`] = null;
       }
-
-      // Update layer order
-      const layerOrderRef = db.ref(`canvases/${context.canvasId}/layerOrder`);
-      const layerSnapshot = await layerOrderRef.once('value');
-      const layerOrder = layerSnapshot.val() || [];
-      const newLayerOrder = layerOrder.filter((id: string) => !params.shapeIds.includes(id));
-      updates[`canvases/${context.canvasId}/layerOrder`] = newLayerOrder;
 
       await db.ref().update(updates);
 
@@ -307,7 +305,7 @@ export const modifyShapeTool: ToolDefinition = {
 
       // Validate shape exists
       const db = admin.database();
-      const shapeRef = db.ref(`canvases/${context.canvasId}/shapes/${params.shapeId}`);
+      const shapeRef = db.ref(`canvas/${context.canvasId}/objects/${params.shapeId}`);
       const snapshot = await shapeRef.once('value');
       
       if (!snapshot.exists()) {

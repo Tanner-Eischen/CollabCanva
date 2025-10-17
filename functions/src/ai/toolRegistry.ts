@@ -17,7 +17,7 @@ export interface ToolDefinition {
 
 export interface ToolResult {
   success: boolean;
-  message: string;
+  message?: string;
   data?: any;
   error?: string;
 }

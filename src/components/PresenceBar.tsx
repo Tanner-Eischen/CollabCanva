@@ -1,7 +1,8 @@
+import { useState, useRef, useEffect } from 'react'
 import { logOut } from '../services/auth'
 import type { Presence } from '../types/firebase'
-import { ZoomControls } from './ZoomControls'
-import { Tooltip } from './Tooltip'
+import { ZoomControls } from './ui/ZoomControls'
+import { Tooltip } from './ui/Tooltip'
 
 interface PresenceBarProps {
   currentUser: {
@@ -20,7 +21,12 @@ interface PresenceBarProps {
   // Tilemap mode toggle
   isTilemapMode?: boolean
   onToggleTilemapMode?: () => void
-  // Export functions (available for both modes)
+  // Asset Library toggle
+  onToggleAssetLibrary?: () => void
+  // Import/Export functions (available for both modes)
+  onImport?: (format: 'json' | 'png' | 'tilemap') => void
+  onExport?: (format: 'json' | 'png' | 'svg' | 'tilemap' | 'godot' | 'unity') => void
+  // Legacy export functions (for backward compatibility)
   onExportJSON?: () => void
   onExportPNG?: () => void
   // Theme prop (always grey theme now)
@@ -49,6 +55,9 @@ export default function PresenceBar({
   onBack,
   isTilemapMode = false,
   onToggleTilemapMode,
+  onToggleAssetLibrary,
+  onImport,
+  onExport,
   onExportJSON,
   onExportPNG,
   collabTheme = {
@@ -60,6 +69,11 @@ export default function PresenceBar({
     softBorder: 'rgba(71, 85, 105, 0.4)'
   },
 }: PresenceBarProps) {
+  const [showImportMenu, setShowImportMenu] = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const importMenuRef = useRef<HTMLDivElement>(null)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+
   const handleLogout = async () => {
     try {
       await logOut()
@@ -67,6 +81,21 @@ export default function PresenceBar({
       console.error('Logout failed:', error)
     }
   }
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (importMenuRef.current && !importMenuRef.current.contains(event.target as Node)) {
+        setShowImportMenu(false)
+      }
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Combine current user with other users for display
   const allUsers = [
@@ -150,28 +179,145 @@ export default function PresenceBar({
           </button>
         )}
         
-        {/* Export Buttons (available for both modes) */}
-        {onExportJSON && (
+        {/* Asset Library Toggle */}
+        {onToggleAssetLibrary && (
+          <button
+            onClick={onToggleAssetLibrary}
+            className="h-7 px-2.5 rounded font-medium text-[9px] transition-all flex items-center gap-1 bg-white/15 text-white/90 hover:bg-white/25"
+            title="Open Asset Library"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Assets
+          </button>
+        )}
+        
+        {/* Import/Export Buttons */}
+        {(onImport || onExport || onExportJSON) && (
           <>
             <div className="w-px h-4 bg-white/20 mx-1" />
             <div className="flex items-center gap-1.5">
-              <Tooltip content="Export as JSON" side="bottom">
-                <button
-                  onClick={onExportJSON}
-                  className="h-7 px-2.5 rounded font-medium text-[9px] transition-all bg-white/15 text-white hover:bg-white/25 flex items-center"
-                >
-                  JSON
-                </button>
-              </Tooltip>
-              {onExportPNG && (
-                <Tooltip content="Export as PNG" side="bottom">
+              {/* Import Dropdown */}
+              {onImport && (
+                <div className="relative" ref={importMenuRef}>
                   <button
-                    onClick={onExportPNG}
-                    className="h-7 px-2.5 rounded font-medium text-[9px] transition-all bg-white/15 text-white hover:bg-white/25 flex items-center"
+                    onClick={() => setShowImportMenu(!showImportMenu)}
+                    className="h-7 px-2.5 rounded font-medium text-[9px] transition-all bg-white/15 text-white hover:bg-white/25 flex items-center gap-1"
                   >
-                    PNG
+                    Import
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </button>
-                </Tooltip>
+                  
+                  {showImportMenu && (
+                    <div className="absolute top-full mt-1 right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[120px] z-50">
+                      <button
+                        onClick={() => {
+                          onImport('json')
+                          setShowImportMenu(false)
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        JSON
+                      </button>
+                      <button
+                        onClick={() => {
+                          onImport('png')
+                          setShowImportMenu(false)
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        PNG/Image
+                      </button>
+                      <button
+                        onClick={() => {
+                          onImport('tilemap')
+                          setShowImportMenu(false)
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        Tilemap JSON
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Export Dropdown */}
+              {(onExport || onExportJSON) && (
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="h-7 px-2.5 rounded font-medium text-[9px] transition-all bg-white/15 text-white hover:bg-white/25 flex items-center gap-1"
+                  >
+                    Export
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showExportMenu && (
+                    <div className="absolute top-full mt-1 right-0 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[140px] z-50">
+                      <button
+                        onClick={() => {
+                          if (onExport) onExport('json')
+                          else if (onExportJSON) onExportJSON()
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        JSON
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (onExport) onExport('png')
+                          else if (onExportPNG) onExportPNG()
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        PNG
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (onExport) onExport('svg')
+                          setShowExportMenu(false)
+                        }}
+                        className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        SVG
+                      </button>
+                      {isTilemapMode && (
+                        <>
+                          <div className="my-1 border-t border-gray-200" />
+                          <div className="px-3 py-1 text-[8px] text-gray-500 uppercase font-semibold">
+                            Game Engines
+                          </div>
+                          <button
+                            onClick={() => {
+                              if (onExport) onExport('godot')
+                              setShowExportMenu(false)
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            Godot (.tscn)
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (onExport) onExport('unity')
+                              setShowExportMenu(false)
+                            }}
+                            className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            Unity (.prefab)
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </>

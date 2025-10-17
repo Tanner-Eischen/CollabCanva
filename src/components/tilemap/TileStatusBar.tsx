@@ -13,6 +13,7 @@ interface TileStatusBarProps {
   tileSize: number
   zoom: number
   connectionStatus: ConnectionStatus
+  aiChat?: React.ReactNode // Optional AI chat component to render inline
 }
 
 /**
@@ -26,6 +27,7 @@ export default function TileStatusBar({
   tileSize,
   zoom,
   connectionStatus,
+  aiChat,
 }: TileStatusBarProps) {
   const connectionIndicators = {
     connected: { icon: '🟢', text: 'Connected', color: 'text-green-400' },
@@ -43,19 +45,26 @@ export default function TileStatusBar({
   const indicator = connectionIndicators[connectionStatus]
   
   return (
-    <div className="absolute bottom-0 left-0 right-0 h-10 z-50 bg-gradient-to-r from-slate-900/95 to-slate-800/95 backdrop-blur-md border-t border-white/10 flex items-center justify-end px-6 gap-6 text-xs text-white/90 font-mono shadow-lg">
-      {/* Cursor Position */}
-      {cursorPosition && (
-        <div className="flex items-center gap-2">
-          <span className="text-white/50">Tile:</span>
-          <span className="text-white/90 font-semibold">
-            X: {cursorPosition.x}, Y: {cursorPosition.y}
-          </span>
-        </div>
-      )}
-      
-      {/* Separator */}
-      {cursorPosition && <div className="h-4 w-px bg-white/20" />}
+    <div className="fixed bottom-0 left-0 right-0 h-10 z-50 bg-gradient-to-r from-slate-900/95 to-slate-800/95 backdrop-blur-md border-t border-white/10 flex items-center justify-between px-2 sm:px-4 gap-2 sm:gap-4 text-xs text-white/90 font-mono shadow-lg">
+      {/* Left side - AI Chat */}
+      <div id="status-bar-left" className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+        {aiChat}
+      </div>
+
+      {/* Right side - Status Info */}
+      <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+        {/* Cursor Position */}
+        {cursorPosition && (
+          <div className="flex items-center gap-2">
+            <span className="text-white/50">Tile:</span>
+            <span className="text-white/90 font-semibold">
+              X: {cursorPosition.x}, Y: {cursorPosition.y}
+            </span>
+          </div>
+        )}
+        
+        {/* Separator */}
+        {cursorPosition && <div className="h-4 w-px bg-white/20" />}
       
       {/* Tile Count */}
       <div className="flex items-center gap-2">
@@ -96,10 +105,11 @@ export default function TileStatusBar({
       {/* Separator */}
       <div className="h-4 w-px bg-white/20" />
       
-      {/* Connection Status */}
-      <div className={`flex items-center gap-2 ${indicator.color}`}>
-        <span>{indicator.icon}</span>
-        <span className="font-semibold">{indicator.text}</span>
+        {/* Connection Status */}
+        <div className={`flex items-center gap-2 ${indicator.color}`}>
+          <span>{indicator.icon}</span>
+          <span className="font-semibold">{indicator.text}</span>
+        </div>
       </div>
     </div>
   )

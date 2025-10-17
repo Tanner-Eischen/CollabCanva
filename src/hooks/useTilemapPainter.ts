@@ -6,7 +6,7 @@
 import { useCallback, useRef } from 'react'
 import type { TileData, TileMode } from '../types/tilemap'
 import { coordToKey } from '../types/tilemap'
-import { calculateTileVariant, calculateAutoTileUpdates } from '../utils/autoTile'
+import { calculateTileVariant, calculateAutoTileUpdates } from '../utils/tilemap/autoTile'
 import { hasSpriteAsset } from '../constants/tilemapDefaults'
 
 export interface UseTilemapPainterOptions {

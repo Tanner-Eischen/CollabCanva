@@ -3,6 +3,8 @@
  * Core types for the tilemap editor feature
  */
 
+import type { TileLayerMeta } from './tileLayer'
+
 // ============================================================================
 // Core Tile Data
 // ============================================================================
@@ -15,6 +17,7 @@ export interface TileData {
   color: string;          // hex color (e.g., '#4ade80')
   variant?: number;       // Auto-tile variant (0-15 bitmask result) - optional for backwards compatibility
   metadata?: Record<string, any>;  // For game logic (collision, etc.)
+  animationId?: string;   // Optional animation ID for animated tiles (water, torches, etc.)
 }
 
 /**
@@ -36,6 +39,7 @@ export interface TilemapMeta {
   chunkSize: number;      // Tiles per chunk (16)
   palette: PaletteColor[]; // Array of {type, color, name}
   version: number;        // For future migrations
+  layers?: TileLayerMeta[]; // Multi-layer support (v2+)
 }
 
 // ============================================================================
@@ -85,6 +89,7 @@ export interface FirebaseTileData {
   t: string;   // type
   c: string;   // color
   v?: number;  // variant (0-15 bitmask result) - optional for backwards compatibility
+  a?: string;  // animationId - optional for animated tiles
   by: string;  // last editor (user ID)
   ts: number;  // server timestamp
 }
@@ -99,6 +104,7 @@ export interface FirebaseTilemapMeta {
   chunkSize: number;
   palette: PaletteColor[];
   version: number;
+  layers?: TileLayerMeta[]; // Multi-layer support (v2+)
 }
 
 // ============================================================================
@@ -279,6 +285,7 @@ export const DEFAULT_TILEMAP_META: TilemapMeta = {
     { type: 'spawn', color: '#fbbf24', name: 'Spawn' },
     { type: 'empty', color: '#ef4444', name: 'Empty' },
   ],
-  version: 1,
+  version: 2, // Version 2: Multi-layer support
+  layers: undefined, // Will be populated with default layers on creation
 };
 

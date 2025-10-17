@@ -21,8 +21,9 @@ export interface ViewportTransform {
  * Shape types supported by the canvas
  * Phase 3 PR-16: Added line, polygon, star, roundRect
  * Phase 4 PR-21: Added path for freehand drawing
+ * Phase 3 PR-31: Added animatedSprite for sprite animations
  */
-export type ShapeType = 'rectangle' | 'circle' | 'text' | 'line' | 'polygon' | 'star' | 'roundRect' | 'path'
+export type ShapeType = 'rectangle' | 'circle' | 'text' | 'line' | 'polygon' | 'star' | 'roundRect' | 'path' | 'animatedSprite'
 
 /**
  * Client-side representation of a canvas shape
@@ -60,6 +61,14 @@ export interface Shape {
   // Phase 4: Path properties for freehand drawing (PR-21)
   tension?: number // 0 = sharp (pencil), 0.5 = smooth (pen)
   closed?: boolean // whether the path is closed
+  // Phase 3 PR-31: Animated sprite properties
+  animationId?: string // reference to animation (for animatedSprite type)
+  spriteSheetId?: string // reference to sprite sheet asset (for animatedSprite type)
+  currentFrame?: number // current animation frame (for animatedSprite type)
+  isPlaying?: boolean // whether animation is playing (for animatedSprite type)
+  flipX?: boolean // flip horizontally (for animatedSprite type)
+  flipY?: boolean // flip vertically (for animatedSprite type)
+  opacity?: number // 0-1 opacity (for animatedSprite type)
 }
 
 /**
@@ -79,8 +88,9 @@ export interface CanvasConfig {
  * Tool types for the canvas toolbar
  * Phase 3 PR-16: Added line, polygon, star, roundRect
  * Phase 4 PR-21: Added pencil, pen, hand tools
+ * Phase 3 PR-31: Added animation tool for placing animated sprites
  */
-export type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'delete' | 'line' | 'polygon' | 'star' | 'roundRect' | 'pencil' | 'pen' | 'hand'
+export type ToolType = 'select' | 'rectangle' | 'circle' | 'text' | 'delete' | 'line' | 'polygon' | 'star' | 'roundRect' | 'pencil' | 'pen' | 'hand' | 'animation'
 
 /**
  * Canvas bounds for enforcing hard boundaries

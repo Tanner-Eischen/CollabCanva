@@ -11,28 +11,28 @@ import {
   syncBatchCreate,
   syncZIndex,
   subscribeToCanvas,
-} from '../services/canvasSync'
+} from '../services/canvas/canvasSync'
 import {
   copyShapes as copyShapesToClipboard,
   pasteShapes as pasteShapesFromClipboard,
   duplicateShapes as duplicateShapesInternal,
-} from '../services/clipboard'
-import { createHistoryManager } from '../services/commandHistory'
-import { CreateCommand } from '../commands/CreateCommand'
-import { DeleteCommand } from '../commands/DeleteCommand'
-import { ZIndexCommand } from '../commands/ZIndexCommand'
-import { AlignmentCommand } from '../commands/AlignmentCommand'
+} from '../services/canvas/clipboard'
+import { createHistoryManager } from '../services/canvas/commandHistory'
+import { CreateCommand } from '../commands/shape/CreateCommand'
+import { DeleteCommand } from '../commands/shape/DeleteCommand'
+import { ZIndexCommand } from '../commands/shape/ZIndexCommand'
+import { AlignmentCommand } from '../commands/advanced/AlignmentCommand'
 import {
   loadRecentColors,
   saveRecentColors,
-} from '../services/colorStorage'
+} from '../services/canvas/colorStorage'
 import {
   alignShapes,
   distributeHorizontally,
   distributeVertically,
   centerInCanvas,
   type AlignmentType,
-} from '../services/alignment'
+} from '../services/collaboration/alignment'
 
 interface UseCanvasOptions {
   canvasId: string

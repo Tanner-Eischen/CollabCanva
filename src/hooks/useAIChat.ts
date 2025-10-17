@@ -5,9 +5,10 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { sendAICommand, AIRequest, AIResponse } from '../services/ai';
+import { sendAICommand } from '../services/ai/ai';
+import type { AIRequest, AIResponse } from '../services/ai/ai';
 
-export interface ChatMessage {
+export type ChatMessage = {
   id: string;
   role: 'user' | 'assistant' | 'error';
   content: string;

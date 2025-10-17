@@ -8,6 +8,26 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>CollabCanvas - Real-time Collaborative Design</title>
+    <!-- Fix React DevTools version detection for React 19 -->
+    <script>
+      // Patch React DevTools hook to handle empty version strings
+      if (typeof window !== 'undefined') {
+        const originalHook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+        if (originalHook) {
+          const originalRegister = originalHook.registerRendererInterface;
+          if (originalRegister) {
+            originalHook.registerRendererInterface = function(id, renderer) {
+              try {
+                return originalRegister.call(this, id, renderer);
+              } catch (e) {
+                // Silently ignore version parsing errors
+                console.warn('React DevTools version detection failed (non-critical):', e.message);
+              }
+            };
+          }
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

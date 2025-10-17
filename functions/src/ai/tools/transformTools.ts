@@ -65,7 +65,7 @@ export const moveShapesTool: ToolDefinition = {
 
       // Process each shape
       for (const shapeId of params.shapeIds) {
-        const shapeRef = db.ref(`canvases/${context.canvasId}/shapes/${shapeId}`);
+        const shapeRef = db.ref(`canvas/${context.canvasId}/objects/${shapeId}`);
         const snapshot = await shapeRef.once('value');
         
         if (!snapshot.exists()) {
@@ -94,10 +94,10 @@ export const moveShapesTool: ToolDefinition = {
           newY = clamped.y;
         }
 
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}/x`] = newX;
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}/y`] = newY;
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}/modifiedBy`] = context.userId;
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}/modifiedAt`] = Date.now();
+        updates[`canvas/${context.canvasId}/objects/${shapeId}/x`] = newX;
+        updates[`canvas/${context.canvasId}/objects/${shapeId}/y`] = newY;
+        updates[`canvas/${context.canvasId}/objects/${shapeId}/modifiedBy`] = context.userId;
+        updates[`canvas/${context.canvasId}/objects/${shapeId}/modifiedAt`] = Date.now();
         movedCount++;
       }
 
@@ -163,7 +163,7 @@ export const resizeShapeTool: ToolDefinition = {
 
       // Get current shape
       const db = admin.database();
-      const shapeRef = db.ref(`canvases/${context.canvasId}/shapes/${params.shapeId}`);
+      const shapeRef = db.ref(`canvas/${context.canvasId}/objects/${params.shapeId}`);
       const snapshot = await shapeRef.once('value');
       
       if (!snapshot.exists()) {
@@ -265,7 +265,7 @@ export const rotateShapesTool: ToolDefinition = {
 
       // Process each shape
       for (const shapeId of params.shapeIds) {
-        const shapeRef = db.ref(`canvases/${context.canvasId}/shapes/${shapeId}`);
+        const shapeRef = db.ref(`canvas/${context.canvasId}/objects/${shapeId}`);
         const snapshot = await shapeRef.once('value');
         
         if (!snapshot.exists()) {
@@ -285,9 +285,9 @@ export const rotateShapesTool: ToolDefinition = {
         // Normalize to 0-360
         newRotation = ((newRotation % 360) + 360) % 360;
 
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}/rotation`] = newRotation;
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}/modifiedBy`] = context.userId;
-        updates[`canvases/${context.canvasId}/shapes/${shapeId}/modifiedAt`] = Date.now();
+        updates[`canvas/${context.canvasId}/objects/${shapeId}/rotation`] = newRotation;
+        updates[`canvas/${context.canvasId}/objects/${shapeId}/modifiedBy`] = context.userId;
+        updates[`canvas/${context.canvasId}/objects/${shapeId}/modifiedAt`] = Date.now();
         rotatedCount++;
       }
 

@@ -6,8 +6,9 @@
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage'
 import { ref as dbRef, set, get, remove, update, query, orderByChild, equalTo } from 'firebase/database'
 import { storage, db } from '../firebase'
-import { analyzeTileset, generateBasicIndex, type TilesetAnalysisResult } from './tilesetAnalysis'
+import { analyzeTileset as analyzePatterns, generateBasicIndex, type TilesetAnalysisResult } from './tilesetAnalysis'
 import { updateCatalogEntry, removeCatalogEntry } from './assetCatalog'
+import { analyzeImageFromUrl as analyzeThemesAndMaterials } from './assetAnalyzer'
 import type {
   Asset,
   AssetType,
@@ -226,7 +227,8 @@ export async function uploadAsset(
               })
               
               try {
-                const analysis = await analyzeTileset(url, {
+                // 1. Pattern detection (auto-tile, named tiles)
+                const patternAnalysis = await analyzePatterns(url, {
                   tileWidth: enrichedTilesetMetadata.tileWidth,
                   tileHeight: enrichedTilesetMetadata.tileHeight,
                   columns: enrichedTilesetMetadata.columns,
@@ -235,25 +237,51 @@ export async function uploadAsset(
                   margin: enrichedTilesetMetadata.margin
                 })
                 
-                // Merge analysis results into metadata
+                // 2. Theme and material detection (color-based)
+                const themeAnalysis = await analyzeThemesAndMaterials(url, assetName, {
+                  tileWidth: enrichedTilesetMetadata.tileWidth,
+                  tileHeight: enrichedTilesetMetadata.tileHeight,
+                  columns: enrichedTilesetMetadata.columns,
+                  rows: enrichedTilesetMetadata.rows,
+                  tileCount: enrichedTilesetMetadata.tileCount
+                })
+                
+                // Merge both analysis results
                 enrichedTilesetMetadata = {
                   ...enrichedTilesetMetadata,
                   
-                  // Add computed tileSize if square
-                  tileSize: enrichedTilesetMetadata.tileWidth === enrichedTilesetMetadata.tileHeight
-                    ? enrichedTilesetMetadata.tileWidth
-                    : undefined,
+                  // From theme analysis
+                  ...themeAnalysis,
                   
-                  // Add analysis results
-                  autoTileSystem: analysis.autoTileSystem,
-                  namedTiles: analysis.namedTiles,
-                  features: analysis.features,
-                  detectionConfidence: analysis.detectionConfidence,
+                  // From pattern analysis (may override theme analysis if higher confidence)
+                  autoTileSystem: patternAnalysis.autoTileSystem || themeAnalysis.autoTileSystem,
+                  namedTiles: patternAnalysis.namedTiles || themeAnalysis.namedTiles || {},
+                  features: {
+                    ...patternAnalysis.features,
+                    ...themeAnalysis.features
+                  },
                   
-                  // Add validation report
+                  // Combined confidence
+                  detectionConfidence: {
+                    autoTilePattern: Math.max(
+                      patternAnalysis.detectionConfidence.autoTilePattern,
+                      themeAnalysis.detectionConfidence?.autoTilePattern || 0
+                    ),
+                    namedTiles: Math.max(
+                      patternAnalysis.detectionConfidence.namedTiles,
+                      themeAnalysis.detectionConfidence?.namedTiles || 0
+                    ),
+                    overall: (patternAnalysis.detectionConfidence.overall + (themeAnalysis.detectionConfidence?.overall || 0)) / 2
+                  },
+                  
+                  // Combined validation
                   validation: {
+                    ...(themeAnalysis.validation || {}),
                     dimensionCheck: 'pass',
-                    warnings: analysis.warnings,
+                    warnings: [
+                      ...(patternAnalysis.warnings || []),
+                      ...(themeAnalysis.validation?.warnings || [])
+                    ],
                     checkedAt: Date.now()
                   },
                   
@@ -261,13 +289,15 @@ export async function uploadAsset(
                   version: 1
                 }
                 
-                console.log('Tileset analysis complete:', {
-                  autoTileSystem: analysis.autoTileSystem,
-                  namedTileCount: Object.keys(analysis.namedTiles).length,
-                  confidence: analysis.detectionConfidence.overall
+                console.log('✅ Tileset analysis complete:', {
+                  themes: enrichedTilesetMetadata.themes,
+                  materials: enrichedTilesetMetadata.materials,
+                  autoTileSystem: enrichedTilesetMetadata.autoTileSystem,
+                  namedTileCount: Object.keys(enrichedTilesetMetadata.namedTiles || {}).length,
+                  confidence: enrichedTilesetMetadata.detectionConfidence?.overall
                 })
               } catch (analysisError) {
-                console.warn('Tileset analysis failed, using basic index:', analysisError)
+                console.warn('⚠ Tileset analysis failed, using basic index:', analysisError)
                 
                 // Fallback to basic index
                 enrichedTilesetMetadata = {
@@ -282,7 +312,8 @@ export async function uploadAsset(
                     dimensionCheck: 'pass',
                     warnings: ['Auto-analysis failed, using basic tile numbering'],
                     checkedAt: Date.now()
-                  }
+                  },
+                  version: 1
                 }
               }
             }
@@ -530,6 +561,7 @@ export async function replaceAssetFile(
 
 /**
  * Re-analyze existing tileset
+ * Uses both pattern detection and theme/material analysis
  */
 export async function reanalyzeTileset(
   assetId: string,
@@ -541,7 +573,8 @@ export async function reanalyzeTileset(
     throw new Error('Asset is not a tileset')
   }
   
-  const analysis = await analyzeTileset(asset.url, {
+  // Pattern analysis
+  const patternAnalysis = await analyzePatterns(asset.url, {
     tileWidth: asset.tilesetMetadata.tileWidth,
     tileHeight: asset.tilesetMetadata.tileHeight,
     columns: asset.tilesetMetadata.columns,
@@ -550,17 +583,45 @@ export async function reanalyzeTileset(
     margin: asset.tilesetMetadata.margin
   })
   
+  // Theme and material analysis
+  const themeAnalysis = await analyzeThemesAndMaterials(asset.url, asset.name, {
+    tileWidth: asset.tilesetMetadata.tileWidth,
+    tileHeight: asset.tilesetMetadata.tileHeight,
+    columns: asset.tilesetMetadata.columns,
+    rows: asset.tilesetMetadata.rows,
+    tileCount: asset.tilesetMetadata.tileCount
+  })
+  
+  // Merge results
   const updatedMetadata: TilesetMetadata = {
     ...asset.tilesetMetadata,
-    autoTileSystem: analysis.autoTileSystem,
-    namedTiles: analysis.namedTiles,
-    features: analysis.features,
-    detectionConfidence: analysis.detectionConfidence,
+    ...themeAnalysis,
+    autoTileSystem: patternAnalysis.autoTileSystem || themeAnalysis.autoTileSystem,
+    namedTiles: patternAnalysis.namedTiles || themeAnalysis.namedTiles || {},
+    features: {
+      ...patternAnalysis.features,
+      ...themeAnalysis.features
+    },
+    detectionConfidence: {
+      autoTilePattern: Math.max(
+        patternAnalysis.detectionConfidence.autoTilePattern,
+        themeAnalysis.detectionConfidence?.autoTilePattern || 0
+      ),
+      namedTiles: Math.max(
+        patternAnalysis.detectionConfidence.namedTiles,
+        themeAnalysis.detectionConfidence?.namedTiles || 0
+      ),
+      overall: (patternAnalysis.detectionConfidence.overall + (themeAnalysis.detectionConfidence?.overall || 0)) / 2
+    },
     validation: {
-      ...asset.tilesetMetadata.validation,
-      warnings: analysis.warnings,
+      ...(themeAnalysis.validation || asset.tilesetMetadata.validation),
+      warnings: [
+        ...patternAnalysis.warnings,
+        ...(themeAnalysis.validation?.warnings || [])
+      ],
       checkedAt: Date.now()
-    }
+    },
+    version: (asset.tilesetMetadata.version || 0) + 1
   }
   
   await updateAssetMetadata(assetId, userId, {

@@ -16,12 +16,15 @@
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.14",
     "firebase": "^12.4.0",
+    "jszip": "^3.10.1",
     "konva": "^10.0.2",
     "lodash-es": "^4.17.21",
+    "lucide-react": "^0.468.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-konva": "^19.0.10",
     "react-router-dom": "^7.9.4",
+    "use-image": "^1.1.4",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

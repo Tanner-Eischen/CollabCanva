@@ -14,14 +14,14 @@ import {
   syncDeleteGroup,
   syncAddToGroup,
   syncRemoveFromGroup,
-} from '../services/groupSync'
+} from '../services/collaboration/groupSync'
 import {
   isInAnyGroup,
   getAllGroupMembers,
   getGroupShapes,
   hasCircularDependency,
   updateGroupBounds,
-} from '../utils/groupHelpers'
+} from '../utils/canvas/groupHelpers'
 
 interface UseGroupsOptions {
   canvasId: string

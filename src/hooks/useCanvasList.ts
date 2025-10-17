@@ -12,7 +12,7 @@ import {
   duplicateCanvas as duplicateCanvasService,
   updateCanvas as updateCanvasService,
   type CanvasMetadata,
-} from '../services/canvasManager'
+} from '../services/canvas/canvasManager'
 import { useNavigate } from 'react-router-dom'
 
 interface UseCanvasListReturn {

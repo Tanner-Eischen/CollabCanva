@@ -1,20 +1,22 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import Canvas from '../components/Canvas'
+import Canvas from '../components/canvas/Canvas'
 import PresenceBar from '../components/PresenceBar'
-import Toolbar from '../components/Toolbar'
-import { LayerPanel } from '../components/LayerPanel'
+import Toolbar from '../components/toolbar/Toolbar'
+import { LayerPanel } from '../components/panels/LayerPanel'
 import ShapeStatusBar from '../components/canvas/ShapeStatusBar'
-import { AIChatPanel } from '../components/ai/AIChatPanel'
+import { AIChatPanel } from '../components/panels/AIChatPanel'
+import { AssetLibrary } from '../components/assets/AssetLibrary'
+import ExportModal from '../components/export/ExportModal'
 import { useAuth } from '../hooks/useAuth'
 import { usePresence } from '../hooks/usePresence'
 import { useCanvas } from '../hooks/useCanvas'
 import { useGroups } from '../hooks/useGroups'
 import { useLayers } from '../hooks/useLayers'
-import { getCanvas, updateCanvas, generateThumbnail } from '../services/canvasManager'
-import { isAIEnabled } from '../services/ai'
+import { getCanvas, updateCanvas, generateThumbnail } from '../services/canvas/canvasManager'
+import { isAIEnabled } from '../services/ai/ai'
 import type { ToolType } from '../types/canvas'
-import type { CanvasMetadata } from '../services/canvasManager'
+import type { CanvasMetadata } from '../services/canvas/canvasManager'
 import type Konva from 'konva'
 
 /**
@@ -25,7 +27,7 @@ export default function CanvasPage() {
   const { canvasId: routeCanvasId } = useParams<{ canvasId: string }>()
   const [selectedTool, setSelectedTool] = useState<ToolType>('select')
   const [canvasMetadata, setCanvasMetadata] = useState<CanvasMetadata | null>(null)
-  const [viewport, setViewport] = useState({ scale: 1 })
+  const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 })
   const stageRef = useRef<Konva.Stage | null>(null)
   
   // Use 'public-board' as default if no canvasId in route
@@ -37,10 +39,16 @@ export default function CanvasPage() {
   // AI Assistant state
   const [showAIChat, setShowAIChat] = useState(false)
   
+  // Asset Library state
+  const [showAssetLibrary, setShowAssetLibrary] = useState(false)
+  
+  // Export Modal state
+  const [showExportModal, setShowExportModal] = useState(false)
+  
   // Tilemap state
   const [tileMode, setTileMode] = useState<'stamp' | 'erase' | 'fill' | 'pick'>('stamp')
   const [brushSize, setBrushSize] = useState(1)
-  const [autoTilingEnabled, setAutoTilingEnabled] = useState(false)
+  const [autoTilingEnabled, setAutoTilingEnabled] = useState(true) // Default to ON for better UX
   const [showTileGrid, setShowTileGrid] = useState(true)
   const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0)
   const [selectedVariant, setSelectedVariant] = useState<number | undefined>(undefined)
@@ -221,6 +229,23 @@ export default function CanvasPage() {
     exportFunctionsRef.current?.exportPNG()
   }, [])
 
+  // Handle new export system (opens Export Modal)
+  const handleExport = useCallback((format: 'json' | 'png' | 'svg' | 'tilemap' | 'godot' | 'unity') => {
+    // For new formats (godot, unity) or when user wants advanced options, open the export modal
+    if (format === 'godot' || format === 'unity') {
+      setShowExportModal(true)
+    } else if (format === 'json') {
+      // Legacy: use existing JSON export
+      handleExportJSON()
+    } else if (format === 'png') {
+      // Legacy: use existing PNG export
+      handleExportPNG()
+    } else {
+      // For other formats, open export modal
+      setShowExportModal(true)
+    }
+  }, [handleExportJSON, handleExportPNG])
+
   // Layer panel handlers (PR-19)
   const handleSelectLayer = useCallback((layerId: string) => {
     setSelection(layerId)
@@ -248,6 +273,8 @@ export default function CanvasPage() {
         onZoomFit={handleZoomFit}
         isTilemapMode={isTilemapMode}
         onToggleTilemapMode={() => setIsTilemapMode(!isTilemapMode)}
+        onToggleAssetLibrary={() => setShowAssetLibrary(!showAssetLibrary)}
+        onExport={handleExport}
         onExportJSON={handleExportJSON}
         onExportPNG={handleExportPNG}
       />
@@ -276,7 +303,8 @@ export default function CanvasPage() {
             deleteTriggered={deleteTriggered}
             onUndoRedoChange={handleUndoRedoChange}
             canvasId={canvasId}
-            onZoomChange={(scale) => setViewport({ scale })}
+            onViewportChange={(vp) => setViewport({ x: vp.x, y: vp.y, scale: vp.scale })}
+            onZoomChange={(scale) => setViewport(prev => ({ ...prev, scale }))}
             onZoomControlsReady={handleZoomControlsReady}
             onColorSamplingReady={handleColorSamplingReady}
             isTilemapMode={isTilemapMode}
@@ -300,6 +328,24 @@ export default function CanvasPage() {
             onVariantChange={setSelectedVariant}
             plainColor={plainColor}
             onPlainColorChange={setPlainColor}
+            aiChat={
+              isAIEnabled() && user ? (
+                <AIChatPanel
+                  canvasId={canvasId}
+                  userId={user.uid}
+                  selectedShapes={Array.from(selectedIds)}
+                  viewport={{
+                    x: viewport.x,
+                    y: viewport.y,
+                    width: window.innerWidth,
+                    height: window.innerHeight,
+                    zoom: viewport.scale,
+                  }}
+                  mode={isTilemapMode ? 'tilemap' : 'shapes'}
+                  onClose={() => {/* AI always visible in status bar */}}
+                />
+              ) : null
+            }
           />
         </div>
 
@@ -329,45 +375,57 @@ export default function CanvasPage() {
           />
         )}
 
-        {/* Status Bar - Fixed at bottom (shape mode only) */}
-        {!isTilemapMode && (
-          <ShapeStatusBar
-            shapeCount={shapes.length}
-            selectedCount={selectedIds.size}
-            zoom={viewport.scale}
-            connectionStatus="connected"
-          />
-        )}
       </div>
 
-      {/* AI Assistant Button - Fixed bottom-right */}
-      {isAIEnabled() && !showAIChat && (
-        <button
-          onClick={() => setShowAIChat(true)}
-          className="fixed bottom-4 right-4 w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-110 flex items-center justify-center z-50"
-          title="AI Assistant"
-        >
-          <span className="text-2xl">🤖</span>
-        </button>
-      )}
-
-      {/* AI Chat Panel */}
-      {showAIChat && user && (
-        <AIChatPanel
-          canvasId={canvasId}
-          userId={user.uid}
-          selectedShapes={Array.from(selectedIds)}
-          viewport={{
-            x: 0,
-            y: 0,
-            width: window.innerWidth,
-            height: window.innerHeight,
-            zoom: viewport.scale,
-          }}
-          mode={isTilemapMode ? 'tilemap' : 'shapes'}
-          onClose={() => setShowAIChat(false)}
+      {/* Status Bar with inline AI Chat - Fixed at bottom */}
+      {!isTilemapMode && (
+        <ShapeStatusBar
+          shapeCount={shapes.length}
+          selectedCount={selectedIds.size}
+          zoom={viewport.scale}
+          connectionStatus="connected"
+          aiChat={
+            isAIEnabled() && user ? (
+              <AIChatPanel
+                canvasId={canvasId}
+                userId={user.uid}
+                selectedShapes={Array.from(selectedIds)}
+                viewport={{
+                  x: viewport.x,
+                  y: viewport.y,
+                  width: window.innerWidth,
+                  height: window.innerHeight,
+                  zoom: viewport.scale,
+                }}
+                mode="shapes"
+                onClose={() => {/* AI always visible in status bar */}}
+              />
+            ) : null
+          }
         />
       )}
+
+      {/* Asset Library Panel - Slides in from left */}
+      {showAssetLibrary && user?.uid && (
+        <div className="fixed left-0 top-12 bottom-0 w-80 z-40 shadow-2xl">
+          <AssetLibrary 
+            userId={user.uid}
+            onClose={() => setShowAssetLibrary(false)}
+            onSelectAsset={(assetId) => {
+              console.log('Selected asset:', assetId)
+              // TODO: Handle asset selection (add to canvas, open animation creator, etc.)
+            }}
+          />
+        </div>
+      )}
+
+      {/* Export Modal */}
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        canvasId={canvasId}
+        canvasName={canvasMetadata?.name || 'Untitled Canvas'}
+      />
     </div>
   )
 }

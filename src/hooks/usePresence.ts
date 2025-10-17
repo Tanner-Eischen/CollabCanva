@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { ref, set, onValue, onDisconnect, off } from 'firebase/database'
 import { db } from '../services/firebase'
 import type { Presence, PresenceData } from '../types/firebase'
-import { throttle } from '../utils/throttle'
+import { throttle } from '../utils/common/throttle'
 
 // Predefined color palette for user cursors and selections
 const USER_COLORS = [

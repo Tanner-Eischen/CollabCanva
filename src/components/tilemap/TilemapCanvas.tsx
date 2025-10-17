@@ -1,25 +1,31 @@
-import { useRef, useState, useCallback, useEffect, useMemo } from 'react'
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { Stage, Layer } from 'react-konva'
 import Konva from 'konva'
 import type { ViewportTransform } from '../../types/canvas'
 import type { TileMode, PaletteColor, TileData } from '../../types/tilemap'
+import type { TileLayerMeta } from '../../types/tileLayer'
 import { useAuth } from '../../hooks/useAuth'
 import { usePresence } from '../../hooks/usePresence'
 import { useCanvasViewport } from '../../hooks/useCanvasViewport'
 import { useTilemap } from '../../hooks/useTilemap'
 import { coordToKey } from '../../types/tilemap'
-import { createHistoryManager } from '../../services/commandHistory'
-import { TileSetCommand, BulkTileCommand } from '../../commands/TileCommand'
-import { TileStrokeCommand } from '../../commands/TileStrokeCommand'
-import { TileFillCommand } from '../../commands/TileFillCommand'
-import { exportTilemapJSON, generateExportFilename } from '../../services/tilemapExport'
+import { createHistoryManager } from '../../services/canvas/commandHistory'
+import { TileSetCommand, BulkTileCommand } from '../../commands/tile/TileCommand'
+import { TileStrokeCommand } from '../../commands/tile/TileStrokeCommand'
+import { TileFillCommand } from '../../commands/tile/TileFillCommand'
+import { exportTilemapJSON, generateExportFilename } from '../../services/tilemap/tilemapExport'
 import { DEFAULT_TILEMAP_PALETTE, hasSpriteAsset } from '../../constants/tilemapDefaults'
-import { calculateTileVariant, calculateAutoTileUpdates } from '../../utils/autoTile'
+import { calculateTileVariant, calculateAutoTileUpdates } from '../../utils/tilemap/autoTile'
+import { updateLayer as updateLayerInFirebase } from '../../services/tilemap/tilemapSync'
+import { useLayerContext } from '../../hooks/useLayerManagement'
+import { useAIOrchestrator } from '../../hooks/useAIOrchestrator'
 import Cursor from '../Cursor'
 import TilemapGrid from './TilemapGrid'
 import TileRenderer from './TileRenderer'
 import TileStatusBar from './TileStatusBar'
-import TilePalette from './TilePalette'
+import TilePalette from '../panels/TilePalette'
+import LayerPanelTilemap from './LayerPanelTilemap'
+import AIQuickActionsPanel from '../ai/AIQuickActionsPanel'
 
 interface TilemapCanvasProps {
   canvasId: string
@@ -43,6 +49,7 @@ interface TilemapCanvasProps {
   onVariantChange?: (variant: number | undefined) => void
   plainColor: string
   onPlainColorChange: (color: string) => void
+  aiChat?: React.ReactNode // Optional AI chat component to render inline in status bar
 }
 
 const DEFAULT_PALETTE: PaletteColor[] = DEFAULT_TILEMAP_PALETTE
@@ -68,6 +75,7 @@ export default function TilemapCanvas({
   onVariantChange,
   plainColor,
   onPlainColorChange,
+  aiChat,
 }: TilemapCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null)
   
@@ -80,6 +88,7 @@ export default function TilemapCanvas({
   const [hoverTile, setHoverTile] = useState<{ x: number; y: number } | null>(null)
   const [isSpacePressed, setIsSpacePressed] = useState(false)
   const [lastPanPosition, setLastPanPosition] = useState<{ x: number; y: number } | null>(null)
+  const [showAIActions, setShowAIActions] = useState(false)
   
   // Track stroke for bulk undo/redo
   const currentStrokeRef = useRef<Array<{ x: number; y: number; oldTile: TileData | undefined; newTile: TileData | null }>>([])
@@ -112,6 +121,12 @@ export default function TilemapCanvas({
     canvasId: canvasId,
   })
 
+  // Layer management
+  const { setLayers, activeLayerId, setActiveLayer, togglePanel } = useLayerContext()
+
+  // AI Orchestration
+  const { previewTiles, executeAICommand, isExecuting, error: aiError } = useAIOrchestrator()
+
   // Tilemap hook
   const {
     tiles,
@@ -129,6 +144,34 @@ export default function TilemapCanvas({
     canvasId,
     userId: user?.uid || '',
   })
+
+  // Sync layers from meta to store
+  useEffect(() => {
+    if (meta?.layers) {
+      setLayers(meta.layers)
+    }
+  }, [meta?.layers, setLayers])
+
+  // Handle AI Quick Action
+  const handleAIAction = useCallback(
+    async (prompt: string, layerId?: string) => {
+      if (!user?.uid || !meta) return
+
+      await executeAICommand(prompt, {
+        canvasId,
+        userId: user.uid,
+        tilemapMeta: meta,
+        viewport: {
+          x: -viewport.x / viewport.scale,
+          y: -viewport.y / viewport.scale,
+          width: containerWidth / viewport.scale,
+          height: containerHeight / viewport.scale,
+          zoom: viewport.scale,
+        },
+      })
+    },
+    [user, meta, canvasId, viewport, containerWidth, containerHeight, executeAICommand]
+  )
 
   // Load visible chunks whenever viewport changes
   useEffect(() => {
@@ -206,6 +249,15 @@ export default function TilemapCanvas({
       onExportFunctionsReady(handleExportJSON, handleExportPNG)
     }
   }, [onExportFunctionsReady, handleExportJSON, handleExportPNG])
+
+  // Layer management handlers
+  const handleLayerUpdate = useCallback(async (layerId: string, updates: Partial<TileLayerMeta>) => {
+    await updateLayerInFirebase(canvasId, layerId, updates)
+  }, [canvasId])
+
+  const handleToggleLayerPanel = useCallback(() => {
+    togglePanel()
+  }, [togglePanel])
 
   // Get current palette selection
   const selectedPalette = DEFAULT_PALETTE[selectedPaletteIndex]
@@ -659,6 +711,8 @@ export default function TilemapCanvas({
           y={viewport.y}
           scaleX={viewport.scale}
           scaleY={viewport.scale}
+          // Performance optimizations
+          pixelRatio={1} // Use device pixel ratio for smoother rendering
         >
           {/* Grid Layer */}
           <TilemapGrid
@@ -685,6 +739,17 @@ export default function TilemapCanvas({
             } : null}
             showPreview={tileMode === 'stamp' && !isPainting}
           />
+
+          {/* AI Preview Tiles Layer (ghost preview) */}
+          {previewTiles && previewTiles.length > 0 && (
+            <Layer listening={false} opacity={0.5}>
+              {previewTiles.map((preview, idx) => (
+                <React.Fragment key={`ai-preview-${idx}`}>
+                  {/* Render preview tile using same logic as TileRenderer */}
+                </React.Fragment>
+              ))}
+            </Layer>
+          )}
 
           {/* Cursors Layer */}
           <Layer listening={false}>
@@ -730,7 +795,62 @@ export default function TilemapCanvas({
         tileSize={tileSize}
         zoom={viewport.scale}
         connectionStatus={connectionStatus}
+        aiChat={aiChat}
       />
+
+      {/* Layer Management Panel */}
+      <LayerPanelTilemap
+        canvasId={canvasId}
+        onLayerUpdate={handleLayerUpdate}
+      />
+
+      {/* AI Quick Actions Panel */}
+      {showAIActions && meta && (
+        <AIQuickActionsPanel
+          tilemapMeta={meta}
+          tileCount={tiles.size}
+          onActionClick={handleAIAction}
+        />
+      )}
+
+      {/* AI Toggle Button */}
+      <button
+        onClick={() => setShowAIActions(!showAIActions)}
+        className={`
+          fixed top-14 right-4 z-40
+          w-10 h-10 rounded-full
+          flex items-center justify-center
+          transition-all duration-200
+          ${showAIActions
+            ? 'bg-gradient-to-br from-blue-500 to-purple-500 shadow-lg scale-110'
+            : 'bg-slate-800/80 hover:bg-slate-700/80'
+          }
+          text-white text-xl
+          backdrop-blur-sm
+        `}
+        title={showAIActions ? 'Hide AI Actions' : 'Show AI Actions'}
+      >
+        {showAIActions ? '✨' : '🤖'}
+      </button>
+
+      {/* AI Execution Status */}
+      {isExecuting && (
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-blue-500/90 backdrop-blur-md text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-medium">AI is painting...</span>
+          </div>
+        </div>
+      )}
+
+      {/* AI Error Toast */}
+      {aiError && (
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-red-500/90 backdrop-blur-md text-white px-4 py-2 rounded-lg shadow-lg">
+            <span className="text-sm">{aiError}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

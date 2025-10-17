@@ -16,8 +16,8 @@ import {
   getMeta,
   setMeta as syncSetMeta,
   initializeTilemap,
-} from '../services/tilemapSync'
-import { floodFill } from '../services/tileFill'
+} from '../services/tilemap/tilemapSync'
+import { floodFill } from '../services/tilemap/tileFill'
 import type {
   TileData,
   TilemapMeta,

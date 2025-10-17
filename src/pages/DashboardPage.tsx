@@ -5,8 +5,8 @@
 
 import { useAuth } from '../hooks/useAuth'
 import { useCanvasList } from '../hooks/useCanvasList'
-import { CanvasCard } from '../components/CanvasCard'
-import { SkeletonCard } from '../components/Skeleton'
+import { CanvasCard } from '../components/canvas/CanvasCard'
+import { SkeletonCard } from '../components/ui/Skeleton'
 import { logOut } from '../services/auth'
 
 /**

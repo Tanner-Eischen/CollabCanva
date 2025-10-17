@@ -1,9 +1,10 @@
 /**
  * SpriteTile Component
  * Renders a single tile using a sprite sheet with variant-based cropping
+ * Memoized for performance
  */
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Image as KonvaImage, Rect } from 'react-konva'
 import { useSprite } from '../../hooks/useSpriteCache'
 
@@ -25,8 +26,9 @@ interface SpriteTileProps {
  * @performance
  * - Individual tile images are cached (no redundant loads)
  * - Scales tiles efficiently (16x16 → 32x32, etc.)
+ * - Memoized to prevent unnecessary re-renders
  */
-export default function SpriteTile({
+function SpriteTile({
   x,
   y,
   tileSize,
@@ -72,7 +74,22 @@ export default function SpriteTile({
       opacity={opacity}
       // Pixelated scaling for crisp pixel art
       imageSmoothingEnabled={false}
+      listening={false}
+      perfectDrawEnabled={false}
     />
   )
 }
+
+/**
+ * Export memoized version to prevent re-renders when props haven't changed
+ */
+export default React.memo(SpriteTile, (prevProps, nextProps) => {
+  return (
+    prevProps.x === nextProps.x &&
+    prevProps.y === nextProps.y &&
+    prevProps.tileSize === nextProps.tileSize &&
+    prevProps.tilePath === nextProps.tilePath &&
+    prevProps.opacity === nextProps.opacity
+  )
+})
 
