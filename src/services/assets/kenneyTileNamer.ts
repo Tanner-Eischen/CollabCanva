@@ -132,18 +132,22 @@ export const KENNEY_PROP_PATTERNS: Array<{
 
 /**
  * Material keywords for Kenney tilesets
+ * Expanded list to catch more variations
  */
 export const KENNEY_MATERIALS: Record<string, string[]> = {
-  grass: ['grass', 'lawn', 'green'],
-  dirt: ['dirt', 'earth', 'soil', 'brown'],
-  stone: ['stone', 'rock', 'gray', 'grey'],
-  water: ['water', 'ocean', 'sea', 'blue'],
-  sand: ['sand', 'beach', 'desert', 'yellow'],
-  snow: ['snow', 'ice', 'frozen', 'white'],
-  wood: ['wood', 'plank', 'timber'],
-  brick: ['brick', 'castle', 'dungeon'],
-  metal: ['metal', 'iron', 'steel'],
-  crystal: ['crystal', 'gem', 'magic']
+  grass: ['grass', 'lawn', 'green', 'turf', 'vegetation', 'nature'],
+  dirt: ['dirt', 'earth', 'soil', 'brown', 'mud', 'ground'],
+  stone: ['stone', 'rock', 'gray', 'grey', 'cobble', 'granite'],
+  water: ['water', 'ocean', 'sea', 'blue', 'aqua', 'liquid'],
+  sand: ['sand', 'beach', 'desert', 'yellow', 'dune'],
+  snow: ['snow', 'ice', 'frozen', 'white', 'winter', 'arctic'],
+  wood: ['wood', 'plank', 'timber', 'log', 'tree', 'oak'],
+  brick: ['brick', 'castle', 'dungeon', 'wall'],
+  metal: ['metal', 'iron', 'steel', 'silver'],
+  crystal: ['crystal', 'gem', 'magic', 'purple'],
+  lava: ['lava', 'magma', 'fire', 'red', 'volcano'],
+  // Generic fallback
+  tile: ['tile', 'tileset', 'tiles', 'sheet', 'terrain', 'map', 'level']
 }
 
 /**
@@ -163,15 +167,19 @@ export const KENNEY_THEMES: Record<string, string[]> = {
 }
 
 /**
- * Detect if a tileset follows Kenney naming conventions
+ * Detect if a tileset follows Kenney or similar naming conventions
+ * This includes Kenney.nl assets and other well-known tileset collections
  */
 export function detectKenneyTileset(assetName: string): boolean {
   const kenneyIndicators = [
     /kenney/i,
+    /0x72/i,  // 0x72 dungeon tilesets
     /\btile(set)?_?\d+/i, // tile_001, tileset123
     /(top.?down|platform|rpg).?pack/i,
     /nature.?pack/i,
-    /dungeon.?pack/i
+    /dungeon.?pack/i,
+    /_topdown_/i,  // Common pattern in Kenney files
+    /_platformer_/i  // Common pattern in Kenney files
   ]
   
   return kenneyIndicators.some(pattern => pattern.test(assetName))
@@ -186,7 +194,8 @@ export function generateKenneyNamedTiles(
   detectedMaterial?: string
 ): Record<string, number> {
   const namedTiles: Record<string, number> = {}
-  const baseMaterial = detectedMaterial || 'tile'
+  // Use provided material, or detect from name, or fallback to 'tile'
+  const baseMaterial = detectedMaterial || detectMaterialFromName(assetName)
   
   // Detect auto-tile system based on tile count
   if (tileCount === 16) {
@@ -202,10 +211,14 @@ export function generateKenneyNamedTiles(
       }
     })
   } else {
-    // Unknown system - use generic numbering
+    // Large tileset - use generic numbering with material prefix
+    // Format: { "grass_0": 0, "grass_1": 1, ... }
+    console.log(`🎮 [KENNEY] Large tileset (${tileCount} tiles) - using indexed naming with material: ${baseMaterial}`)
     for (let i = 0; i < tileCount; i++) {
-      namedTiles[`${baseMaterial}.tile_${i}`] = i
+      // Use format: semantic name → tile index
+      namedTiles[`${baseMaterial}_${i}`] = i
     }
+    console.log(`🎮 [KENNEY] Created ${tileCount} named tiles (sample: ${Object.keys(namedTiles).slice(0, 5).join(', ')})`)
   }
   
   return namedTiles
@@ -213,17 +226,22 @@ export function generateKenneyNamedTiles(
 
 /**
  * Detect material from asset name
+ * Returns 'tile' as fallback if no specific material detected
  */
-export function detectMaterialFromName(assetName: string): string | undefined {
+export function detectMaterialFromName(assetName: string): string {
   const nameLower = assetName.toLowerCase()
   
+  // Check for specific materials first (skip 'tile' which is the fallback)
   for (const [material, keywords] of Object.entries(KENNEY_MATERIALS)) {
-    if (keywords.some(keyword => nameLower.includes(keyword))) {
+    if (material !== 'tile' && keywords.some(keyword => nameLower.includes(keyword))) {
+      console.log(`🎮 [KENNEY] Detected material: ${material} from name: ${assetName}`)
       return material
     }
   }
   
-  return undefined
+  // Fallback to generic 'tile'
+  console.log(`🎮 [KENNEY] No specific material detected, using fallback: tile`)
+  return 'tile'
 }
 
 /**
@@ -296,11 +314,15 @@ export function generateKenneyMetadata(
     props?: boolean
   }
 } {
+  console.log(`🎮 [KENNEY] Generating metadata for: ${assetName} (${tileCount} tiles @ ${tileWidth}x${tileHeight})`)
+  
   const detectedMaterial = detectMaterialFromName(assetName)
   const themes = detectThemeFromName(assetName)
-  const materials = detectedMaterial ? [detectedMaterial] : []
+  const materials = [detectedMaterial] // Always return material, even if it's 'tile'
   const layerTypes = suggestLayerTypes(assetName, tileCount)
   const namedTiles = generateKenneyNamedTiles(assetName, tileCount, detectedMaterial)
+  
+  console.log(`🎮 [KENNEY] Metadata: themes=[${themes.join(',')}], materials=[${materials.join(',')}], tiles=${Object.keys(namedTiles).length}`)
   
   let autoTileSystem: 'blob16' | 'blob47' | undefined
   let features: { autotile?: boolean; props?: boolean } = {}
@@ -325,5 +347,62 @@ export function generateKenneyMetadata(
     autoTileSystem,
     features
   }
+}
+
+/**
+ * Common sprite type patterns
+ */
+export const SPRITE_TYPE_PATTERNS: Record<string, string[]> = {
+  enemy: ['enemy', 'enemies', 'monster', 'monsters', 'mob', 'mobs', 'creature', 'creatures', 'npc', 'npcs'],
+  weapon: ['weapon', 'weapons', 'sword', 'gun', 'bow', 'arrow', 'axe', 'spear', 'staff', 'wand'],
+  item: ['item', 'items', 'loot', 'drop', 'collectible', 'collectibles', 'pickup', 'pickups'],
+  character: ['character', 'characters', 'player', 'hero', 'protagonist', 'person', 'people'],
+  prop: ['prop', 'props', 'object', 'objects', 'furniture', 'tree', 'tree', 'rock', 'plant', 'decoration'],
+  effect: ['effect', 'effects', 'particle', 'particles', 'spell', 'magic', 'fx'],
+  ui: ['ui', 'button', 'buttons', 'icon', 'icons', 'menu', 'hud', 'interface'],
+  tileset: ['tile', 'tileset', 'ground', 'terrain', 'wall', 'floor', 'grass', 'stone', 'water'],
+}
+
+/**
+ * Detect sprite type from filename
+ */
+export function detectSpriteType(assetName: string): string | undefined {
+  const nameLower = assetName.toLowerCase()
+  
+  for (const [type, keywords] of Object.entries(SPRITE_TYPE_PATTERNS)) {
+    if (keywords.some(keyword => nameLower.includes(keyword))) {
+      console.log(`🎮 [SPRITE TYPE] Detected type: ${type} from name: ${assetName}`)
+      return type
+    }
+  }
+  
+  return undefined
+}
+
+/**
+ * Generate named tiles with type prefix
+ */
+export function generateNamedTilesWithType(
+  tileCount: number,
+  baseMaterial: string,
+  spriteType?: string
+): Record<string, number> {
+  const namedTiles: Record<string, number> = {}
+  
+  if (spriteType) {
+    // Use type as prefix
+    for (let i = 0; i < tileCount; i++) {
+      namedTiles[`${spriteType}_${i}`] = i
+    }
+    console.log(`🎮 [SPRITE TYPE] Created ${tileCount} named tiles with type: ${spriteType}`)
+  } else {
+    // Fallback to material
+    for (let i = 0; i < tileCount; i++) {
+      namedTiles[`${baseMaterial}_${i}`] = i
+    }
+    console.log(`🎮 [SPRITE TYPE] Created ${tileCount} named tiles with material: ${baseMaterial}`)
+  }
+  
+  return namedTiles
 }
 

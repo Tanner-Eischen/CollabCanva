@@ -1,0 +1,61 @@
+*** a/src/services/assets/tilesetAnalysis.ts
+--- b/src/services/assets/tilesetAnalysis.ts
+@@
+-import { detectKenneyTileset } from "./kenneyTileNamer";
++import { detectKenneyTileset, AnalyzerHints } from "./kenneyTileNamer";
+ import { chooseBaseMaterial } from "./assetAnalyzer";
+ 
+-export async function analyzeGenericTileset(params: {
++export async function analyzeGenericTileset(params: {
+   imageUrl: string;
+   baseMetadata: { tileWidth:number; tileHeight:number; rows:number; cols:number };
+   assetName: string;
++  hints?: AnalyzerHints;
+ }) {
+   const { imageUrl, baseMetadata, assetName } = params;
+   // ... your existing image decode + histogram + blob/wang pattern search ...
+   const bestPattern = await detectAutoTilePattern(/* ... */);
+-  if (bestPattern.result.confidence > 0.6) {
++  if (bestPattern.result.confidence > 0.6) {
+     return {
+       autoTileSystem: bestPattern.system, // "blob16" | "blob47" | "wang"
+       namedTiles: bestPattern.namedTiles,
+       materials: bestPattern.materials,
+       themes: bestPattern.themes,
+     };
+   }
+ 
+   // ---- Fallback when confidence is low but sheet is Kenney-like or hinted ----
+-  const kenneyLike = detectKenneyTileset(assetName) || [16,32].includes(baseMetadata.tileWidth);
++  const kenneyLike =
++    params.hints?.kenney === true ||
++    detectKenneyTileset(assetName) ||
++    [16,32].includes(baseMetadata.tileWidth);
+ 
+   if (kenneyLike) {
+     const tileCount = baseMetadata.rows * baseMetadata.cols;
+-    const baseMaterial = chooseBaseMaterial(assetName);
++    const baseMaterial = chooseBaseMaterial(assetName /*, optional histogram if you pass it here*/);
+     const namedTiles: Record<string, number> = {};
+     for (let i = 0; i < tileCount; i++) {
+       const key = `${baseMaterial}.${i.toString().padStart(3,"0")}`;
+       if (!(key in namedTiles)) namedTiles[key] = i;
+     }
+     return {
+       autoTileSystem: undefined,
+       namedTiles,
+       materials: [baseMaterial],
+       themes: [],
+       analyzer: "fallback" as const
+     };
+   }
+ 
+   // final fallback (previous behavior)
+   return {
+     autoTileSystem: undefined,
+     namedTiles: {}, // the next patch ensures we still give readable keys per tile
+     materials: [],
+     themes: [],
+     analyzer: "none" as const
+   };
+ }

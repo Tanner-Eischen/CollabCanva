@@ -61,7 +61,8 @@ export default function Toolbar({
 
   return (
     <div 
-      className="w-12 h-[calc(100%-56px)] my-2 ml-2 rounded-lg shadow-lg flex flex-col items-center relative overflow-hidden bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md"
+      className="w-12 h-[calc(100%-48
+      px)] my-2 ml-2 rounded-lg shadow-lg flex flex-col items-center relative overflow-hidden bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md"
     >
       {/* Dot pattern overlay */}
       <div 

@@ -3,10 +3,34 @@
  * PR-31: Supports both auto-detection and manual sprite selection
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ManualSpriteSelector } from './ManualSpriteSelector';
 import { detectSpritesByTransparency, detectedSpritesToSelections } from '../../utils/tilemap/spriteDetection';
 import type { AssetType, SpriteSelection } from '../../types/asset';
+
+/**
+ * Check if a grid cell contains any visible content
+ * Returns true if the cell has pixels with meaningful alpha or color variation
+ */
+function checkIfCellHasContent(imageData: ImageData): boolean {
+  const { data } = imageData;
+  const alphaThreshold = 20; // Alpha threshold (0-255) - more aggressive
+  let opaquePixels = 0;
+  const samplingRate = 8; // Check every 8th pixel for speed
+  let totalSamples = 0;
+  
+  // Sample pixels across the cell
+  for (let i = 3; i < data.length; i += samplingRate * 4) {
+    totalSamples++;
+    if (data[i] > alphaThreshold) {
+      opaquePixels++;
+    }
+  }
+  
+  // Require at least 10% of samples to be opaque to consider cell non-empty
+  const opaqueRatio = opaquePixels / totalSamples;
+  return opaqueRatio > 0.10;
+}
 
 interface AssetUploadModalEnhancedProps {
   isOpen: boolean;
@@ -15,7 +39,12 @@ interface AssetUploadModalEnhancedProps {
     name: string;
     type?: AssetType;
     tags: string[];
-    spriteSelections?: SpriteSelection[];
+    spriteSheetMetadata?: {
+      spriteSelections?: SpriteSelection[];
+      frameCount?: number;
+      spacing?: number;
+      margin?: number;
+    };
   }) => Promise<void>;
 }
 
@@ -42,6 +71,118 @@ export function AssetUploadModalEnhanced({
   // Visual detection state
   const [isDetectingSprites, setIsDetectingSprites] = useState(false);
   const [detectionResult, setDetectionResult] = useState<any>(null);
+
+  // Manual grid size state
+  const [manualGridWidth, setManualGridWidth] = useState<number>(32);
+  const [manualGridHeight, setManualGridHeight] = useState<number>(32);
+  const [spacing, setSpacing] = useState<number>(0); // Spacing between tiles
+  const [margin, setMargin] = useState<number>(0);  // Margin around entire grid
+  
+  // Region selection state (for selective grid application)
+  const [useRegion, setUseRegion] = useState<boolean>(false);
+  const [region, setRegion] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
+  // File input ref for programmatic triggering
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Manual grid detection function
+  const handleManualGridDetection = useCallback(async () => {
+    if (!preview) return;
+    
+    setIsDetectingSprites(true);
+    
+    try {
+      // Load image
+      const img = new Image();
+      img.src = preview;
+      
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      
+      // Create canvas to analyze pixels
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Failed to get canvas context');
+      
+      ctx.drawImage(img, 0, 0);
+      
+      // Determine the region to process
+      const processRegion = useRegion && region 
+        ? region 
+        : { x: 0, y: 0, width: img.width, height: img.height };
+      
+      const selections: SpriteSelection[] = [...spriteSelections]; // Keep existing selections
+      
+      // Calculate grid accounting for spacing and margin
+      // Formula: margin + (tileSize + spacing) * n + tileSize <= totalSize
+      // Simplified: (tileSize + spacing) * n <= totalSize - margin
+      const effectiveTileWidth = manualGridWidth + spacing;
+      const effectiveTileHeight = manualGridHeight + spacing;
+      const availableWidth = processRegion.width - margin;
+      const availableHeight = processRegion.height - margin;
+      
+      const cols = Math.floor((availableWidth - manualGridWidth + spacing) / effectiveTileWidth) + 1;
+      const rows = Math.floor((availableHeight - manualGridHeight + spacing) / effectiveTileHeight) + 1;
+      
+      // Get base name from filename (without extension)
+      const baseName = file ? file.name.replace(/\.[^/.]+$/, '') : 'sprite';
+      
+      let skippedEmpty = 0;
+      let created = 0;
+      
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          // Apply margin + spacing formula
+          const x = processRegion.x + margin + (col * effectiveTileWidth);
+          const y = processRegion.y + margin + (row * effectiveTileHeight);
+          
+          // Skip if outside image bounds
+          if (x + manualGridWidth > img.width || y + manualGridHeight > img.height) {
+            continue;
+          }
+          
+          // Check if this grid cell has any non-transparent pixels
+          const imageData = ctx.getImageData(x, y, manualGridWidth, manualGridHeight);
+          const hasContent = checkIfCellHasContent(imageData);
+          
+          if (hasContent) {
+            // Calculate sprite index for zero-padded naming
+            const spriteIndex = selections.length;
+            selections.push({
+              id: `sprite_${row}_${col}_${Date.now()}`,
+              x,
+              y,
+              width: manualGridWidth,
+              height: manualGridHeight,
+              name: `${baseName}_${String(spriteIndex).padStart(2, '0')}`
+            });
+            created++;
+          } else {
+            skippedEmpty++;
+          }
+        }
+      }
+      
+      setSpriteSelections(selections);
+      
+      // Clear the region after applying (for next region)
+      if (useRegion && region) {
+        setRegion(null);
+      }
+      
+      const regionText = useRegion && region ? ` in region (${processRegion.width}x${processRegion.height})` : '';
+      const spacingText = spacing > 0 || margin > 0 ? `, spacing: ${spacing}px, margin: ${margin}px` : '';
+      console.log(`🎯 Manual Grid Detection: Created ${created} sprites, skipped ${skippedEmpty} empty cells (${cols}x${rows} grid, ${manualGridWidth}×${manualGridHeight} tiles${spacingText}${regionText})`);
+    } catch (err) {
+      console.error('Manual grid detection failed:', err);
+    } finally {
+      setIsDetectingSprites(false);
+    }
+  }, [preview, manualGridWidth, manualGridHeight, spacing, margin, useRegion, region, spriteSelections, file]);
 
   const handleFileSelect = useCallback(async (selectedFile: File) => {
     setError(null);
@@ -118,7 +259,12 @@ export function AssetUploadModalEnhanced({
         name: name.trim(),
         type,
         tags,
-        spriteSelections: mode === 'manual-select' ? spriteSelections : undefined
+        spriteSheetMetadata: mode === 'manual-select' ? {
+          spriteSelections: spriteSelections,
+          frameCount: spriteSelections.length,
+          spacing: 0,
+          margin: 0
+        } : undefined
       });
 
       // Reset form
@@ -146,13 +292,17 @@ export function AssetUploadModalEnhanced({
     setError(null);
     
     try {
+      // Auto-detect ALWAYS works on the WHOLE image (ignore regions)
       // Run visual sprite detection
       const result = await detectSpritesByTransparency(preview, 8, 2);
       setDetectionResult(result);
       
-      // Convert detected sprites to selections
-      const selections = detectedSpritesToSelections(result.sprites);
-      console.log('🎯 Visual Detection Complete:', {
+      // Get base name from filename (without extension)
+      const baseName = file ? file.name.replace(/\.[^/.]+$/, '') : 'sprite';
+      
+      // Convert detected sprites to selections (REPLACES all existing selections)
+      const selections = detectedSpritesToSelections(result.sprites, baseName);
+      console.log('🎯 Auto-Detect Complete (WHOLE IMAGE):', {
         spritesDetected: result.sprites.length,
         selections: selections,
         gridDetected: result.gridDetected,
@@ -161,10 +311,14 @@ export function AssetUploadModalEnhanced({
       });
       setSpriteSelections(selections);
       
+      // Reset any region selection
+      setRegion(null);
+      setUseRegion(false);
+      
       // Show success message
       if (result.sprites.length > 0) {
         setError(null);
-        console.log(`✅ Detected ${result.sprites.length} sprites automatically!`);
+        console.log(`✅ Detected ${result.sprites.length} sprites automatically from ENTIRE image!`);
       } else {
         setError('No sprites detected. Try manual selection or adjust the image.');
       }
@@ -174,7 +328,7 @@ export function AssetUploadModalEnhanced({
     } finally {
       setIsDetectingSprites(false);
     }
-  }, [preview]);
+  }, [preview, file]);
 
   const handleReset = useCallback(() => {
     setFile(null);
@@ -236,19 +390,23 @@ export function AssetUploadModalEnhanced({
                   </svg>
                 </div>
                 <p className="text-gray-600 mb-3 text-lg">Drag and drop your image here, or</p>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,image/webp"
-                  onChange={(e) => e.target.files && handleFileSelect(e.target.files[0])}
-                  className="hidden"
-                  id="file-input"
-                />
-                <label
-                  htmlFor="file-input"
-                  className="cursor-pointer inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Browse Files
-                </label>
+                <div className="relative inline-block">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleFileSelect(e.target.files[0]);
+                      }
+                    }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    title="Browse Files"
+                  />
+                  <div className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium pointer-events-none">
+                    Browse Files
+                  </div>
+                </div>
                 <p className="text-sm text-gray-500 mt-3">
                   Supported: PNG, JPG, WEBP (max 10MB)
                 </p>
@@ -410,69 +568,110 @@ export function AssetUploadModalEnhanced({
 
                 {mode === 'manual-select' && preview && (
                   <div className="flex flex-col h-full">
-                    {/* Visual Detection Controls */}
-                    <div className="p-4 bg-white border-b border-gray-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                            </svg>
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900">Sprite Selection</h3>
-                            <p className="text-xs text-gray-500">
-                              Auto-detect sprites or draw boxes manually
-                            </p>
-                          </div>
-                        </div>
+                    {/* Compact Controls Toolbar */}
+                    <div className="p-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={handleVisualDetection}
                           disabled={isDetectingSprites}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 text-xs font-medium"
                         >
                           {isDetectingSprites ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                              <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
                               Detecting...
                             </>
                           ) : (
-                            <>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                              </svg>
-                              Auto-Detect
-                            </>
+                            <>Auto-Detect</>
                           )}
                         </button>
+                        
+                        <div className="w-px h-6 bg-gray-300" />
+                        
+                        <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={useRegion}
+                            onChange={(e) => setUseRegion(e.target.checked)}
+                            className="rounded"
+                          />
+                          Region
+                        </label>
+                        
+                        <span className="text-xs text-gray-600">Grid:</span>
+                        <input
+                          type="number"
+                          min="8"
+                          max="256"
+                          value={manualGridWidth}
+                          onChange={(e) => setManualGridWidth(Math.max(8, parseInt(e.target.value) || 8))}
+                          className="w-14 px-1.5 py-1 border border-gray-300 rounded text-xs"
+                        />
+                        <span className="text-xs text-gray-500">×</span>
+                        <input
+                          type="number"
+                          min="8"
+                          max="256"
+                          value={manualGridHeight}
+                          onChange={(e) => setManualGridHeight(Math.max(8, parseInt(e.target.value) || 8))}
+                          className="w-14 px-1.5 py-1 border border-gray-300 rounded text-xs"
+                        />
+                        
+                        <span className="text-xs text-gray-600">Spacing:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="32"
+                          value={spacing}
+                          onChange={(e) => setSpacing(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-12 px-1.5 py-1 border border-gray-300 rounded text-xs"
+                          title="Space between tiles (px)"
+                        />
+                        
+                        <span className="text-xs text-gray-600">Margin:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="32"
+                          value={margin}
+                          onChange={(e) => setMargin(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-12 px-1.5 py-1 border border-gray-300 rounded text-xs"
+                          title="Margin around entire grid (px)"
+                        />
+                        
+                        <button
+                          onClick={handleManualGridDetection}
+                          disabled={isDetectingSprites || (useRegion && !region)}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50 text-xs font-medium"
+                          title={useRegion && !region ? "Draw a region first" : "Apply grid to " + (useRegion ? "selected region" : "entire image")}
+                        >
+                          Apply {useRegion && region ? "to Region" : ""}
+                        </button>
+                        
+                        {useRegion && region && (
+                          <button
+                            onClick={() => setRegion(null)}
+                            className="px-2 py-1.5 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-xs"
+                            title="Clear the selected region"
+                          >
+                            Clear Region
+                          </button>
+                        )}
                       </div>
                       
-                      {/* Detection result info */}
+                      {/* Detection result - compact */}
                       {detectionResult && (
-                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-4">
-                              <div className="flex items-center gap-2">
-                                <span className="text-gray-700">Detected:</span>
-                                <span className="font-semibold text-blue-900">{detectionResult.sprites.length} sprites</span>
-                              </div>
-                              {detectionResult.gridDetected && detectionResult.suggestedTileSize && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-700">Grid:</span>
-                                  <span className="font-semibold text-blue-900">
-                                    {detectionResult.suggestedTileSize.width}×{detectionResult.suggestedTileSize.height}px
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                8px-aligned
-                              </span>
-                            </div>
-                          </div>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-gray-600">Detected: <span className="font-semibold text-gray-900">{detectionResult.sprites.length}</span></span>
+                          {detectionResult.gridDetected && detectionResult.suggestedTileSize && (
+                            <span className="text-gray-600">({detectionResult.suggestedTileSize.width}×{detectionResult.suggestedTileSize.height}px)</span>
+                          )}
                         </div>
                       )}
+                      
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                        <span>{spriteSelections.length} sprites</span>
+                      </div>
                     </div>
                     
                     {/* Manual Sprite Selector */}
@@ -481,6 +680,9 @@ export function AssetUploadModalEnhanced({
                         imageUrl={preview}
                         onSelectionsChange={(selections) => setSpriteSelections(selections)}
                         initialSelections={spriteSelections}
+                        regionMode={useRegion}
+                        region={region}
+                        onRegionChange={(newRegion) => setRegion(newRegion)}
                       />
                     </div>
                   </div>

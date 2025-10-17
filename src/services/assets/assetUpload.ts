@@ -16,7 +16,8 @@ import type {
   AssetValidation,
   AssetUploadProgress,
   TilesetMetadata,
-  SpriteSheetMetadata
+  SpriteSheetMetadata,
+  SpriteSelection
 } from '../../types/asset'
 
 /**
@@ -246,6 +247,44 @@ export async function uploadAsset(
                   tileCount: enrichedTilesetMetadata.tileCount
                 })
                 
+                console.log('✅ Tileset analysis complete:', {
+                  themes: themeAnalysis.themes,
+                  materials: themeAnalysis.materials,
+                  autoTileSystem: patternAnalysis.autoTileSystem,
+                  namedTileCount: Object.keys(patternAnalysis.namedTiles || {}).length,
+                  confidence: patternAnalysis.detectionConfidence.overall
+                })
+                
+                // === NEW: Also try Kenney analyzer for better results ===
+                console.log('🎮 Checking if this is a Kenney tileset...')
+                const { detectKenneyTileset, generateKenneyMetadata } = await import('./kenneyTileNamer')
+                const isKenney = detectKenneyTileset(assetName)
+                console.log(`🎮 Kenney tileset detected: ${isKenney}`)
+                
+                if (isKenney) {
+                  console.log('🎮 Using Kenney analyzer for better tile naming...')
+                  const kenneyMeta = generateKenneyMetadata(
+                    assetName,
+                    enrichedTilesetMetadata.tileCount,
+                    enrichedTilesetMetadata.tileWidth,
+                    enrichedTilesetMetadata.tileHeight
+                  )
+                  
+                  console.log('✅ Kenney analysis complete:', {
+                    themes: kenneyMeta.themes,
+                    materials: kenneyMeta.materials,
+                    autoTileSystem: kenneyMeta.autoTileSystem,
+                    namedTileCount: Object.keys(kenneyMeta.namedTiles).length
+                  })
+                  
+                  // Use Kenney results instead
+                  Object.assign(patternAnalysis, {
+                    namedTiles: kenneyMeta.namedTiles,
+                    autoTileSystem: kenneyMeta.autoTileSystem
+                  })
+                }
+                // === END NEW ===
+                
                 // Merge both analysis results
                 enrichedTilesetMetadata = {
                   ...enrichedTilesetMetadata,
@@ -289,13 +328,22 @@ export async function uploadAsset(
                   version: 1
                 }
                 
-                console.log('✅ Tileset analysis complete:', {
+                console.log('✅ Final tileset metadata:', {
                   themes: enrichedTilesetMetadata.themes,
                   materials: enrichedTilesetMetadata.materials,
                   autoTileSystem: enrichedTilesetMetadata.autoTileSystem,
                   namedTileCount: Object.keys(enrichedTilesetMetadata.namedTiles || {}).length,
                   confidence: enrichedTilesetMetadata.detectionConfidence?.overall
                 })
+                
+                // Apply semantic naming to sprite selections if they exist
+                if (options.spriteSheetMetadata?.spriteSelections && enrichedTilesetMetadata.namedTiles) {
+                  applySemanticNamingToSprites(
+                    options.spriteSheetMetadata.spriteSelections,
+                    enrichedTilesetMetadata.namedTiles,
+                    assetName
+                  )
+                }
               } catch (analysisError) {
                 console.warn('⚠ Tileset analysis failed, using basic index:', analysisError)
                 
@@ -318,7 +366,118 @@ export async function uploadAsset(
               }
             }
           }
+          
+          // === NEW: Auto-analyze sprite sheets ===
+          let enrichedSpriteSheetMetadata = options.spriteSheetMetadata
+          
+          console.log('🔍 [SPRITESHEET] Checking for analysis...')
+          console.log(`🔍 [SPRITESHEET] assetType: ${assetType}`)
+          console.log(`🔍 [SPRITESHEET] has enrichedSpriteSheetMetadata: ${!!enrichedSpriteSheetMetadata}`)
+          console.log(`🔍 [SPRITESHEET] spriteSelections: ${enrichedSpriteSheetMetadata?.spriteSelections?.length || 0}`)
+          
+          if (assetType === 'spritesheet' && enrichedSpriteSheetMetadata?.spriteSelections) {
+            console.log('🔍 [SPRITESHEET] ✅ Conditions met! Starting analysis...')
+            const shouldAnalyze = options.autoAnalyze !== false
+            console.log(`🔍 [SPRITESHEET] shouldAnalyze: ${shouldAnalyze}`)
+            console.log(`🔍 [SPRITESHEET] spriteSelections.length: ${enrichedSpriteSheetMetadata.spriteSelections.length}`)
+            
+            if (shouldAnalyze && enrichedSpriteSheetMetadata.spriteSelections.length > 0) {
+              console.log('🔍 [SPRITESHEET] ✅ Entering analysis block...')
+              options.onProgress?.({
+                assetId,
+                fileName,
+                progress: 95,
+                status: 'processing'
+              })
+              
+              try {
+                console.log('🔍 [SPRITESHEET] Starting sprite sheet analysis...')
+                
+                // Get first sprite dimensions for analysis
+                const firstSprite = enrichedSpriteSheetMetadata.spriteSelections[0]
+                const tileWidth = firstSprite.width
+                const tileHeight = firstSprite.height
+                
+                // Calculate effective grid dimensions
+                const cols = enrichedSpriteSheetMetadata.columns || 
+                            Math.ceil(Math.sqrt(enrichedSpriteSheetMetadata.spriteSelections.length))
+                const rows = enrichedSpriteSheetMetadata.rows || 
+                            Math.ceil(enrichedSpriteSheetMetadata.spriteSelections.length / cols)
+                
+                console.log(`📐 Analyzing as ${cols}x${rows} grid with ${tileWidth}x${tileHeight}px tiles`)
+                
+                // Check if this is a Kenney tileset first
+                const { detectKenneyTileset, generateKenneyMetadata } = await import('./kenneyTileNamer')
+                const isKenney = detectKenneyTileset(assetName)
+                console.log(`🎮 Kenney tileset detected: ${isKenney}`)
+                
+                let namedTiles: Record<string, number | string> = {}
+                let detectedMaterials: string[] = []
+                let detectedThemes: string[] = []
+                let autoTileSystem: string | undefined
+                
+                if (isKenney) {
+                  // Use Kenney-specific naming (more aggressive and accurate)
+                  console.log('🎮 Using Kenney-specific analyzer...')
+                  const kenneyMeta = generateKenneyMetadata(
+                    assetName,
+                    enrichedSpriteSheetMetadata.spriteSelections.length,
+                    tileWidth,
+                    tileHeight
+                  )
+                  namedTiles = kenneyMeta.namedTiles
+                  detectedMaterials = kenneyMeta.materials
+                  detectedThemes = kenneyMeta.themes
+                  autoTileSystem = kenneyMeta.autoTileSystem
+                  
+                  console.log('✅ Kenney analysis complete:', {
+                    themes: detectedThemes,
+                    materials: detectedMaterials,
+                    autoTileSystem,
+                    namedTileCount: Object.keys(namedTiles).length
+                  })
+                } else {
+                  // For sprite sheets with manual selections, skip pattern analysis
+                  // (it requires loading image which can have CORS issues)
+                  // Instead, just use basic naming
+                  console.log('ℹ️ Skipping pattern analysis for manual sprite selections')
+                  console.log('✅ Using basic naming for sprite sheet')
+                  
+                  // Detect sprite type from filename
+                  const { detectSpriteType, generateNamedTilesWithType } = await import('./kenneyTileNamer')
+                  const spriteType = detectSpriteType(assetName)
+                  
+                  namedTiles = generateNamedTilesWithType(
+                    enrichedSpriteSheetMetadata.spriteSelections.length,
+                    'sprite',
+                    spriteType
+                  )
+                  
+                  detectedThemes = []
+                  detectedMaterials = spriteType ? [spriteType] : []
+                }
+                
+                // Apply semantic naming to sprite selections
+                if (Object.keys(namedTiles).length > 0) {
+                  console.log(`🏷️ Found ${Object.keys(namedTiles).length} named tiles, applying to ${enrichedSpriteSheetMetadata.spriteSelections.length} sprites...`)
+                  applySemanticNamingToSprites(
+                    enrichedSpriteSheetMetadata.spriteSelections,
+                    namedTiles,
+                    assetName
+                  )
+                } else {
+                  console.warn('⚠️ No named tiles detected by analyzer - sprites will keep numeric names')
+                  console.warn('   This is normal for irregular sprite sheets or unrecognized patterns')
+                }
+              } catch (analysisError) {
+                console.error('❌ Sprite sheet analysis failed, keeping original names:', analysisError)
+              }
+            }
+          }
           // === END NEW ===
+
+          // === REMOVED DUPLICATE - Handled by universal analyzer above ===
+
 
           // Create asset document (filter out undefined values for Firebase)
           const asset: Asset = {
@@ -333,7 +492,7 @@ export async function uploadAsset(
             updatedAt: Date.now(),
             tags: options.tags || [],
             ...(enrichedTilesetMetadata && { tilesetMetadata: enrichedTilesetMetadata }),
-            ...(options.spriteSheetMetadata && { spriteSheetMetadata: options.spriteSheetMetadata }),
+            ...(enrichedSpriteSheetMetadata && { spriteSheetMetadata: enrichedSpriteSheetMetadata }),
             ...(options.folderId && { folderId: options.folderId })
           }
 
@@ -359,6 +518,45 @@ export async function uploadAsset(
             status: 'complete'
           })
 
+          // === Final summary ===
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+          console.log('✅ Asset Upload Complete!')
+          console.log(`📦 Asset: ${assetName}`)
+          console.log(`🏷️  Type: ${assetType}`)
+          
+          if (asset.type === 'spritesheet' && enrichedSpriteSheetMetadata?.spriteSelections) {
+            const selections = enrichedSpriteSheetMetadata.spriteSelections
+            // Check if names contain semantic prefixes (like sprite_, grass_, etc) before the final number
+            const semanticCount = selections.filter(s => s.name.match(/_[a-z_]+_\d+$/i)).length
+            console.log(`🎨 Sprites: ${selections.length} total`)
+            if (semanticCount > 0) {
+              console.log(`   └─ ${semanticCount} with semantic names`)
+              console.log(`   └─ ${selections.length - semanticCount} with numeric names`)
+              console.log('📝 Sample sprite names:')
+              selections.slice(0, 10).forEach(s => console.log(`   - ${s.name}`))
+              if (selections.length > 10) {
+                console.log(`   ... and ${selections.length - 10} more`)
+              }
+            } else {
+              console.log(`   └─ All using numeric names (pattern not recognized)`)
+            }
+          }
+          
+          if (asset.type === 'tileset' && enrichedTilesetMetadata) {
+            const namedCount = Object.keys(enrichedTilesetMetadata.namedTiles || {}).length
+            console.log(`🎨 Tiles: ${enrichedTilesetMetadata.tileCount} total`)
+            if (namedCount > 0) {
+              console.log(`   └─ ${namedCount} with semantic names`)
+              console.log(`🌲 Themes: ${enrichedTilesetMetadata.themes?.join(', ') || 'none'}`)
+              console.log(`🪨 Materials: ${enrichedTilesetMetadata.materials?.join(', ') || 'none'}`)
+              if (enrichedTilesetMetadata.autoTileSystem) {
+                console.log(`🔧 Auto-tile: ${enrichedTilesetMetadata.autoTileSystem}`)
+              }
+            }
+          }
+          
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
           resolve(asset)
         } catch (error) {
           reject(error)
@@ -366,6 +564,66 @@ export async function uploadAsset(
       }
     )
   })
+}
+
+/**
+ * Apply semantic naming to sprite selections based on namedTiles mapping
+ * Renames sprites from "filename_00" to "filename_grass_center" etc.
+ */
+function applySemanticNamingToSprites(
+  spriteSelections: SpriteSelection[],
+  namedTiles: Record<string, number | string>,
+  baseFileName: string
+): void {
+  // Create reverse mapping: index → semantic name
+  const indexToName: Record<number, string> = {}
+  
+  for (const [semanticName, index] of Object.entries(namedTiles)) {
+    const numIndex = typeof index === 'number' ? index : parseInt(index, 10)
+    if (!isNaN(numIndex)) {
+      // Clean up the semantic name (remove dots, lowercase, replace spaces with underscores)
+      const cleanName = semanticName
+        .replace(/\./g, '_')
+        .replace(/\s+/g, '_')
+        .toLowerCase()
+      indexToName[numIndex] = cleanName
+    }
+  }
+  
+  console.log(`🏷️ Applying semantic names to ${spriteSelections.length} sprites...`)
+  console.log(`📋 Available semantic names:`, indexToName)
+  
+  // Update sprite names
+  let renamedCount = 0
+  const renamedList: string[] = []
+  
+  spriteSelections.forEach((sprite, index) => {
+    if (indexToName[index]) {
+      const oldName = sprite.name
+      sprite.name = `${baseFileName}_${indexToName[index]}`
+      renamedList.push(`  ${oldName} → ${sprite.name}`)
+      renamedCount++
+    }
+    // If no semantic name found, keep the original name
+  })
+  
+  // Show first 20 renames, then summary
+  if (renamedList.length > 0) {
+    console.log('📝 Sample renames (first 20):')
+    renamedList.slice(0, 20).forEach(line => console.log(line))
+    if (renamedList.length > 20) {
+      console.log(`  ... and ${renamedList.length - 20} more`)
+    }
+  }
+  
+  console.log(`✅ Renamed ${renamedCount}/${spriteSelections.length} sprites with semantic names`)
+  
+  if (renamedCount === 0) {
+    console.warn('⚠️ No semantic names were applied. This could mean:')
+    console.warn('  - The tileset pattern was not recognized')
+    console.warn('  - The analyzer returned empty namedTiles')
+    console.warn('  - Detection confidence was too low')
+  }
 }
 
 /**

@@ -9,7 +9,7 @@
  * - Seamless tiling validation
  */
 
-import { TilesetMetadata } from '../../types/asset'
+import type { TilesetMetadata } from '../../types/asset'
 import {
   detectKenneyTileset,
   generateKenneyMetadata,

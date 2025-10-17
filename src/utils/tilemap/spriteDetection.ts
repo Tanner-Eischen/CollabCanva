@@ -322,10 +322,13 @@ export function snapSpritesToGrid(
 /**
  * Convert detected sprites to sprite selections
  */
-export function detectedSpritesToSelections(sprites: DetectedSprite[]) {
+export function detectedSpritesToSelections(sprites: DetectedSprite[], baseName?: string) {
+  // Use provided base name or fallback to "sprite"
+  const base = baseName || 'sprite';
+  
   return sprites.map((sprite, index) => ({
     id: `detected_${Date.now()}_${index}`,
-    name: `Sprite ${index + 1}`,
+    name: `${base}_${String(index).padStart(2, '0')}`,
     x: sprite.x,
     y: sprite.y,
     width: sprite.width,

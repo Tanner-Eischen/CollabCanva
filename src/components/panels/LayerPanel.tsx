@@ -267,7 +267,7 @@ export function LayerPanel({
     return (
       <button
         onClick={togglePanelState}
-        className="fixed right-4 bottom-[56px] z-30 w-10 h-10 bg-white rounded-full shadow-lg border border-gray-300 hover:bg-gray-50 flex items-center justify-center"
+        className="fixed right-4 bottom-[16px] z-30 w-10 h-10 bg-white rounded-full shadow-lg border border-gray-300 hover:bg-gray-50 flex items-center justify-center"
         title="Show layers panel"
       >
         <span className="text-lg text-gray-700">☰</span>
@@ -277,7 +277,7 @@ export function LayerPanel({
 
   return (
     <div
-      className="w-80 h-[calc(100%-56px)] my-2 mr-2 rounded-lg shadow-lg flex flex-col transition-all duration-200 relative overflow-hidden bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md"
+      className="w-80 h-[calc(100%-16px)] my-2 mr-2 rounded-lg shadow-lg flex flex-col transition-all duration-200 relative overflow-hidden bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md"
     >
       {/* Dot pattern overlay */}
       <div 
