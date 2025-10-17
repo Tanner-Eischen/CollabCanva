@@ -692,12 +692,16 @@ export const selectTilesetTool: ToolDefinition = {
 
       return {
         success: true,
-        message: `Selected "${best.name}" (${catalog.length} ${catalog.length === 1 ? 'match' : 'matches'} found)`,
+        message: `Selected "${best.name}" (${catalog.length} ${catalog.length === 1 ? 'match' : 'matches'} found)` +
+          (asset.tilesetMetadata?.tileGroups
+            ? ` — semantic groups: ${Object.keys(asset.tilesetMetadata.tileGroups).join(', ')}`
+            : ''),
         data: {
           tilesetId: best.id,
           name: best.name,
           tileSize: best.tileSize,
           namedTiles: asset.tilesetMetadata?.namedTiles || {},
+          tileGroups: asset.tilesetMetadata?.tileGroups || {},
           features: best.features,
           autoTileSystem: best.autoTileSystem,
           themes: best.themes,
@@ -826,6 +830,7 @@ export const listTilesetsTool: ToolDefinition = {
           tileCount: entry.tileCount,
           themes: entry.themes || [],
           materials: entry.materials || [],
+          semanticGroups: entry.semanticGroups || [],
           features,
           autoTileSystem: entry.autoTileSystem,
           confidence: entry.detectionConfidence
@@ -846,6 +851,7 @@ export const listTilesetsTool: ToolDefinition = {
             tileSizes: [...new Set(catalog.map(e => e.tileSize))].sort((a, b) => a - b),
             themes: [...new Set(catalog.flatMap(e => e.themes || []))].slice(0, 10),
             materials: [...new Set(catalog.flatMap(e => e.materials || []))].slice(0, 10),
+            semanticGroups: [...new Set(catalog.flatMap(e => e.semanticGroups || []))].slice(0, 10),
             withAutotile: catalog.filter(e => e.features?.autotile).length,
             withAnimation: catalog.filter(e => e.features?.animated).length
           }

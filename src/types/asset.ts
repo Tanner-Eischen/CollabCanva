@@ -23,6 +23,28 @@ export interface AutoTileMapping {
 }
 
 /**
+ * Semantic grouping of tiles derived from named tile metadata
+ */
+export interface TileSemanticGroup {
+  /** Human-friendly label for the group (e.g. "Grass") */
+  label: string
+  /** Optional description describing how the group should be used */
+  description?: string
+  /** Auto-tile system this group supports, if applicable */
+  autoTileSystem?: 'blob16' | 'blob47' | 'wang' | 'custom'
+  /** Related materials for this group (grass, water, etc.) */
+  materials?: string[]
+  /** Related themes for this group (forest, dungeon, etc.) */
+  themes?: string[]
+  /** Individual tile variants within this group mapped to tile indices */
+  tiles: Record<string, number>
+  /** Cached list of tile variant names for quick lookup */
+  variants: string[]
+  /** Number of tiles that belong to this group */
+  tileCount: number
+}
+
+/**
  * Tileset-specific metadata
  */
 export interface TilesetMetadata {
@@ -61,7 +83,10 @@ export interface TilesetMetadata {
   
   // Named tile index (AI-friendly vocabulary)
   namedTiles?: Record<string, number>  // { "grass.center": 0, "tree.small": 45 }
-  
+
+  // Semantic groups derived from named tiles and material/theme metadata
+  tileGroups?: Record<string, TileSemanticGroup>
+
   // Adjacency rules (for complex auto-tile systems)
   adjacencyRules?: {
     system: 'blob16' | 'blob47' | 'wang' | 'custom'
@@ -278,7 +303,10 @@ export interface TilesetCatalogEntry {
   
   // Auto-tile info
   autoTileSystem?: string
-  
+
+  // Semantic grouping summary (group names only for quick filtering)
+  semanticGroups?: string[]
+
   // Preview
   thumbnailUrl: string
   
