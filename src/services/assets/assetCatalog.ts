@@ -36,6 +36,7 @@ export async function updateCatalogEntry(asset: Asset): Promise<void> {
     layerTypes: tilesetMetadata.layerTypes || [],
     features: tilesetMetadata.features || {},
     autoTileSystem: tilesetMetadata.autoTileSystem,
+    semanticGroups: Object.keys(tilesetMetadata.tileGroups || {}),
     thumbnailUrl: asset.thumbnailUrl || asset.url,
     version: tilesetMetadata.version || 1,
     updatedAt: asset.updatedAt,
