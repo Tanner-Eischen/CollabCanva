@@ -27,7 +27,7 @@ import TileRenderer from './TileRenderer'
 import TileStatusBar from './TileStatusBar'
 import TilePalette from '../panels/TilePalette'
 import LayerPanelTilemap from './LayerPanelTilemap'
-import AIQuickActionsPanel from '../ai/AIQuickActionsPanel'
+import AIQuickActionsPanel, { generateTilemapQuickActions } from '../ai/AIQuickActionsPanel'
 
 interface TilemapCanvasProps {
   canvasId: string
@@ -161,6 +161,13 @@ function TilemapCanvasInner({
   useEffect(() => {
     tilesRef.current = tiles
   }, [tiles])
+
+  const quickActionsPreview = useMemo(() => {
+    if (!meta) return []
+
+    const layers = meta.layers ?? []
+    return generateTilemapQuickActions(meta, tiles.size, layers, null).slice(0, 5)
+  }, [meta, tiles])
 
   useEffect(() => {
     return registerTileState({
@@ -878,6 +885,7 @@ function TilemapCanvasInner({
             return next
           })
         }}
+        quickActionsPreview={quickActionsPreview}
       />
 
       {/* Status Bar - Fixed at bottom */}

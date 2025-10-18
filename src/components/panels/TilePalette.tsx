@@ -8,6 +8,18 @@ import type { TileMode, PaletteColor } from '../../types/tilemap'
 import { hasSpriteAsset, getTilePath } from '../../constants/tilemapDefaults'
 import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 import { ToolButton } from '../toolbar/ToolButton'
+import type { TilemapQuickAction } from '../ai/AIQuickActionsPanel'
+
+// Icon assets from public/assets used throughout the palette toolbar
+import paintBrushIcon from '/assets/paint-brush-32.png'
+import eraserIcon from '/assets/eraser-32.png'
+import paintBucketIcon from '/assets/paint-bucket-32.png'
+import eyedropperIcon from '/assets/eyedropper-32.png'
+import handToolIcon from '/assets/hand-tool-32.svg'
+import autoTileIcon from '/assets/auto-tile-32.svg'
+import gridIcon from '/assets/grid-32.svg'
+import tilePaletteIcon from '/assets/tile-palette-32.svg'
+import aiSparkIcon from '/assets/ai-spark-32.svg'
 
 interface TilePaletteProps {
   palette: PaletteColor[]
@@ -33,6 +45,7 @@ interface TilePaletteProps {
   onAIQuickActionsToggle?: () => void
   isAdvancedAIOpen?: boolean
   onAdvancedAIToggle?: () => void
+  quickActionsPreview?: TilemapQuickAction[]
 }
 
 const MODE_BUTTONS: Array<{
@@ -44,25 +57,25 @@ const MODE_BUTTONS: Array<{
 }> = [
   {
     mode: 'stamp',
-    iconPath: '/assets/paint-brush-32.png',
+    iconPath: paintBrushIcon,
     label: 'Paint',
     shortcut: 'B'
   },
   {
     mode: 'erase',
-    iconPath: '/assets/eraser-32.png',
+    iconPath: eraserIcon,
     label: 'Erase',
     shortcut: 'E'
   },
   {
     mode: 'fill',
-    iconPath: '/assets/paint-bucket-32.png',
+    iconPath: paintBucketIcon,
     label: 'Fill',
     shortcut: 'F'
   },
   {
     mode: 'pick',
-    iconPath: '/assets/eyedropper-32.png',
+    iconPath: eyedropperIcon,
     label: 'Eyedropper',
     shortcut: 'I'
   },
@@ -94,6 +107,7 @@ export default function TilePalette({
   onAIQuickActionsToggle,
   isAdvancedAIOpen = false,
   onAdvancedAIToggle,
+  quickActionsPreview,
 }: TilePaletteProps) {
   const [isTilePanelOpen, setIsTilePanelOpen] = useState(false)
   const [isAIOptionsOpen, setIsAIOptionsOpen] = useState(false)
@@ -159,6 +173,10 @@ export default function TilePalette({
   }, [isPlainTile, plainColor])
 
   const aiToolbarActive = isAIOptionsOpen || isAIQuickActionsVisible || isAdvancedAIOpen
+  const quickActionsSummary = useMemo(
+    () => (quickActionsPreview ?? []).slice(0, 5),
+    [quickActionsPreview]
+  )
 
   const handleTileSelect = (index: number) => {
     onSelectIndex(index)
@@ -206,7 +224,7 @@ export default function TilePalette({
             <div className="w-9 h-px my-1 bg-white/20" />
 
             <ToolButton
-              icon="✥"
+              iconPath={handToolIcon}
               label="Hand Tool"
               shortcut="Space"
               active={isPanModeActive}
@@ -215,7 +233,7 @@ export default function TilePalette({
             />
 
             <ToolButton
-              icon="🧩"
+              iconPath={autoTileIcon}
               label="Auto-Tile"
               shortcut="A"
               active={autoTilingEnabled}
@@ -225,7 +243,7 @@ export default function TilePalette({
             />
 
             <ToolButton
-              icon="#"
+              iconPath={gridIcon}
               label="Toggle Grid"
               shortcut="G"
               active={showGrid}
@@ -237,10 +255,13 @@ export default function TilePalette({
             <div className="flex-1" />
 
             <ToolButton
-              icon="🎨"
+              iconPath={tilePaletteIcon}
               label="Tile Palette"
               shortcut="T"
               active={isTilePanelOpen}
+              ariaHasPopup="dialog"
+              ariaExpanded={isTilePanelOpen}
+              ariaControls="tile-palette-popover"
               onClick={() => {
                 setIsTilePanelOpen(prev => !prev)
                 setIsAIOptionsOpen(false)
@@ -249,9 +270,12 @@ export default function TilePalette({
             />
 
             <ToolButton
-              icon="🤖"
+              iconPath={aiSparkIcon}
               label="AI Commands"
               active={aiToolbarActive}
+              ariaHasPopup="menu"
+              ariaExpanded={isAIOptionsOpen}
+              ariaControls="tile-ai-popover"
               onClick={() => {
                 setIsAIOptionsOpen(prev => !prev)
                 setIsTilePanelOpen(false)
@@ -264,6 +288,7 @@ export default function TilePalette({
 
       {isTilePanelOpen && (
         <div
+          id="tile-palette-popover"
           className="absolute z-40"
           style={{
             left: '72px',
@@ -480,6 +505,7 @@ export default function TilePalette({
 
       {isAIOptionsOpen && (
         <div
+          id="tile-ai-popover"
           className="absolute z-40"
           style={{
             left: '72px',
@@ -498,30 +524,69 @@ export default function TilePalette({
                 ✕
               </button>
             </div>
-            <div className="p-3 space-y-2 text-sm text-white/80">
-              <p className="text-xs text-white/60">
-                Choose which AI interface you want to open.
-              </p>
-              <button
-                className={`w-full px-3 py-2 rounded-lg text-left transition-all flex items-center gap-2 ${isAIQuickActionsVisible ? 'bg-white/25 text-white shadow-md' : 'bg-white/10 hover:bg-white/20'}`}
-                onClick={() => {
-                  onAIQuickActionsToggle?.()
-                  setIsAIOptionsOpen(false)
-                }}
-              >
-                <span>✨</span>
-                <span>Quick Commands</span>
-              </button>
-              <button
-                className={`w-full px-3 py-2 rounded-lg text-left transition-all flex items-center gap-2 ${isAdvancedAIOpen ? 'bg-white/25 text-white shadow-md' : 'bg-white/10 hover:bg-white/20'}`}
-                onClick={() => {
-                  onAdvancedAIToggle?.()
-                  setIsAIOptionsOpen(false)
-                }}
-              >
-                <span>🧠</span>
-                <span>Advanced Commands</span>
-              </button>
+            <div className="p-3 space-y-3 text-sm text-white/80">
+              <div>
+                <p className="text-xs text-white/60 leading-snug">
+                  Choose which AI interface you want to open.
+                </p>
+                <div className="mt-2 flex flex-col gap-2">
+                  <button
+                    className={`w-full px-3 py-2 rounded-lg text-left transition-all flex items-center gap-2 ${isAIQuickActionsVisible ? 'bg-white/25 text-white shadow-md' : 'bg-white/10 hover:bg-white/20'}`}
+                    onClick={() => {
+                      onAIQuickActionsToggle?.()
+                      setIsAIOptionsOpen(false)
+                    }}
+                  >
+                    <span>✨</span>
+                    <span className="font-medium">Quick Commands</span>
+                  </button>
+                  <button
+                    className={`w-full px-3 py-2 rounded-lg text-left transition-all flex items-center gap-2 ${isAdvancedAIOpen ? 'bg-white/25 text-white shadow-md' : 'bg-white/10 hover:bg-white/20'}`}
+                    onClick={() => {
+                      onAdvancedAIToggle?.()
+                      setIsAIOptionsOpen(false)
+                    }}
+                  >
+                    <span>🧠</span>
+                    <span className="font-medium">Advanced Commands</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <div className="text-[10px] uppercase tracking-wide text-white/50 font-semibold">
+                  Quick command previews
+                </div>
+                {quickActionsSummary.length > 0 ? (
+                  <ul className="mt-2 space-y-2 text-xs text-white/80">
+                    {quickActionsSummary.map((action) => (
+                      <li
+                        key={action.id}
+                        className="flex gap-2 items-start bg-white/5 rounded-lg px-2 py-1.5"
+                      >
+                        <span className="text-base leading-tight flex-shrink-0">
+                          {action.icon ?? '•'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-white font-medium leading-tight">
+                            {action.text}
+                          </div>
+                          <div className="text-[10px] text-white/60 leading-snug break-words">
+                            {action.prompt}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-[11px] text-white/60 leading-snug">
+                    Start painting your map to unlock context-aware quick commands.
+                  </p>
+                )}
+                <p className="mt-2 text-[10px] text-white/40 leading-snug">
+                  Use “Quick Commands” to open the full list and run one instantly.
+                </p>
+              </div>
             </div>
           </div>
         </div>
