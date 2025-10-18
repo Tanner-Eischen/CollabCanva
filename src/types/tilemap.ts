@@ -4,6 +4,9 @@
  */
 
 import type { TileLayerMeta } from './tileLayer'
+import type { PaletteColor, TilemapMeta } from './tileset'
+
+export type { PaletteColor, TilemapMeta } from './tileset';
 
 // ============================================================================
 // Core Tile Data
@@ -18,28 +21,6 @@ export interface TileData {
   variant?: number;       // Auto-tile variant (0-15 bitmask result) - optional for backwards compatibility
   metadata?: Record<string, any>;  // For game logic (collision, etc.)
   animationId?: string;   // Optional animation ID for animated tiles (water, torches, etc.)
-}
-
-/**
- * Palette color configuration
- */
-export interface PaletteColor {
-  type: string;
-  color: string;
-  name: string;
-}
-
-/**
- * Tilemap metadata configuration
- */
-export interface TilemapMeta {
-  tileSize: number;       // 8, 16, or 32
-  width: number;          // Max tiles in X (default: 256)
-  height: number;         // Max tiles in Y (default: 256)
-  chunkSize: number;      // Tiles per chunk (16)
-  palette: PaletteColor[]; // Array of {type, color, name}
-  version: number;        // For future migrations
-  layers?: TileLayerMeta[]; // Multi-layer support (v2+)
 }
 
 // ============================================================================
@@ -105,6 +86,7 @@ export interface FirebaseTilemapMeta {
   palette: PaletteColor[];
   version: number;
   layers?: TileLayerMeta[]; // Multi-layer support (v2+)
+  activeTilesetId?: string;
 }
 
 // ============================================================================
