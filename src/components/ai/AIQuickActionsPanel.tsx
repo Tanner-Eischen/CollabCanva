@@ -10,6 +10,7 @@ import { useEffect, useState, useMemo } from 'react'
 import type { TilemapMeta } from '../../types/tilemap'
 import type { TileLayerMeta } from '../../types/tileLayer'
 import { detectGameType } from '../../services/ai/gameTypeDetection'
+import { PRESENCE_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 
 interface TilemapQuickAction {
   id: string
@@ -37,6 +38,7 @@ export default function AIQuickActionsPanel({
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null)
 
   const layers = useMemo(() => tilemapMeta.layers || [], [tilemapMeta.layers])
+  const topOffset = PRESENCE_BAR_HEIGHT + HUD_SAFE_MARGIN
 
   // Generate context-aware actions
   useEffect(() => {
@@ -49,7 +51,10 @@ export default function AIQuickActionsPanel({
   }
 
   return (
-    <div className="fixed top-14 right-4 w-72 z-30 animate-slide-in-right">
+    <div
+      className="fixed right-4 w-72 z-30 animate-slide-in-right"
+      style={{ top: topOffset }}
+    >
       <div className="bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md rounded-lg shadow-2xl border border-white/10 overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 border-b border-white/10">

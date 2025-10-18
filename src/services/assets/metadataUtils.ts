@@ -18,6 +18,12 @@ export interface SpriteRenamingSummary {
   renamedCount: number
   skippedCount: number
   renames: Array<{ oldName: string; newName: string }>
+  sampleNames: string[]
+}
+
+export function getSemanticVariantKey(tileName: string): string {
+  const parts = tileName.split(/[._-]/)
+  return parts.slice(1).join('_') || 'base'
 }
 
 /**
@@ -154,10 +160,13 @@ export function applySemanticNamingToSprites(
     }
   })
 
+  const sampleNames = spriteSelections.slice(0, 5).map(sprite => sprite.name)
+
   return {
     renamedCount,
     skippedCount,
-    renames
+    renames,
+    sampleNames,
   }
 }
 
@@ -183,11 +192,15 @@ export function buildTileSemanticGroups(
       const groupKey = parts[0].toLowerCase()
 
       if (!groups[groupKey]) {
+        const materialMatches = context?.materials?.filter(material =>
+          material.toLowerCase().includes(groupKey)
+        )
+
         groups[groupKey] = {
           label: groupKey.charAt(0).toUpperCase() + groupKey.slice(1),
           description: `Tiles in the ${groupKey} group`,
           autoTileSystem: (context?.autoTileSystem as 'blob16' | 'blob47' | 'wang' | 'custom' | undefined),
-          materials: context?.materials,
+          materials: materialMatches && materialMatches.length > 0 ? materialMatches : context?.materials,
           themes: context?.themes,
           tiles: {},
           variants: [],
@@ -197,8 +210,10 @@ export function buildTileSemanticGroups(
 
       // Add tile to group
       groups[groupKey].tiles[name] = typeof index === 'number' ? index : parseInt(String(index), 10)
-      if (!groups[groupKey].variants.includes(name)) {
-        groups[groupKey].variants.push(name)
+      const variantKey = getSemanticVariantKey(name)
+
+      if (!groups[groupKey].variants.includes(variantKey)) {
+        groups[groupKey].variants.push(variantKey)
       }
       groups[groupKey].tileCount = Object.keys(groups[groupKey].tiles).length
     }

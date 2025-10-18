@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import type { TileMode, PaletteColor } from '../../types/tilemap'
 import { hasSpriteAsset, getTilePath } from '../../constants/tilemapDefaults'
+import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 
 interface TilePaletteProps {
   palette: PaletteColor[]
@@ -57,6 +58,8 @@ export default function TilePalette({
   const selectedTile = palette[selectedIndex]
   const isPlainTile = selectedTile?.type === 'plain'
   const hasSprite = selectedTile && hasSpriteAsset(selectedTile.type)
+  const topOffset = PRESENCE_BAR_HEIGHT + HUD_SAFE_MARGIN
+  const bottomOffset = TILE_STATUS_BAR_HEIGHT + HUD_SAFE_MARGIN
   
   // Activate backdrop after a brief delay to prevent immediate closure
   useEffect(() => {
@@ -147,8 +150,8 @@ export default function TilePalette({
       style={{
         width: isExpanded ? '206px' : '60px',
         left: '8px',
-        top: '8px',
-        bottom: '48px', // 40px footer + 8px margin
+        top: `${topOffset}px`,
+        bottom: `${bottomOffset}px`,
       }}
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}

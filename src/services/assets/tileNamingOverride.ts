@@ -7,6 +7,7 @@
 import { ref as dbRef, update } from 'firebase/database'
 import { db } from '../firebase'
 import type { Asset } from '../../types/asset'
+import { getSemanticVariantKey } from './metadataUtils'
 
 // Import or define getAsset function
 // For now, we'll assume it's imported from assetUpload
@@ -66,7 +67,8 @@ export async function applyTileNameOverrides(
         Object.entries(tileGroups).forEach(([groupKey, group]) => {
           if (group.tiles && name in group.tiles) {
             delete group.tiles[name]
-            group.variants = group.variants.filter(v => v !== name)
+            const variantKey = getSemanticVariantKey(name)
+            group.variants = group.variants.filter(v => v !== variantKey)
             group.tileCount = Object.keys(group.tiles).length
           }
         })
@@ -88,8 +90,9 @@ export async function applyTileNameOverrides(
         }
         const group = tileGroups[override.category]
         group.tiles[override.semanticName] = override.tileIndex
-        if (!group.variants.includes(override.semanticName)) {
-          group.variants.push(override.semanticName)
+        const variantKey = getSemanticVariantKey(override.semanticName)
+        if (!group.variants.includes(variantKey)) {
+          group.variants.push(variantKey)
         }
         group.tileCount = Object.keys(group.tiles).length
       }

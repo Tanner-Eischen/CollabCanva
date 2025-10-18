@@ -8,6 +8,7 @@ import { useState, useCallback } from 'react'
 import { Tooltip } from '../ui/Tooltip'
 import { useLayerContext, useSortedLayers } from '../../hooks/useLayerManagement'
 import type { TileLayerMeta } from '../../types/tileLayer'
+import { PRESENCE_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 
 interface LayerPanelTilemapProps {
   canvasId: string
@@ -181,6 +182,7 @@ export default function LayerPanelTilemap({
 }: LayerPanelTilemapProps) {
   const { isPanelOpen, togglePanel, activeLayerId, setActiveLayer } = useLayerContext()
   const layers = useSortedLayers()
+  const topOffset = PRESENCE_BAR_HEIGHT + HUD_SAFE_MARGIN
 
   const handleToggleVisibility = useCallback(async (layer: TileLayerMeta) => {
     await onLayerUpdate(layer.id, { visible: !layer.visible })
@@ -209,7 +211,7 @@ export default function LayerPanelTilemap({
 
   if (!isPanelOpen) {
     return (
-      <div className="fixed right-4 top-4 z-50">
+      <div className="fixed right-4 z-50" style={{ top: topOffset }}>
         <Tooltip content="Show Layers Panel" side="left">
           <button
             onClick={togglePanel}
@@ -228,14 +230,15 @@ export default function LayerPanelTilemap({
   }
 
   return (
-    <div 
+    <div
       className="
-        fixed right-4 top-4 w-80 z-50
+        fixed right-4 w-80 z-50
         bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md
         rounded-lg shadow-2xl border border-white/10
         flex flex-col max-h-[calc(100vh-32px)]
         animate-slide-in-right
       "
+      style={{ top: topOffset }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
