@@ -15,6 +15,7 @@ interface LineProps {
   onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (points: number[], x: number, y: number) => void
+  locked?: boolean
 }
 
 /**
@@ -35,6 +36,7 @@ export default function Line({
   onDragStart,
   onDragEnd,
   onTransformEnd,
+  locked = false,
 }: LineProps) {
   const shapeRef = useRef<Konva.Line | Konva.Arrow>(null)
   const trRef = useRef<Konva.Transformer>(null)
@@ -48,23 +50,26 @@ export default function Line({
 
   // Attach transformer to shape when selected
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
+    if (isSelected && !locked && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current])
       trRef.current.getLayer()?.batchDraw()
     }
-  }, [isSelected])
+  }, [isSelected, locked])
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragStart(node.x(), node.y())
   }
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragEnd(node.x(), node.y())
   }
 
   const handleTransformEnd = () => {
+    if (locked) return
     const node = shapeRef.current
     if (!node) return
 
@@ -109,41 +114,41 @@ export default function Line({
           x={x}
           y={y}
           points={relativePoints}
-          stroke={lineColor}
-          strokeWidth={strokeWidth}
-          fill={lineColor}
-          pointerAtBeginning={arrows.start}
-          pointerAtEnding={arrows.end}
-          pointerLength={10}
-          pointerWidth={10}
-          draggable
-          onClick={onSelect}
-          onTap={onSelect}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onTransformEnd={handleTransformEnd}
-        />
-      ) : (
-        <KonvaLine
-          ref={shapeRef as any}
-          x={x}
-          y={y}
-          points={relativePoints}
-          stroke={lineColor}
-          strokeWidth={strokeWidth}
-          lineCap="round"
-          lineJoin="round"
-          draggable
-          onClick={onSelect}
-          onTap={onSelect}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onTransformEnd={handleTransformEnd}
-        />
-      )}
+      stroke={lineColor}
+      strokeWidth={strokeWidth}
+      fill={lineColor}
+      pointerAtBeginning={arrows.start}
+      pointerAtEnding={arrows.end}
+      pointerLength={10}
+      pointerWidth={10}
+      draggable={!locked}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onTransformEnd={handleTransformEnd}
+    />
+  ) : (
+    <KonvaLine
+      ref={shapeRef as any}
+      x={x}
+      y={y}
+      points={relativePoints}
+      stroke={lineColor}
+      strokeWidth={strokeWidth}
+      lineCap="round"
+      lineJoin="round"
+      draggable={!locked}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onTransformEnd={handleTransformEnd}
+    />
+  )}
 
       {/* Transformer for line endpoints - Figma style (PR-20) */}
-      {isSelected && (
+      {isSelected && !locked && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(_oldBox, newBox) => {

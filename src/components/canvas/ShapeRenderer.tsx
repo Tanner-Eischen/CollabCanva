@@ -35,6 +35,10 @@ interface ShapeRendererProps {
   handleTextDoubleClick: (shape: Shape) => void
   updateShape: (shapeId: string, updates: Partial<Shape>) => void
   dragStartPosRef: React.MutableRefObject<{ x: number; y: number } | null>
+  isShapeVisible: (shapeId: string) => boolean
+  isShapeLocked: (shapeId: string) => boolean
+  isGroupVisible: (groupId: string) => boolean
+  isGroupLocked: (groupId: string) => boolean
 }
 
 export function ShapeRenderer({
@@ -60,6 +64,10 @@ export function ShapeRenderer({
   handleTextDoubleClick,
   updateShape,
   dragStartPosRef,
+  isShapeVisible,
+  isShapeLocked,
+  isGroupVisible,
+  isGroupLocked,
 }: ShapeRendererProps) {
   const getUserColor = () => '#3B82F6'
 
@@ -103,6 +111,7 @@ export function ShapeRenderer({
   return (
     <>
       {sortShapesByZIndex()
+        .filter((shape) => isShapeVisible(shape.id))
         .filter((shape) => !isShapeInGroup(shape.id))
         .filter((shape) => {
           if (selectedIds.has(shape.id)) {
@@ -113,6 +122,7 @@ export function ShapeRenderer({
         .map((shape) => {
         const isSelected = selectedIds.has(shape.id)
         const userColor = getUserColor()
+        const locked = isShapeLocked(shape.id)
 
         if (shape.type === 'rectangle') {
           return (
@@ -133,6 +143,7 @@ export function ShapeRenderer({
               onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
               onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
               onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
+              locked={locked}
             />
           )
         } else if (shape.type === 'circle') {
@@ -149,7 +160,7 @@ export function ShapeRenderer({
               fill={shape.fill}
               stroke={shape.stroke || '#000000'}
               strokeWidth={shape.strokeWidth || 2}
-              draggable
+              draggable={!locked}
               onClick={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(shape.id, e.evt.shiftKey)}
               onDragStart={(e) => {
                 const node = e.target
@@ -186,6 +197,7 @@ export function ShapeRenderer({
               onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
               onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
               onDoubleClick={() => handleTextDoubleClick(shape)}
+              locked={locked}
             />
           )
         } else if (shape.type === 'line' && shape.points) {
@@ -206,6 +218,7 @@ export function ShapeRenderer({
               onTransformEnd={(pts: number[], x: number, y: number) => {
                 updateShape(shape.id, { points: pts, x, y })
               }}
+              locked={locked}
             />
           )
         } else if (shape.type === 'polygon' && shape.sides) {
@@ -228,6 +241,7 @@ export function ShapeRenderer({
               onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
               onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
               onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
+              locked={locked}
             />
           )
         } else if (shape.type === 'star' && shape.sides) {
@@ -250,6 +264,7 @@ export function ShapeRenderer({
               onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
               onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
               onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
+              locked={locked}
             />
           )
         } else if (shape.type === 'roundRect' && shape.cornerRadius !== undefined) {
@@ -272,6 +287,7 @@ export function ShapeRenderer({
               onDragStart={(x: number, y: number) => handleShapeDragStart(shape.id, x, y)}
               onDragEnd={(x: number, y: number) => handleShapeDragEnd(shape.id, x, y)}
               onTransformEnd={(w, h, r, x, y) => handleShapeTransformEnd(shape.id, w, h, r, x, y)}
+              locked={locked}
             />
           )
         } else if (shape.type === 'path' && shape.points) {
@@ -292,6 +308,7 @@ export function ShapeRenderer({
               onTransformEnd={(pts: number[], x: number, y: number) => {
                 updateShape(shape.id, { points: pts, x, y })
               }}
+              locked={locked}
             />
           )
         }
@@ -330,13 +347,15 @@ export function ShapeRenderer({
         const isSelected = selectedIds.has(group.id)
         const userColor = getUserColor()
         const bounds = calculateBounds(group.id, shapes)
-        
-        if (!bounds) return null
-        
+        const groupVisible = isGroupVisible(group.id)
+        const groupLocked = isGroupLocked(group.id)
+
+        if (!bounds || !groupVisible) return null
+
         const renderGroupMember = (shapeId: string) => {
           const shape = shapes.find((s) => s.id === shapeId)
-          if (!shape) return null
-          
+          if (!shape || !isShapeVisible(shape.id)) return null
+
           const relativeX = shape.x - bounds.x
           const relativeY = shape.y - bounds.y
           
@@ -384,41 +403,42 @@ export function ShapeRenderer({
           return null
         }
         
-        return (
-          <Group
-            key={group.id}
-            id={group.id}
-            x={bounds.x}
-            y={bounds.y}
-            width={bounds.width}
-            height={bounds.height}
-            rotation={group.rotation}
-            isSelected={isSelected}
-            selectionColor={isSelected ? userColor : undefined}
-            locked={group.locked}
-            visible={group.visible}
-            onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(group.id, e.evt.shiftKey)}
-            onDragStart={() => {
-              dragStartPosRef.current = { x: bounds.x, y: bounds.y }
-            }}
-            onDragEnd={(x: number, y: number) => {
-              if (dragStartPosRef.current) {
-                const deltaX = x - dragStartPosRef.current.x
-                const deltaY = y - dragStartPosRef.current.y
-                
-                group.memberIds.forEach((memberId) => {
-                  const shape = shapes.find((s) => s.id === memberId)
-                  if (shape) {
-                    updateShape(memberId, {
-                      x: shape.x + deltaX,
-                      y: shape.y + deltaY,
-                    })
-                  }
-                })
-                
-                dragStartPosRef.current = null
-              }
-            }}
+          return (
+            <Group
+              key={group.id}
+              id={group.id}
+              x={bounds.x}
+              y={bounds.y}
+              width={bounds.width}
+              height={bounds.height}
+              rotation={group.rotation}
+              isSelected={isSelected}
+              selectionColor={isSelected ? userColor : undefined}
+              locked={groupLocked}
+              visible={groupVisible}
+              onSelect={(e: Konva.KonvaEventObject<MouseEvent>) => handleShapeSelect(group.id, e.evt.shiftKey)}
+              onDragStart={() => {
+                if (groupLocked) return
+                dragStartPosRef.current = { x: bounds.x, y: bounds.y }
+              }}
+              onDragEnd={(x: number, y: number) => {
+                if (dragStartPosRef.current && !groupLocked) {
+                  const deltaX = x - dragStartPosRef.current.x
+                  const deltaY = y - dragStartPosRef.current.y
+
+                  group.memberIds.forEach((memberId) => {
+                    const shape = shapes.find((s) => s.id === memberId)
+                    if (shape && !isShapeLocked(shape.id)) {
+                      updateShape(memberId, {
+                        x: shape.x + deltaX,
+                        y: shape.y + deltaY,
+                      })
+                    }
+                  })
+
+                  dragStartPosRef.current = null
+                }
+              }}
           >
             {group.memberIds.map(renderGroupMember)}
           </Group>

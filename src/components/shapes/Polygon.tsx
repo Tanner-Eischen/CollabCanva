@@ -19,6 +19,7 @@ interface PolygonProps {
   onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (width: number, height: number, rotation: number, x: number, y: number) => void
+  locked?: boolean
 }
 
 /**
@@ -43,6 +44,7 @@ export default function Polygon({
   onDragStart,
   onDragEnd,
   onTransformEnd,
+  locked = false,
 }: PolygonProps) {
   const shapeRef = useRef<Konva.RegularPolygon>(null)
   const trRef = useRef<Konva.Transformer>(null)
@@ -52,11 +54,11 @@ export default function Polygon({
 
   // Attach transformer to shape when selected
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
+    if (isSelected && !locked && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current])
       trRef.current.getLayer()?.batchDraw()
     }
-  }, [isSelected])
+  }, [isSelected, locked])
 
   // Auto-cache for polygons with >6 sides (performance optimization)
   useEffect(() => {
@@ -66,16 +68,19 @@ export default function Polygon({
   }, [sides])
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragStart(node.x(), node.y())
   }
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragEnd(node.x(), node.y())
   }
 
   const handleTransformEnd = () => {
+    if (locked) return
     const node = shapeRef.current
     if (!node) return
 
@@ -113,7 +118,7 @@ export default function Polygon({
         fill={fill}
         stroke={strokeWidth && strokeWidth > 0 ? stroke : undefined}
         strokeWidth={strokeWidth}
-        draggable
+        draggable={!locked}
         onClick={onSelect}
         onTap={onSelect}
         onDragStart={handleDragStart}
@@ -122,7 +127,7 @@ export default function Polygon({
       />
 
       {/* Transformer for resize/rotate handles - Figma style (PR-20) */}
-      {isSelected && (
+      {isSelected && !locked && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(oldBox, newBox) => {
