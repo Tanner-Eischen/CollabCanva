@@ -204,8 +204,8 @@ export async function uploadAsset(
     console.warn('Failed to generate thumbnail:', error)
   }
 
-  // Upload to Firebase Storage
-  const storagePath = `assets/${userId}/${assetId}`
+  // Upload to Firebase Storage (public assets)
+  const storagePath = `assets/${assetId}`
   const fileRef = storageRef(storage, storagePath)
 
   return new Promise((resolve, reject) => {
@@ -545,6 +545,7 @@ export async function uploadAsset(
             url,
             thumbnailUrl,
             metadata,
+            createdAt: Date.now(),
             uploadedAt: Date.now(),
             updatedAt: Date.now(),
             tags: options.tags || [],
@@ -553,8 +554,8 @@ export async function uploadAsset(
             ...(options.folderId && { folderId: options.folderId })
           }
 
-          // Save to Firebase Database
-          const assetRef = dbRef(db, `assets/${userId}/${assetId}`)
+          // Save to Firebase Database (public assets structure)
+          const assetRef = dbRef(db, `assets/${assetId}`)
           await set(assetRef, asset)
           
           // === NEW: Update catalog ===
@@ -648,7 +649,7 @@ function detectAssetType(
 export async function deleteAsset(assetId: string, userId: string): Promise<void> {
   try {
     // Get asset data first
-    const assetRef = dbRef(db, `assets/${userId}/${assetId}`)
+    const assetRef = dbRef(db, `assets/${assetId}`)
     const snapshot = await get(assetRef)
     
     if (!snapshot.exists()) {
@@ -656,9 +657,14 @@ export async function deleteAsset(assetId: string, userId: string): Promise<void
     }
 
     const asset = snapshot.val() as Asset
+    
+    // Verify ownership
+    if (asset.userId !== userId) {
+      throw new Error('Permission denied: You can only delete your own assets')
+    }
 
     // Delete from Storage
-    const fileRef = storageRef(storage, `assets/${userId}/${assetId}`)
+    const fileRef = storageRef(storage, `assets/${assetId}`)
     await deleteObject(fileRef)
 
     // Delete from Database
@@ -689,12 +695,17 @@ export async function updateAssetMetadata(
   userId: string,
   updates: Partial<Pick<Asset, 'name' | 'tags' | 'folderId' | 'tilesetMetadata' | 'spriteSheetMetadata'>>
 ): Promise<void> {
-  const assetRef = dbRef(db, `assets/${userId}/${assetId}`)
+  const assetRef = dbRef(db, `assets/${assetId}`)
   
   // Check ownership
   const snapshot = await get(assetRef)
   if (!snapshot.exists()) {
     throw new Error('Asset not found')
+  }
+  
+  const asset = snapshot.val() as Asset
+  if (asset.userId !== userId) {
+    throw new Error('Permission denied: You can only update your own assets')
   }
 
   await update(assetRef, {
@@ -704,10 +715,10 @@ export async function updateAssetMetadata(
 }
 
 /**
- * Get asset by ID
+ * Get asset by ID (public read)
  */
-export async function getAsset(assetId: string, userId: string): Promise<Asset | null> {
-  const assetRef = dbRef(db, `assets/${userId}/${assetId}`)
+export async function getAsset(assetId: string): Promise<Asset | null> {
+  const assetRef = dbRef(db, `assets/${assetId}`)
   const snapshot = await get(assetRef)
   
   if (!snapshot.exists()) {
@@ -718,18 +729,28 @@ export async function getAsset(assetId: string, userId: string): Promise<Asset |
 }
 
 /**
- * Get all assets for a user
+ * Get all assets for a user (query-based)
  */
 export async function getUserAssets(userId: string): Promise<Asset[]> {
-  const assetsRef = dbRef(db, `assets/${userId}`)
-  const snapshot = await get(assetsRef)
+  const assetsRef = dbRef(db, 'assets')
+  const userAssetsQuery = query(
+    assetsRef,
+    orderByChild('userId'),
+    equalTo(userId)
+  )
+  
+  const snapshot = await get(userAssetsQuery)
   
   if (!snapshot.exists()) {
     return []
   }
 
-  const assetsData = snapshot.val()
-  return Object.values(assetsData) as Asset[]
+  const assets: Asset[] = []
+  snapshot.forEach((childSnapshot) => {
+    assets.push(childSnapshot.val() as Asset)
+  })
+
+  return assets
 }
 
 /**
@@ -742,9 +763,14 @@ export async function replaceAssetFile(
   onProgress?: (progress: AssetUploadProgress) => void
 ): Promise<Asset> {
   // Get existing asset
-  const existingAsset = await getAsset(assetId, userId)
+  const existingAsset = await getAsset(assetId)
   if (!existingAsset) {
     throw new Error('Asset not found')
+  }
+  
+  // Verify ownership
+  if (existingAsset.userId !== userId) {
+    throw new Error('Permission denied: You can only replace your own assets')
   }
 
   // Validate new file
@@ -759,8 +785,8 @@ export async function replaceAssetFile(
   // Generate new thumbnail
   const thumbnailUrl = await generateThumbnail(newFile)
 
-  // Upload new file to Storage
-  const storagePath = `assets/${userId}/${assetId}`
+  // Upload new file to Storage (public assets)
+  const storagePath = `assets/${assetId}`
   const fileRef = storageRef(storage, storagePath)
 
   return new Promise((resolve, reject) => {
@@ -799,7 +825,7 @@ export async function replaceAssetFile(
             updatedAt: Date.now()
           }
 
-          const assetRef = dbRef(db, `assets/${userId}/${assetId}`)
+          const assetRef = dbRef(db, `assets/${assetId}`)
           await set(assetRef, updatedAsset)
 
           onProgress?.({
@@ -826,10 +852,15 @@ export async function reanalyzeTileset(
   assetId: string,
   userId: string
 ): Promise<Asset> {
-  const asset = await getAsset(assetId, userId)
+  const asset = await getAsset(assetId)
   
   if (!asset || asset.type !== 'tileset' || !asset.tilesetMetadata) {
     throw new Error('Asset is not a tileset')
+  }
+  
+  // Verify ownership
+  if (asset.userId !== userId) {
+    throw new Error('Permission denied: You can only re-analyze your own assets')
   }
   
   // Pattern analysis

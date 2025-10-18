@@ -179,7 +179,7 @@ export interface AssetMetadata {
  */
 export interface Asset {
   id: string // unique asset identifier
-  userId: string // owner user ID
+  userId: string // owner user ID (for public assets with query)
   name: string // user-friendly name
   type: AssetType // asset classification
   url: string // Firebase Storage download URL
@@ -187,7 +187,8 @@ export interface Asset {
   metadata: AssetMetadata // base metadata
   tilesetMetadata?: TilesetMetadata // only if type === 'tileset'
   spriteSheetMetadata?: SpriteSheetMetadata // only if type === 'spritesheet'
-  uploadedAt: number // timestamp (Date.now())
+  createdAt: number // timestamp (Date.now()) - when asset was first created
+  uploadedAt: number // timestamp (Date.now()) - compatibility with old code
   updatedAt: number // timestamp (Date.now())
   tags: string[] // user-defined tags for organization
   folderId?: string // optional folder organization

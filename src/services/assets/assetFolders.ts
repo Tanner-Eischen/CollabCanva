@@ -181,7 +181,16 @@ export async function moveAssetToFolder(
   userId: string,
   folderId: string | null
 ): Promise<void> {
-  const assetRef = ref(db, `assets/${userId}/${assetId}`)
+  const assetRef = ref(db, `assets/${assetId}`)
+  // Verify ownership before updating
+  const snapshot = await get(assetRef)
+  if (!snapshot.exists()) {
+    throw new Error('Asset not found')
+  }
+  const asset = snapshot.val() as Asset
+  if (asset.userId !== userId) {
+    throw new Error('Permission denied: You can only move your own assets')
+  }
   await update(assetRef, { folderId: folderId ?? null, updatedAt: Date.now() })
 }
 
@@ -192,17 +201,28 @@ export async function getAssetsInFolder(
   userId: string,
   folderId: string | null
 ): Promise<string[]> {
-  const assetsRef = ref(db, `assets/${userId}`)
-  const snapshot = await get(assetsRef)
+  // Query user's assets
+  const assetsRef = ref(db, 'assets')
+  const userAssetsQuery = query(
+    assetsRef,
+    orderByChild('userId'),
+    equalTo(userId)
+  )
+  const snapshot = await get(userAssetsQuery)
 
   if (!snapshot.exists()) {
     return []
   }
 
-  const assets = snapshot.val() as Record<string, Asset>
-  return Object.entries(assets)
-    .filter(([, asset]) => (asset?.folderId ?? null) === (folderId ?? null))
-    .map(([assetId]) => assetId)
+  const assetIds: string[] = []
+  snapshot.forEach((childSnapshot) => {
+    const asset = childSnapshot.val() as Asset
+    if ((asset?.folderId ?? null) === (folderId ?? null)) {
+      assetIds.push(childSnapshot.key as string)
+    }
+  })
+  
+  return assetIds
 }
 
 /**
