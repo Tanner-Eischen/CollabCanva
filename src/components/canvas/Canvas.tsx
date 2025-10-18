@@ -1,7 +1,6 @@
 import type { ViewportTransform, ToolType } from '../../types/canvas'
 import type { TileMode } from '../../types/tilemap'
 import { LayerProvider } from '../../hooks/useLayerManagement'
-import { AIOrchestratorProvider } from '../../hooks/useAIOrchestrator'
 import ShapeCanvas from './ShapeCanvas'
 import TilemapCanvas from '../tilemap/TilemapCanvas'
 
@@ -89,31 +88,29 @@ export default function Canvas({
   if (isTilemapMode) {
     return (
       <LayerProvider>
-        <AIOrchestratorProvider>
-          <TilemapCanvas
-            canvasId={canvasId}
-            onViewportChange={onViewportChange}
-            onZoomChange={onZoomChange}
-            onZoomControlsReady={onZoomControlsReady}
-            onUndoRedoChange={onUndoRedoChange}
-            onExportFunctionsReady={onExportFunctionsReady}
-            tileMode={tileMode}
-            onTileModeChange={onTileModeChange}
-            brushSize={brushSize}
-            onBrushSizeChange={onBrushSizeChange}
-            autoTilingEnabled={autoTilingEnabled}
-            onAutoTilingToggle={onAutoTilingToggle}
-            showGrid={showTileGrid}
-            onGridToggle={onTileGridToggle}
-            selectedPaletteIndex={selectedPaletteIndex}
-            onPaletteIndexChange={onPaletteIndexChange}
-            selectedVariant={selectedVariant}
-            onVariantChange={onVariantChange}
-            plainColor={plainColor}
-            onPlainColorChange={onPlainColorChange}
-            aiChat={aiChat}
-          />
-        </AIOrchestratorProvider>
+        <TilemapCanvas
+          canvasId={canvasId}
+          onViewportChange={onViewportChange}
+          onZoomChange={onZoomChange}
+          onZoomControlsReady={onZoomControlsReady}
+          onUndoRedoChange={onUndoRedoChange}
+          onExportFunctionsReady={onExportFunctionsReady}
+          tileMode={tileMode}
+          onTileModeChange={onTileModeChange}
+          brushSize={brushSize}
+          onBrushSizeChange={onBrushSizeChange}
+          autoTilingEnabled={autoTilingEnabled}
+          onAutoTilingToggle={onAutoTilingToggle}
+          showGrid={showTileGrid}
+          onGridToggle={onTileGridToggle}
+          selectedPaletteIndex={selectedPaletteIndex}
+          onPaletteIndexChange={onPaletteIndexChange}
+          selectedVariant={selectedVariant}
+          onVariantChange={onVariantChange}
+          plainColor={plainColor}
+          onPlainColorChange={onPlainColorChange}
+          aiChat={aiChat}
+        />
       </LayerProvider>
     )
   }

@@ -14,8 +14,10 @@ import {
   type AILayerAction,
   type AIActionResult,
 } from '../services/ai/aiLayerActions'
-import type { TilemapMeta } from '../types/tilemap'
+import { coordToKey, type TileData, type TilemapMeta } from '../types/tilemap'
 import type { AssetAIContextPayload } from '../types/asset'
+import { hasSpriteAsset } from '../constants/tilemapDefaults'
+import { calculateAutoTileUpdates } from '../utils/tilemap/autoTile'
 
 /**
  * AI Orchestration State
@@ -65,6 +67,9 @@ interface AIOrchestratorContextState extends AIOrchestrationState {
 
   // Set error
   setError: (error: string | null) => void
+
+  // Register tilemap state provider (for auto-tiling integration)
+  registerTileState: (provider: TileStateProvider | null) => () => void
 }
 
 const AIOrchestratorContext = createContext<AIOrchestratorContextState | undefined>(undefined)
@@ -81,6 +86,7 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
 
   // Executor instances cache
   const executorsRef = useRef<Map<string, ReturnType<typeof createAILayerExecutor>>>(new Map())
+  const tileStateRef = useRef<TileStateProvider | null>(null)
 
   /**
    * Get or create executor for canvas
@@ -130,7 +136,12 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
 
         if (response.success && response.toolResults) {
           // Parse actions from AI response
-          const actions = parseAIResponseToActions(response.toolResults, context.tilemapMeta)
+          let actions = parseAIResponseToActions(response.toolResults, context.tilemapMeta)
+
+          // Enhance actions with auto-tiling neighbor updates when available
+          if (actions.length > 0 && tileStateRef.current) {
+            actions = enhanceActionsWithAutoTiling(actions, tileStateRef.current)
+          }
 
           if (actions.length > 0) {
             // Execute actions
@@ -181,9 +192,13 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
 
       try {
         const executor = getExecutor(canvasId, userId)
+        const actionsToExecute =
+          tileStateRef.current && actions.length > 0
+            ? enhanceActionsWithAutoTiling(actions, tileStateRef.current)
+            : actions
         const results: AIActionResult[] = []
 
-        for (const action of actions) {
+        for (const action of actionsToExecute) {
           setCurrentAction(action)
 
           // Generate preview for paint actions
@@ -298,6 +313,16 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
     setError(null)
   }, [])
 
+  const registerTileState = useCallback((provider: TileStateProvider | null) => {
+    tileStateRef.current = provider
+
+    return () => {
+      if (tileStateRef.current === provider) {
+        tileStateRef.current = null
+      }
+    }
+  }, [])
+
   const contextValue = useMemo(
     () => ({
       isExecuting,
@@ -312,6 +337,7 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
       modifyLastAction,
       clearHistory,
       setError,
+      registerTileState,
     }),
     [
       isExecuting,
@@ -325,6 +351,7 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
       undoLastAction,
       modifyLastAction,
       clearHistory,
+      registerTileState,
     ]
   )
 
@@ -384,5 +411,124 @@ function generateTilesForArea(x: number, y: number, width: number, height: numbe
     }
   }
   return tiles
+}
+
+/**
+ * Tilemap state provider configuration supplied by the canvas
+ */
+interface TileStateProvider {
+  getTileMap: () => Map<string, TileData>
+  isAutoTilingEnabled: () => boolean
+}
+
+/**
+ * Clone a tile map so we can safely mutate it during AI execution
+ */
+function cloneTileMap(original: Map<string, TileData>): Map<string, TileData> {
+  const clone = new Map<string, TileData>()
+  original.forEach((value, key) => {
+    clone.set(key, { ...value })
+  })
+  return clone
+}
+
+/**
+ * Enhance AI actions with auto-tiling updates when the canvas provides state information
+ */
+function enhanceActionsWithAutoTiling(actions: AILayerAction[], provider: TileStateProvider): AILayerAction[] {
+  if (!provider.isAutoTilingEnabled()) {
+    return actions
+  }
+
+  const sourceMap = provider.getTileMap()
+  const workingMap = cloneTileMap(sourceMap)
+  const enhanced: AILayerAction[] = []
+
+  for (const action of actions) {
+    if (action.type === 'paintTiles') {
+      const tilesToApply = new Map<string, { x: number; y: number; tile: TileData }>()
+
+      // Pre-apply tiles so neighbor calculations see the latest state
+      action.tiles.forEach(({ x, y, tile }) => {
+        const key = coordToKey(x, y)
+        workingMap.set(key, { ...tile })
+        tilesToApply.set(key, { x, y, tile: { ...tile } })
+      })
+
+      // Update variants for center tiles and neighbors when needed
+      action.tiles.forEach(({ x, y, tile }) => {
+        if (!hasSpriteAsset(tile.type)) return
+
+        const updates = calculateAutoTileUpdates(x, y, workingMap, tile.type)
+        updates.forEach((update) => {
+          const updateKey = coordToKey(update.x, update.y)
+          const existing = workingMap.get(updateKey)
+          if (!existing || !hasSpriteAsset(existing.type)) {
+            return
+          }
+
+          if (existing.variant !== update.variant) {
+            const updatedTile: TileData = { ...existing, variant: update.variant }
+            workingMap.set(updateKey, updatedTile)
+            tilesToApply.set(updateKey, { x: update.x, y: update.y, tile: updatedTile })
+          }
+        })
+      })
+
+      enhanced.push({
+        ...action,
+        tiles: Array.from(tilesToApply.values()),
+      })
+      continue
+    }
+
+    if (action.type === 'eraseTiles') {
+      const neighborUpdates = new Map<string, { x: number; y: number; tile: TileData }>()
+
+      action.tiles.forEach(({ x, y }) => {
+        const key = coordToKey(x, y)
+        const existing = workingMap.get(key)
+        if (!existing) {
+          return
+        }
+
+        workingMap.delete(key)
+
+        if (!hasSpriteAsset(existing.type)) {
+          return
+        }
+
+        const updates = calculateAutoTileUpdates(x, y, workingMap, null)
+        updates.forEach((update) => {
+          const updateKey = coordToKey(update.x, update.y)
+          const neighbor = workingMap.get(updateKey)
+          if (!neighbor || !hasSpriteAsset(neighbor.type)) {
+            return
+          }
+
+          if (neighbor.variant !== update.variant) {
+            const updatedTile: TileData = { ...neighbor, variant: update.variant }
+            workingMap.set(updateKey, updatedTile)
+            neighborUpdates.set(updateKey, { x: update.x, y: update.y, tile: updatedTile })
+          }
+        })
+      })
+
+      enhanced.push(action)
+
+      if (neighborUpdates.size > 0) {
+        enhanced.push({
+          type: 'paintTiles',
+          layerId: action.layerId,
+          tiles: Array.from(neighborUpdates.values()),
+        })
+      }
+      continue
+    }
+
+    enhanced.push(action)
+  }
+
+  return enhanced
 }
 
