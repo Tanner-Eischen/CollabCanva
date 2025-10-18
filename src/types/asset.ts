@@ -280,6 +280,7 @@ export interface TileSlice {
   width: number // tile width
   height: number // tile height
   imageData?: ImageData // optional extracted tile image data
+  name?: string // optional descriptive name assigned to the tile
 }
 
 /**
