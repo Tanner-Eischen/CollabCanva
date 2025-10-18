@@ -30,79 +30,141 @@ export function getSemanticVariantKey(tileName: string): string {
  * Deep clone tileset metadata to avoid mutations
  */
 export function cloneTilesetMetadata(metadata: TilesetMetadata): TilesetMetadata {
-  return {
+  const cloned: TilesetMetadata = {
     tileWidth: metadata.tileWidth,
     tileHeight: metadata.tileHeight,
-    spacing: metadata.spacing,
-    margin: metadata.margin,
     columns: metadata.columns,
     rows: metadata.rows,
     tileCount: metadata.tileCount,
-    autoTileMapping: metadata.autoTileMapping ? { ...metadata.autoTileMapping } : undefined,
-    tileSize: metadata.tileSize,
-    version: metadata.version,
-    pixelArt: metadata.pixelArt,
-    palette: metadata.palette ? [...metadata.palette] : undefined,
-    themes: metadata.themes ? [...metadata.themes] : undefined,
-    styles: metadata.styles ? [...metadata.styles] : undefined,
-    materials: metadata.materials ? [...metadata.materials] : undefined,
-    layerTypes: metadata.layerTypes ? [...metadata.layerTypes] : undefined,
-    autoTileSystem: metadata.autoTileSystem,
-    tiles: metadata.tiles ? metadata.tiles.map(tile => ({
+    ...(metadata.spacing !== undefined ? { spacing: metadata.spacing } : {}),
+    ...(metadata.margin !== undefined ? { margin: metadata.margin } : {})
+  }
+
+  if (metadata.autoTileMapping) {
+    cloned.autoTileMapping = { ...metadata.autoTileMapping }
+  }
+
+  if (metadata.tileSize !== undefined) {
+    cloned.tileSize = metadata.tileSize
+  }
+
+  if (metadata.version !== undefined) {
+    cloned.version = metadata.version
+  }
+
+  if (metadata.pixelArt !== undefined) {
+    cloned.pixelArt = metadata.pixelArt
+  }
+
+  if (metadata.palette) {
+    cloned.palette = [...metadata.palette]
+  }
+
+  if (metadata.themes) {
+    cloned.themes = [...metadata.themes]
+  }
+
+  if (metadata.styles) {
+    cloned.styles = [...metadata.styles]
+  }
+
+  if (metadata.materials) {
+    cloned.materials = [...metadata.materials]
+  }
+
+  if (metadata.layerTypes) {
+    cloned.layerTypes = [...metadata.layerTypes]
+  }
+
+  if (metadata.autoTileSystem) {
+    cloned.autoTileSystem = metadata.autoTileSystem
+  }
+
+  if (metadata.tiles) {
+    cloned.tiles = metadata.tiles.map(tile => ({
       index: tile.index,
       x: tile.x,
       y: tile.y,
       width: tile.width,
       height: tile.height
-    })) : undefined,
-    namedTiles: metadata.namedTiles ? { ...metadata.namedTiles } : undefined,
-    tileGroups: metadata.tileGroups ? cloneTileSemanticGroups(metadata.tileGroups) : undefined,
-    adjacencyRules: metadata.adjacencyRules
-      ? {
-          system: metadata.adjacencyRules.system,
-          rulesData: metadata.adjacencyRules.rulesData,
-          rulesUrl: metadata.adjacencyRules.rulesUrl
-        }
-      : undefined,
-    features: metadata.features ? { ...metadata.features } : undefined,
-    validation: metadata.validation
-      ? {
-          seamQuality: metadata.validation.seamQuality,
-          dimensionCheck: metadata.validation.dimensionCheck,
-          warnings: [...metadata.validation.warnings],
-          checkedAt: metadata.validation.checkedAt
-        }
-      : undefined,
-    detectionConfidence: metadata.detectionConfidence
-      ? { ...metadata.detectionConfidence }
-      : undefined
+    }))
   }
+
+  if (metadata.namedTiles) {
+    cloned.namedTiles = { ...metadata.namedTiles }
+  }
+
+  if (metadata.tileGroups) {
+    cloned.tileGroups = cloneTileSemanticGroups(metadata.tileGroups)
+  }
+
+  if (metadata.adjacencyRules) {
+    cloned.adjacencyRules = {
+      system: metadata.adjacencyRules.system,
+      rulesData: metadata.adjacencyRules.rulesData,
+      rulesUrl: metadata.adjacencyRules.rulesUrl
+    }
+  }
+
+  if (metadata.features) {
+    cloned.features = { ...metadata.features }
+  }
+
+  if (metadata.validation) {
+    cloned.validation = {
+      seamQuality: metadata.validation.seamQuality,
+      dimensionCheck: metadata.validation.dimensionCheck,
+      warnings: [...metadata.validation.warnings],
+      checkedAt: metadata.validation.checkedAt
+    }
+  }
+
+  if (metadata.detectionConfidence) {
+    cloned.detectionConfidence = { ...metadata.detectionConfidence }
+  }
+
+  return cloned
 }
 
 /**
  * Deep clone sprite sheet metadata to avoid mutations
  */
 export function cloneSpriteSheetMetadata(metadata: SpriteSheetMetadata): SpriteSheetMetadata {
-  return {
-    frameWidth: metadata.frameWidth,
-    frameHeight: metadata.frameHeight,
-    frameCount: metadata.frameCount,
-    columns: metadata.columns,
-    rows: metadata.rows,
-    spacing: metadata.spacing,
-    margin: metadata.margin,
-    spriteSelections: metadata.spriteSelections
-      ? metadata.spriteSelections.map(sprite => ({
-          ...sprite,
-          dominantColors: sprite.dominantColors ? [...sprite.dominantColors] : undefined,
-          tags: sprite.tags ? [...sprite.tags] : undefined
-        }))
-      : undefined,
-    selectionMode: metadata.selectionMode,
-    palette: metadata.palette ? [...metadata.palette] : undefined,
-    inferredMaterials: metadata.inferredMaterials ? [...metadata.inferredMaterials] : undefined,
-    inferredThemes: metadata.inferredThemes ? [...metadata.inferredThemes] : undefined
+  const cloned: SpriteSheetMetadata = {
+    ...(metadata.frameWidth !== undefined ? { frameWidth: metadata.frameWidth } : {}),
+    ...(metadata.frameHeight !== undefined ? { frameHeight: metadata.frameHeight } : {}),
+    ...(metadata.frameCount !== undefined ? { frameCount: metadata.frameCount } : {}),
+    ...(metadata.columns !== undefined ? { columns: metadata.columns } : {}),
+    ...(metadata.rows !== undefined ? { rows: metadata.rows } : {}),
+    ...(metadata.spacing !== undefined ? { spacing: metadata.spacing } : {}),
+    ...(metadata.margin !== undefined ? { margin: metadata.margin } : {})
   }
+
+  if (metadata.spriteSelections) {
+    cloned.spriteSelections = metadata.spriteSelections.map(sprite => ({
+      ...sprite,
+      ...(sprite.dominantColors ? { dominantColors: [...sprite.dominantColors] } : {}),
+      ...(sprite.tags ? { tags: [...sprite.tags] } : {})
+    }))
+  }
+
+  if (metadata.selectionMode) {
+    cloned.selectionMode = metadata.selectionMode
+  }
+
+  if (metadata.palette) {
+    cloned.palette = [...metadata.palette]
+  }
+
+  if (metadata.inferredMaterials) {
+    cloned.inferredMaterials = [...metadata.inferredMaterials]
+  }
+
+  if (metadata.inferredThemes) {
+    cloned.inferredThemes = [...metadata.inferredThemes]
+  }
+
+  return cloned
 }
 
 /**

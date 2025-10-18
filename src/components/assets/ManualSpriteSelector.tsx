@@ -4,7 +4,7 @@
  * PR-31: Enhancement for non-uniform sprite collections
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Text } from 'react-konva';
 import useImage from 'use-image';
 import type { SpriteSelection } from '../../types/asset';
@@ -16,6 +16,8 @@ interface ManualSpriteSelectorProps {
   regionMode?: boolean;
   region?: { x: number; y: number; width: number; height: number } | null;
   onRegionChange?: (region: { x: number; y: number; width: number; height: number } | null) => void;
+  initialGridSize?: number;
+  gridSizeOptions?: number[];
 }
 
 export const ManualSpriteSelector: React.FC<ManualSpriteSelectorProps> = ({
@@ -24,7 +26,9 @@ export const ManualSpriteSelector: React.FC<ManualSpriteSelectorProps> = ({
   initialSelections = [],
   regionMode = false,
   region = null,
-  onRegionChange
+  onRegionChange,
+  initialGridSize,
+  gridSizeOptions
 }) => {
   const [image] = useImage(imageUrl, 'anonymous');
   const [selections, setSelections] = useState<SpriteSelection[]>(initialSelections);
@@ -35,7 +39,7 @@ export const ManualSpriteSelector: React.FC<ManualSpriteSelectorProps> = ({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [snapToGrid, setSnapToGrid] = useState(true);
-  const [gridSize, setGridSize] = useState(16);
+  const [gridSize, setGridSize] = useState(initialGridSize ?? 16);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null);
   const [spacePressed, setSpacePressed] = useState(false);
@@ -43,6 +47,19 @@ export const ManualSpriteSelector: React.FC<ManualSpriteSelectorProps> = ({
 
   // Container size
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
+
+  useEffect(() => {
+    if (!initialGridSize || initialGridSize <= 0) return;
+    setGridSize(prev => (Math.abs(prev - initialGridSize) < 0.001 ? prev : initialGridSize));
+  }, [initialGridSize]);
+
+  const snapOptions = useMemo(() => {
+    const options = gridSizeOptions && gridSizeOptions.length > 0
+      ? gridSizeOptions
+      : [8, 16, 32];
+    const withCurrent = options.concat(gridSize);
+    return Array.from(new Set(withCurrent)).sort((a, b) => a - b);
+  }, [gridSize, gridSizeOptions]);
 
   useEffect(() => {
     const updateSize = () => {
@@ -326,7 +343,7 @@ export const ManualSpriteSelector: React.FC<ManualSpriteSelectorProps> = ({
           
           {snapToGrid && (
             <div className="flex items-center gap-1">
-              {[8, 16, 32].map(size => (
+              {snapOptions.map(size => (
                 <button
                   key={size}
                   onClick={() => setGridSize(size)}

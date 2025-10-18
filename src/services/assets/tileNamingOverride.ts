@@ -36,13 +36,22 @@ export async function applyTileNameOverrides(
   overrides: TileNameOverride[]
 ): Promise<NameOverrideResult> {
   try {
-    const asset = await getAsset(assetId, userId)
+    const asset = await getAsset(assetId)
     
     if (!asset?.tilesetMetadata) {
       return {
         success: false,
         appliedCount: 0,
         message: 'Asset does not have tileset metadata',
+      }
+    }
+    
+    // Verify ownership
+    if (asset.userId !== userId) {
+      return {
+        success: false,
+        appliedCount: 0,
+        message: 'Permission denied: You can only modify your own assets',
       }
     }
 
@@ -238,13 +247,22 @@ export async function revertToAutoNaming(
   userId: string
 ): Promise<NameOverrideResult> {
   try {
-    const asset = await getAsset(assetId, userId)
+    const asset = await getAsset(assetId)
     
     if (!asset?.tilesetMetadata) {
       return {
         success: false,
         appliedCount: 0,
         message: 'Asset does not have tileset metadata',
+      }
+    }
+    
+    // Verify ownership
+    if (asset.userId !== userId) {
+      return {
+        success: false,
+        appliedCount: 0,
+        message: 'Permission denied: You can only modify your own assets',
       }
     }
 

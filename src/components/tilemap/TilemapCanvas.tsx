@@ -353,35 +353,38 @@ function TilemapCanvasInner({
   // Handle painting/erasing tiles with command pattern
   const paintTileAt = useCallback((tileX: number, tileY: number, isStrokePainting: boolean = false) => {
     const affectedTiles = getBrushTiles(tileX, tileY)
-    
+    const workingTiles = new Map(tiles)
+
     if (tileMode === 'stamp') {
       // Collect changes for all tiles in brush
       const changes: Array<{x: number, y: number, oldTile: TileData | undefined, newTile: TileData}> = []
-      
+
       // Paint all tiles in the brush area
       affectedTiles.forEach(({x, y}) => {
-        const oldTile = getTile(x, y)
-        
+        const key = coordToKey(x, y)
+        const oldTile = workingTiles.get(key)
+
         // Calculate variant if this tile type has sprite assets
         let variant: number | undefined
         if (hasSpriteAsset(selectedPalette.type)) {
           if (autoTilingEnabled) {
             // Auto-tiling: calculate based on neighbors
-            variant = calculateTileVariant(x, y, tiles, selectedPalette.type)
+            variant = calculateTileVariant(x, y, workingTiles, selectedPalette.type)
           } else {
             // Manual mode: use selected variant or default to center (variant 4)
             variant = selectedVariant !== undefined ? selectedVariant : 4
           }
         }
-        
+
         const newTile: TileData = {
           type: selectedPalette.type,
           color: effectiveColor,
           variant,
         }
-        
+
         changes.push({x, y, oldTile, newTile})
-        
+        workingTiles.set(key, newTile)
+
         // Only update tiles immediately during stroke (for visual feedback)
         if (isStrokePainting) {
           setTile(x, y, newTile)
@@ -392,22 +395,30 @@ function TilemapCanvasInner({
       const neighborUpdates: Array<{x: number, y: number, oldTile: TileData, newTile: TileData}> = []
       if (autoTilingEnabled && hasSpriteAsset(selectedPalette.type)) {
         affectedTiles.forEach(({x, y}) => {
-          const updates = calculateAutoTileUpdates(x, y, tiles, selectedPalette.type)
+          const updates = calculateAutoTileUpdates(x, y, workingTiles, selectedPalette.type)
           updates.forEach(update => {
-            const existingTile = getTile(update.x, update.y)
-            if (existingTile && !affectedTiles.some(t => t.x === update.x && t.y === update.y)) {
+            const neighborKey = coordToKey(update.x, update.y)
+            const existingTile = workingTiles.get(neighborKey)
+            if (
+              existingTile &&
+              !affectedTiles.some(t => t.x === update.x && t.y === update.y) &&
+              existingTile.variant !== update.variant
+            ) {
+              const updatedTile = { ...existingTile, variant: update.variant }
               // Only update neighbors, not the tiles we just painted
               neighborUpdates.push({
                 x: update.x,
                 y: update.y,
                 oldTile: existingTile,
-                newTile: { ...existingTile, variant: update.variant }
+                newTile: updatedTile
               })
-              
+
               // Apply immediately during stroke for visual feedback
               if (isStrokePainting) {
-                setTile(update.x, update.y, { ...existingTile, variant: update.variant })
+                setTile(update.x, update.y, updatedTile)
               }
+
+              workingTiles.set(neighborKey, updatedTile)
             }
           })
         })
@@ -437,39 +448,46 @@ function TilemapCanvasInner({
     } else if (tileMode === 'erase') {
       // Erase all tiles in brush area
       const changes: Array<{x: number, y: number, oldTile: TileData | undefined}> = []
-      
+
       affectedTiles.forEach(({x, y}) => {
-        const oldTile = getTile(x, y)
+        const key = coordToKey(x, y)
+        const oldTile = workingTiles.get(key)
         if (oldTile) {
           changes.push({x, y, oldTile})
-          
+
           // Apply immediately during stroke
           if (isStrokePainting) {
             deleteTile(x, y)
           }
+
+          workingTiles.delete(key)
         }
       })
-      
+
       // Collect neighbor variant updates if auto-tiling is enabled
       const neighborUpdates: Array<{x: number, y: number, oldTile: TileData, newTile: TileData}> = []
       affectedTiles.forEach(({x, y}) => {
-        const oldTile = getTile(x, y)
+        const oldTile = tiles.get(coordToKey(x, y))
         if (oldTile && autoTilingEnabled && hasSpriteAsset(oldTile.type)) {
-          const updates = calculateAutoTileUpdates(x, y, tiles, null)
+          const updates = calculateAutoTileUpdates(x, y, workingTiles, null)
           updates.forEach(update => {
-            const existingTile = getTile(update.x, update.y)
-            if (existingTile) {
+            const neighborKey = coordToKey(update.x, update.y)
+            const existingTile = workingTiles.get(neighborKey)
+            if (existingTile && existingTile.variant !== update.variant) {
+              const updatedTile = { ...existingTile, variant: update.variant }
               neighborUpdates.push({
                 x: update.x,
                 y: update.y,
                 oldTile: existingTile,
-                newTile: { ...existingTile, variant: update.variant }
+                newTile: updatedTile
               })
-              
+
               // Apply immediately during stroke
               if (isStrokePainting) {
-                setTile(update.x, update.y, { ...existingTile, variant: update.variant })
+                setTile(update.x, update.y, updatedTile)
               }
+
+              workingTiles.set(neighborKey, updatedTile)
             }
           })
         }

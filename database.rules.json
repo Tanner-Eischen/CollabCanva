@@ -50,10 +50,19 @@
         ".write": "auth != null"
       }
     },
+    "assetFolders": {
+      ".read": "auth != null && ((query.orderByChild == 'userId' && query.equalTo == auth.uid) || query.equalTo == null)",
+      "$folderId": {
+        ".read": "auth != null && data.child('userId').val() == auth.uid",
+        ".write": "auth != null && ((data.exists() && data.child('userId').val() == auth.uid) || (!data.exists() && newData.child('userId').val() == auth.uid))"
+      }
+    },
     "assets": {
-      "$userId": {
-        ".read": "$userId === auth.uid",
-        ".write": "$userId === auth.uid"
+      ".read": "auth != null",
+      ".indexOn": ["userId"],
+      "$assetId": {
+        ".write": "auth != null && ((data.exists() && data.child('userId').val() == auth.uid) || (!data.exists() && newData.child('userId').val() == auth.uid))",
+        ".validate": "newData.hasChildren(['userId', 'name', 'type', 'url', 'createdAt'])"
       }
     },
     "catalog": {

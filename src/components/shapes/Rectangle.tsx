@@ -18,6 +18,7 @@ interface RectangleProps {
   onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (width: number, height: number, rotation: number, x: number, y: number) => void
+  locked?: boolean
 }
 
 /**
@@ -41,29 +42,33 @@ export default function Rectangle({
   onDragStart,
   onDragEnd,
   onTransformEnd,
+  locked = false,
 }: RectangleProps) {
   const shapeRef = useRef<Konva.Rect>(null)
   const trRef = useRef<Konva.Transformer>(null)
 
   // Attach transformer to shape when selected
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
+    if (isSelected && !locked && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current])
       trRef.current.getLayer()?.batchDraw()
     }
-  }, [isSelected])
+  }, [isSelected, locked])
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragStart(node.x(), node.y())
   }
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragEnd(node.x(), node.y())
   }
 
   const handleTransformEnd = () => {
+    if (locked) return
     const node = shapeRef.current
     if (!node) return
 
@@ -92,20 +97,20 @@ export default function Rectangle({
         y={y}
         width={width}
         height={height}
-        rotation={rotation}
-        fill={fill}
-        stroke={strokeWidth && strokeWidth > 0 ? stroke : undefined}
-        strokeWidth={strokeWidth}
-        draggable
-        onClick={onSelect}
-        onTap={onSelect}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onTransformEnd={handleTransformEnd}
-      />
+      rotation={rotation}
+      fill={fill}
+      stroke={strokeWidth && strokeWidth > 0 ? stroke : undefined}
+      strokeWidth={strokeWidth}
+      draggable={!locked}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onTransformEnd={handleTransformEnd}
+    />
 
       {/* Transformer for resize/rotate handles - Figma style (PR-20) */}
-      {isSelected && (
+      {isSelected && !locked && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(oldBox, newBox) => {
