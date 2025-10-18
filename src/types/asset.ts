@@ -132,6 +132,13 @@ export interface SpriteSelection {
   y: number // y coordinate in source image
   width: number // sprite width
   height: number // sprite height
+
+  // Optional intelligent metadata generated during upload
+  category?: string // inferred sprite category (tree, rock, chest, etc.)
+  confidence?: number // confidence score for the inferred category (0-1)
+  dominantColors?: string[] // representative palette for the sprite (hex strings)
+  tags?: string[] // additional semantic tags derived from analysis
+  notes?: string // manual annotations added by the user
 }
 
 /**
@@ -146,10 +153,15 @@ export interface SpriteSheetMetadata {
   rows?: number // number of rows
   spacing?: number // spacing between frames
   margin?: number // margin around the sprite sheet
-  
+
   // Manual selections (for irregular sprites)
   spriteSelections?: SpriteSelection[] // manually defined sprite bounds
   selectionMode?: 'grid' | 'manual' // how sprites were defined
+
+  // Palette and semantic info extracted from selections
+  palette?: string[]
+  inferredMaterials?: string[]
+  inferredThemes?: string[]
 }
 
 /**

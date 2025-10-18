@@ -4,6 +4,20 @@
  * Analyzes transparency, edges, and connected components
  */
 
+import {
+  analyzeImageColors,
+  clampPalette,
+  suggestMaterialsFromColors,
+  suggestThemesFromColors
+} from '../colorAnalysis';
+
+export interface SpriteClassification {
+  category: string;
+  confidence: number;
+  tags: string[];
+  dominantColors: string[];
+}
+
 export interface DetectedSprite {
   x: number;
   y: number;
@@ -11,6 +25,7 @@ export interface DetectedSprite {
   height: number;
   area: number;
   confidence: number;
+  classification?: SpriteClassification;
 }
 
 export interface SpriteDetectionResult {
@@ -18,6 +33,9 @@ export interface SpriteDetectionResult {
   gridDetected: boolean;
   suggestedTileSize?: { width: number; height: number };
   method: 'grid' | 'transparency' | 'edge-detection';
+  palette?: string[];
+  inferredMaterials?: string[];
+  inferredThemes?: string[];
 }
 
 /**
@@ -92,18 +110,32 @@ export async function detectSpritesByTransparency(
         
         // Merge nearby sprites (helps with multi-part sprites)
         const mergedSprites = mergeNearbySprites(sprites, mergePadding);
-        
+
         // Snap sprites to 8px grid for game-friendly dimensions
         const snappedSprites = snapSpritesToGrid(mergedSprites, 8);
-        
+
+        // Classify each sprite
+        const spritesWithClassification = snappedSprites.map(sprite => {
+          const spriteData = ctx.getImageData(sprite.x, sprite.y, sprite.width, sprite.height);
+          const classification = classifySprite(spriteData, sprite);
+          return { ...sprite, classification };
+        });
+
         // Check if sprites form a grid pattern
-        const gridInfo = detectGridPattern(snappedSprites);
-        
+        const gridInfo = detectGridPattern(spritesWithClassification);
+
+        // Global color summary for the sheet
+        const globalAnalysis = analyzeImageColors(imageData, { sampleStep: 6, maxColors: 8 });
+        const globalPalette = clampPalette(globalAnalysis.dominant);
+
         resolve({
-          sprites: snappedSprites,
+          sprites: spritesWithClassification,
           gridDetected: gridInfo.isGrid,
           suggestedTileSize: gridInfo.tileSize,
-          method: 'transparency'
+          method: 'transparency',
+          palette: globalPalette,
+          inferredMaterials: suggestMaterialsFromColors(globalAnalysis),
+          inferredThemes: suggestThemesFromColors(globalAnalysis).map(t => t.theme)
         });
       } catch (error) {
         reject(error);
@@ -226,6 +258,100 @@ function mergeNearbySprites(sprites: DetectedSprite[], padding: number): Detecte
   return merged;
 }
 
+function classifySprite(imageData: ImageData, sprite: DetectedSprite): SpriteClassification {
+  const analysis = analyzeImageColors(imageData, { sampleStep: 2, maxColors: 6, alphaThreshold: 20 });
+  const palette = clampPalette(analysis.dominant, 5);
+  const totalPixels = imageData.width * imageData.height;
+
+  let opaquePixels = 0;
+  let topOpaque = 0;
+  let bottomOpaque = 0;
+
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    const alpha = imageData.data[i + 3];
+    if (alpha > 20) {
+      opaquePixels++;
+      const pixelIndex = i / 4;
+      const y = Math.floor(pixelIndex / imageData.width);
+      if (y < imageData.height / 3) topOpaque++;
+      if (y > (imageData.height * 2) / 3) bottomOpaque++;
+    }
+  }
+
+  const fillRatio = opaquePixels / Math.max(totalPixels, 1);
+  const canopyRatio = topOpaque / Math.max(opaquePixels, 1);
+  const baseRatio = bottomOpaque / Math.max(opaquePixels, 1);
+
+  const totalHue = analysis.hueHistogram.reduce((sum, value) => sum + value, 0) || 1;
+  const hueRatio = (start: number, end: number) => {
+    let total = 0;
+    for (let i = start; i < end; i++) total += analysis.hueHistogram[i];
+    return total / totalHue;
+  };
+
+  const green = hueRatio(9, 15);
+  const yellow = hueRatio(4, 9);
+  const blue = hueRatio(18, 25);
+  const red = hueRatio(0, 4) + hueRatio(35, 36);
+  const brown = hueRatio(2, 5);
+  const purple = hueRatio(25, 32);
+
+  const aspect = sprite.height / Math.max(sprite.width, 1);
+  const area = sprite.width * sprite.height;
+
+  let category = 'object';
+  let confidence = 0.45;
+  const tags = new Set<string>(['sprite']);
+
+  const hasGreenDominant = analysis.dominant.some(color => color.hue >= 80 && color.hue <= 160 && color.ratio > 0.12)
+
+  if ((green > 0.22 || hasGreenDominant) && aspect > 1.2 && canopyRatio > 0.35 && baseRatio < 0.55) {
+    category = 'tree';
+    confidence = 0.82;
+    tags.add('nature');
+    tags.add('foliage');
+  } else if (green > 0.2 && fillRatio < 0.55 && area < 2000) {
+    category = 'bush';
+    confidence = 0.7;
+    tags.add('nature');
+  } else if (blue > 0.25 && fillRatio > 0.45) {
+    category = aspect > 1.3 ? 'waterfall' : 'water_feature';
+    confidence = 0.78;
+    tags.add('water');
+  } else if (brown > 0.25 && aspect > 1.1 && fillRatio > 0.6) {
+    category = 'structure';
+    confidence = 0.68;
+    tags.add('building');
+  } else if (yellow > 0.22 && area < 1200) {
+    category = 'item';
+    confidence = 0.65;
+    tags.add('collectible');
+  } else if (purple > 0.2 && fillRatio > 0.4) {
+    category = 'crystal';
+    confidence = 0.72;
+    tags.add('magic');
+  } else if (analysis.averageLightness > 0.78 && analysis.averageSaturation < 0.25) {
+    category = 'light_source';
+    confidence = 0.6;
+    tags.add('illumination');
+  } else if (area <= 400 && fillRatio > 0.35) {
+    category = 'decor';
+    confidence = 0.55;
+  }
+
+  if (green > 0.18) tags.add('green');
+  if (blue > 0.18) tags.add('blue');
+  if (red > 0.18) tags.add('red');
+  if (palette.length === 0) palette.push('#888888');
+
+  return {
+    category,
+    confidence,
+    tags: Array.from(tags),
+    dominantColors: palette
+  };
+}
+
 /**
  * Detect if sprites form a grid pattern
  */
@@ -238,10 +364,6 @@ function detectGridPattern(sprites: DetectedSprite[]): {
   if (sprites.length < 4) {
     return { isGrid: false };
   }
-  
-  // Sort sprites by position
-  const sortedByY = [...sprites].sort((a, b) => a.y - b.y);
-  const sortedByX = [...sprites].sort((a, b) => a.x - b.x);
   
   // Check if sprites have consistent sizes
   const widths = sprites.map(s => s.width);
@@ -325,14 +447,37 @@ export function snapSpritesToGrid(
 export function detectedSpritesToSelections(sprites: DetectedSprite[], baseName?: string) {
   // Use provided base name or fallback to "sprite"
   const base = baseName || 'sprite';
-  
-  return sprites.map((sprite, index) => ({
-    id: `detected_${Date.now()}_${index}`,
-    name: `${base}_${String(index).padStart(2, '0')}`,
-    x: sprite.x,
-    y: sprite.y,
-    width: sprite.width,
-    height: sprite.height
-  }));
+  const timestamp = Date.now();
+
+  return sprites.map((sprite, index) => {
+    const classification = sprite.classification;
+    const categorySlug = classification?.category
+      ? classification.category.toLowerCase().replace(/\s+/g, '-')
+      : undefined;
+    const nameParts = [base];
+    if (categorySlug && categorySlug !== 'object') {
+      nameParts.push(categorySlug);
+    }
+    const name = `${nameParts.join('_')}_${String(index).padStart(2, '0')}`;
+
+    return {
+      id: `detected_${timestamp}_${index}`,
+      name,
+      x: sprite.x,
+      y: sprite.y,
+      width: sprite.width,
+      height: sprite.height,
+      category: classification?.category,
+      confidence: classification?.confidence,
+      dominantColors: classification?.dominantColors ? [...classification.dominantColors] : undefined,
+      tags: classification?.tags ? [...classification.tags] : undefined
+    };
+  });
 }
+
+export const __spriteDetectionInternals = {
+  classifySprite,
+  detectGridPattern,
+  mergeNearbySprites
+};
 

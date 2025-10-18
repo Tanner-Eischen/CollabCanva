@@ -7,15 +7,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Text } from 'react-konva';
 import useImage from 'use-image';
-
-export interface SpriteSelection {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { SpriteSelection } from '../../types/asset';
 
 interface ManualSpriteSelectorProps {
   imageUrl: string;

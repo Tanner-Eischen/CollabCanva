@@ -16,227 +16,21 @@ import {
   detectMaterialFromName,
   detectThemeFromName
 } from './kenneyTileNamer'
-
-/**
- * Color utilities
- */
-interface RGB {
-  r: number
-  g: number
-  b: number
-}
-
-function rgbToHue(r: number, g: number, b: number): number {
-  r /= 255
-  g /= 255
-  b /= 255
-  
-  const max = Math.max(r, g, b)
-  const min = Math.min(r, g, b)
-  const delta = max - min
-  
-  if (delta === 0) return 0
-  
-  let hue: number
-  if (max === r) {
-    hue = ((g - b) / delta) % 6
-  } else if (max === g) {
-    hue = (b - r) / delta + 2
-  } else {
-    hue = (r - g) / delta + 4
-  }
-  
-  hue = Math.round(hue * 60)
-  if (hue < 0) hue += 360
-  
-  return hue
-}
-
-function rgbToSaturation(r: number, g: number, b: number): number {
-  r /= 255
-  g /= 255
-  b /= 255
-  
-  const max = Math.max(r, g, b)
-  const min = Math.min(r, g, b)
-  
-  if (max === 0) return 0
-  
-  return (max - min) / max
-}
-
-function rgbToLightness(r: number, g: number, b: number): number {
-  const rNorm = r / 255
-  const gNorm = g / 255
-  const bNorm = b / 255
-  
-  const max = Math.max(rNorm, gNorm, bNorm)
-  const min = Math.min(rNorm, gNorm, bNorm)
-  
-  return (max + min) / 2
-}
-
-/**
- * Color histogram for dominant color detection
- */
-interface ColorHistogram {
-  hueHistogram: number[] // 36 bins (10° each)
-  saturationHistogram: number[] // 10 bins
-  lightnessHistogram: number[] // 10 bins
-  dominantColors: RGB[]
-}
-
-function analyzeColors(imageData: ImageData): ColorHistogram {
-  const hueHist = new Array(36).fill(0)
-  const satHist = new Array(10).fill(0)
-  const lightHist = new Array(10).fill(0)
-  const colorSamples: RGB[] = []
-  
-  // Sample every 4th pixel for performance
-  for (let i = 0; i < imageData.data.length; i += 16) {
-    const r = imageData.data[i]
-    const g = imageData.data[i + 1]
-    const b = imageData.data[i + 2]
-    const a = imageData.data[i + 3]
-    
-    // Skip transparent pixels
-    if (a < 128) continue
-    
-    const hue = rgbToHue(r, g, b)
-    const sat = rgbToSaturation(r, g, b)
-    const light = rgbToLightness(r, g, b)
-    
-    hueHist[Math.floor(hue / 10)]++
-    satHist[Math.min(Math.floor(sat * 10), 9)]++
-    lightHist[Math.min(Math.floor(light * 10), 9)]++
-    
-    colorSamples.push({ r, g, b })
-  }
-  
-  // Get dominant colors (top 5)
-  const dominantColors = colorSamples
-    .sort((a, b) => {
-      // Sort by frequency in color space
-      const aKey = `${Math.floor(a.r / 32)}-${Math.floor(a.g / 32)}-${Math.floor(a.b / 32)}`
-      const bKey = `${Math.floor(b.r / 32)}-${Math.floor(b.g / 32)}-${Math.floor(b.b / 32)}`
-      return aKey.localeCompare(bKey)
-    })
-    .slice(0, 5)
-  
-  return {
-    hueHistogram: hueHist,
-    saturationHistogram: satHist,
-    lightnessHistogram: lightHist,
-    dominantColors
-  }
-}
-
-/**
- * Detect theme based on color analysis
- */
-function detectThemeFromColors(histogram: ColorHistogram): Array<{ theme: string; confidence: number }> {
-  const themes: Array<{ theme: string; confidence: number }> = []
-  
-  // Green dominant → forest
-  const greenHue = histogram.hueHistogram.slice(9, 15).reduce((sum, val) => sum + val, 0) // 90-150°
-  const totalHue = histogram.hueHistogram.reduce((sum, val) => sum + val, 0)
-  if (greenHue / totalHue > 0.3) {
-    themes.push({ theme: 'forest', confidence: Math.min(greenHue / totalHue, 0.95) })
-  }
-  
-  // Gray dominant + low saturation → dungeon/stone
-  const avgSat = histogram.saturationHistogram.reduce((sum, val, i) => sum + val * i, 0) / totalHue / 10
-  const avgLight = histogram.lightnessHistogram.reduce((sum, val, i) => sum + val * i, 0) / totalHue / 10
-  if (avgSat < 0.3 && avgLight > 0.3 && avgLight < 0.7) {
-    themes.push({ theme: 'dungeon', confidence: 0.7 })
-  }
-  
-  // Blue dominant → water/ice/snow
-  const blueHue = histogram.hueHistogram.slice(18, 24).reduce((sum, val) => sum + val, 0) // 180-240°
-  if (blueHue / totalHue > 0.3) {
-    const isIce = avgLight > 0.7
-    themes.push({ theme: isIce ? 'snow' : 'water', confidence: Math.min(blueHue / totalHue, 0.9) })
-  }
-  
-  // Yellow/orange dominant → desert
-  const yellowHue = histogram.hueHistogram.slice(4, 9).reduce((sum, val) => sum + val, 0) // 40-90°
-  if (yellowHue / totalHue > 0.35) {
-    themes.push({ theme: 'desert', confidence: Math.min(yellowHue / totalHue, 0.85) })
-  }
-  
-  // Red/orange dominant → lava/fire
-  const redHue = histogram.hueHistogram.slice(0, 4).reduce((sum, val) => sum + val, 0) // 0-40°
-  if (redHue / totalHue > 0.3 && avgLight < 0.5) {
-    themes.push({ theme: 'lava', confidence: Math.min(redHue / totalHue, 0.8) })
-  }
-  
-  // High lightness + low saturation → snow
-  if (avgLight > 0.8 && avgSat < 0.2) {
-    themes.push({ theme: 'snow', confidence: 0.75 })
-  }
-  
-  // Sort by confidence
-  return themes.sort((a, b) => b.confidence - a.confidence)
-}
-
-/**
- * Detect materials based on color analysis
- */
-function detectMaterialsFromColors(histogram: ColorHistogram): string[] {
-  const materials: string[] = []
-  const totalHue = histogram.hueHistogram.reduce((sum, val) => sum + val, 0)
-  const avgSat = histogram.saturationHistogram.reduce((sum, val, i) => sum + val * i, 0) / totalHue / 10
-  const avgLight = histogram.lightnessHistogram.reduce((sum, val, i) => sum + val * i, 0) / totalHue / 10
-  
-  // Green → grass
-  const greenHue = histogram.hueHistogram.slice(9, 15).reduce((sum, val) => sum + val, 0)
-  if (greenHue / totalHue > 0.2) {
-    materials.push('grass')
-  }
-  
-  // Brown → dirt
-  const brownHue = histogram.hueHistogram.slice(2, 5).reduce((sum, val) => sum + val, 0)
-  if (brownHue / totalHue > 0.15 && avgSat < 0.5) {
-    materials.push('dirt')
-  }
-  
-  // Blue → water
-  const blueHue = histogram.hueHistogram.slice(18, 24).reduce((sum, val) => sum + val, 0)
-  if (blueHue / totalHue > 0.2) {
-    materials.push('water')
-  }
-  
-  // Gray → stone
-  if (avgSat < 0.2 && avgLight > 0.3 && avgLight < 0.7) {
-    materials.push('stone')
-  }
-  
-  // Yellow → sand
-  const yellowHue = histogram.hueHistogram.slice(4, 9).reduce((sum, val) => sum + val, 0)
-  if (yellowHue / totalHue > 0.25) {
-    materials.push('sand')
-  }
-  
-  // Light + low sat → snow
-  if (avgLight > 0.7 && avgSat < 0.2) {
-    materials.push('snow')
-  }
-  
-  // Dark + saturated → lava
-  if (avgLight < 0.4 && avgSat > 0.6) {
-    materials.push('lava')
-  }
-  
-  return materials
-}
+import {
+  analyzeImageColors,
+  clampPalette,
+  suggestMaterialsFromColors,
+  suggestThemesFromColors,
+  type RGB
+} from '../../utils/colorAnalysis'
 
 /**
  * Detect auto-tile system based on tile count and pattern
  */
 function detectAutoTileSystem(
   tileCount: number,
-  tileWidth: number,
-  tileHeight: number
+  _tileWidth: number,
+  _tileHeight: number
 ): {
   system: 'blob16' | 'blob47' | 'wang' | 'custom' | null
   confidence: number
@@ -270,8 +64,7 @@ function detectAutoTileSystem(
 function validateSeamlessTiling(
   imageData: ImageData,
   tileWidth: number,
-  tileHeight: number,
-  columns: number
+  tileHeight: number
 ): {
   quality: 'good' | 'issues' | 'unchecked'
   warnings: string[]
@@ -342,7 +135,7 @@ export async function analyzeTileset(
   assetName: string,
   baseMeta: Pick<TilesetMetadata, 'tileWidth' | 'tileHeight' | 'columns' | 'rows' | 'tileCount'>
 ): Promise<Partial<TilesetMetadata>> {
-  console.log(`[AssetAnalyzer] Analyzing tileset: ${assetName}`)
+  console.info(`[AssetAnalyzer] Analyzing tileset: ${assetName}`)
   
   // Start with base metadata
   const metadata: Partial<TilesetMetadata> = {
@@ -354,7 +147,7 @@ export async function analyzeTileset(
   const isKenney = detectKenneyTileset(assetName)
   
   if (isKenney) {
-    console.log('[AssetAnalyzer] Detected Kenney tileset')
+    console.info('[AssetAnalyzer] Detected Kenney tileset')
     const kenneyMeta = generateKenneyMetadata(
       assetName,
       baseMeta.tileCount,
@@ -372,13 +165,18 @@ export async function analyzeTileset(
     }
   } else {
     // Perform visual analysis for non-Kenney assets
-    console.log('[AssetAnalyzer] Performing color analysis')
-    const colorHist = analyzeColors(imageData)
-    
+    console.info('[AssetAnalyzer] Performing color analysis')
+    const colorAnalysis = analyzeImageColors(imageData, { sampleStep: 4, maxColors: 8 })
+    const palette = clampPalette(colorAnalysis.dominant)
+
+    if (palette.length > 0) {
+      metadata.palette = palette
+    }
+
     // Detect themes
-    const detectedThemes = detectThemeFromColors(colorHist)
+    const detectedThemes = suggestThemesFromColors(colorAnalysis)
     const themeNames = detectedThemes
-      .filter(t => t.confidence > 0.5)
+      .filter(t => t.confidence > 0.45)
       .map(t => t.theme)
     
     // Also check name-based themes
@@ -390,7 +188,7 @@ export async function analyzeTileset(
     }
     
     // Detect materials
-    const colorMaterials = detectMaterialsFromColors(colorHist)
+    const colorMaterials = suggestMaterialsFromColors(colorAnalysis)
     const nameMaterial = detectMaterialFromName(assetName)
     const combinedMaterials = Array.from(new Set([
       ...colorMaterials,
@@ -447,12 +245,11 @@ export async function analyzeTileset(
   }
   
   // Validate seamless tiling
-  console.log('[AssetAnalyzer] Validating seamless tiling')
+  console.info('[AssetAnalyzer] Validating seamless tiling')
   const seamValidation = validateSeamlessTiling(
     imageData,
     baseMeta.tileWidth,
-    baseMeta.tileHeight,
-    baseMeta.columns
+    baseMeta.tileHeight
   )
   
   metadata.validation = {
@@ -467,7 +264,7 @@ export async function analyzeTileset(
     metadata.tileSize = baseMeta.tileWidth
   }
   
-  console.log('[AssetAnalyzer] Analysis complete', metadata)
+  console.info('[AssetAnalyzer] Analysis complete', metadata)
   
   return metadata
 }

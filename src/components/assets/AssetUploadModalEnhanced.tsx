@@ -3,9 +3,16 @@
  * PR-31: Supports both auto-detection and manual sprite selection
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { ManualSpriteSelector } from './ManualSpriteSelector';
 import { detectSpritesByTransparency, detectedSpritesToSelections } from '../../utils/tilemap/spriteDetection';
+import {
+  autoDetectTileSize,
+  sliceTileset,
+  validateTilesetConfig,
+  getImageData,
+  loadImage
+} from '../../utils/tilemap/tilesetSlicer';
 import type {
   Asset,
   AssetType,
@@ -36,6 +43,40 @@ function checkIfCellHasContent(imageData: ImageData): boolean {
   // Require at least 10% of samples to be opaque to consider cell non-empty
   const opaqueRatio = opaquePixels / totalSamples;
   return opaqueRatio > 0.10;
+}
+
+function parseManualNamedTiles(input: string, tileCount: number): Record<string, number> {
+  const namedTiles: Record<string, number> = {};
+  const lines = input
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  let autoIndex = 0;
+  lines.forEach(line => {
+    if (!line) return;
+    const [rawName, rawIndex] = line.split('=').map(part => part.trim());
+    if (!rawName) return;
+
+    if (rawIndex !== undefined && rawIndex !== '') {
+      const parsedIndex = Number(rawIndex);
+      if (!Number.isNaN(parsedIndex) && parsedIndex >= 0 && parsedIndex < tileCount) {
+        namedTiles[rawName] = parsedIndex;
+      }
+    } else {
+      namedTiles[rawName] = autoIndex;
+      autoIndex++;
+    }
+  });
+
+  return namedTiles;
+}
+
+function parseCsvList(value: string): string[] {
+  return value
+    .split(',')
+    .map(token => token.trim())
+    .filter(Boolean);
 }
 
 type UploadMetadata = {
@@ -70,7 +111,7 @@ export function AssetUploadModalEnhanced({
   const [mode, setMode] = useState<UploadMode>('basic');
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Sprite selection state
   const [spriteSelections, setSpriteSelections] = useState<SpriteSelection[]>([]);
   
@@ -90,6 +131,21 @@ export function AssetUploadModalEnhanced({
 
   // File input ref for programmatic triggering
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Tileset detection state
+  const [tilesetImage, setTilesetImage] = useState<HTMLImageElement | null>(null);
+  const [tilesetDetecting, setTilesetDetecting] = useState(false);
+  const [tilesetError, setTilesetError] = useState<string | null>(null);
+  const [tilesetTileWidth, setTilesetTileWidth] = useState(32);
+  const [tilesetTileHeight, setTilesetTileHeight] = useState(32);
+  const [tilesetSpacing, setTilesetSpacing] = useState(0);
+  const [tilesetMargin, setTilesetMargin] = useState(0);
+  const [tilesetShowGrid, setTilesetShowGrid] = useState(true);
+  const tilesetCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [lastAnalyzedPreview, setLastAnalyzedPreview] = useState<string | null>(null);
+  const [manualTileNames, setManualTileNames] = useState('');
+  const [materialsInput, setMaterialsInput] = useState('');
+  const [themesInput, setThemesInput] = useState('');
 
   // Manual grid detection function
   const handleManualGridDetection = useCallback(async () => {
@@ -182,7 +238,7 @@ export function AssetUploadModalEnhanced({
       
       const regionText = useRegion && region ? ` in region (${processRegion.width}x${processRegion.height})` : '';
       const spacingText = spacing > 0 || margin > 0 ? `, spacing: ${spacing}px, margin: ${margin}px` : '';
-      console.log(`🎯 Manual Grid Detection: Created ${created} sprites, skipped ${skippedEmpty} empty cells (${cols}x${rows} grid, ${manualGridWidth}×${manualGridHeight} tiles${spacingText}${regionText})`);
+      console.info(`🎯 Manual Grid Detection: Created ${created} sprites, skipped ${skippedEmpty} empty cells (${cols}x${rows} grid, ${manualGridWidth}×${manualGridHeight} tiles${spacingText}${regionText})`);
     } catch (err) {
       console.error('Manual grid detection failed:', err);
     } finally {
@@ -217,6 +273,10 @@ export function AssetUploadModalEnhanced({
         setMode('manual-select');
       } else if (type === 'tileset') {
         setMode('basic');
+        setManualTileNames('');
+        setMaterialsInput('');
+        setThemesInput('');
+        setLastAnalyzedPreview(null);
       }
     } catch (err) {
       console.warn('Failed to process image:', err);
@@ -247,6 +307,101 @@ export function AssetUploadModalEnhanced({
     setTags(tags.filter(t => t !== tagToRemove));
   }, [tags]);
 
+  const updateSpriteMetadata = useCallback((id: string, updates: Partial<SpriteSelection>) => {
+    setSpriteSelections(prev => prev.map(sprite => sprite.id === id ? { ...sprite, ...updates } : sprite));
+  }, []);
+
+  const prepareTilesetPreview = useCallback(async (source: string, force: boolean = false) => {
+    if (!source || type !== 'tileset') return;
+    if (!force && lastAnalyzedPreview === source) return;
+
+    setTilesetDetecting(true);
+    setTilesetError(null);
+
+    try {
+      const img = await loadImage(source);
+      setTilesetImage(img);
+
+      const imageData = getImageData(img);
+      const detection = autoDetectTileSize(imageData);
+
+      setTilesetTileWidth(detection.tileWidth);
+      setTilesetTileHeight(detection.tileHeight);
+      setTilesetSpacing(detection.spacing);
+      setTilesetMargin(detection.margin);
+      setLastAnalyzedPreview(source);
+    } catch (err) {
+      setTilesetError(err instanceof Error ? err.message : 'Failed to analyze tileset');
+    } finally {
+      setTilesetDetecting(false);
+    }
+  }, [lastAnalyzedPreview, type]);
+
+  useEffect(() => {
+    if (preview && type === 'tileset') {
+      prepareTilesetPreview(preview);
+    }
+  }, [preview, type, prepareTilesetPreview]);
+
+  useEffect(() => {
+    if (type !== 'tileset') {
+      setTilesetImage(null);
+      setTilesetError(null);
+      setLastAnalyzedPreview(null);
+    } else {
+      setLastAnalyzedPreview(null);
+    }
+  }, [type]);
+
+  const tilesetAnalysis = useMemo(() => {
+    if (!tilesetImage) return null;
+
+    const validation = validateTilesetConfig(
+      tilesetImage.width,
+      tilesetImage.height,
+      tilesetTileWidth,
+      tilesetTileHeight,
+      tilesetSpacing,
+      tilesetMargin
+    );
+
+    if (!validation.valid) {
+      return { validation, slice: null };
+    }
+
+    try {
+      const imageData = getImageData(tilesetImage);
+      const slice = sliceTileset(imageData, tilesetTileWidth, tilesetTileHeight, tilesetSpacing, tilesetMargin);
+      return { validation, slice };
+    } catch (err) {
+      console.error('Failed to slice tileset preview:', err);
+      return { validation: { valid: false, errors: ['Failed to slice tileset image'] }, slice: null };
+    }
+  }, [tilesetImage, tilesetTileWidth, tilesetTileHeight, tilesetSpacing, tilesetMargin]);
+
+  useEffect(() => {
+    if (!tilesetCanvasRef.current || !tilesetImage) return;
+
+    const canvas = tilesetCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = tilesetImage.width;
+    canvas.height = tilesetImage.height;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(tilesetImage, 0, 0);
+
+    if (tilesetShowGrid && tilesetAnalysis?.slice) {
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+      ctx.lineWidth = 1;
+      tilesetAnalysis.slice.tiles.forEach(tile => {
+        ctx.strokeRect(tile.x + 0.5, tile.y + 0.5, tile.width, tile.height);
+      });
+    }
+  }, [tilesetAnalysis, tilesetImage, tilesetShowGrid]);
+
   const handleUpload = useCallback(async () => {
     if (!file || !name.trim()) {
       setError('Please provide a file and name');
@@ -263,6 +418,29 @@ export function AssetUploadModalEnhanced({
     setError(null);
 
     try {
+      let tilesetMetadataForUpload: TilesetMetadata | undefined;
+      if (type === 'tileset') {
+        if (!tilesetAnalysis?.slice) {
+          setError('Unable to detect tileset grid. Adjust the settings and try again.');
+          setIsUploading(false);
+          return;
+        }
+
+        const manualMaterials = parseCsvList(materialsInput);
+        const manualThemes = parseCsvList(themesInput);
+
+        tilesetMetadataForUpload = {
+          ...tilesetAnalysis.slice.metadata,
+          spacing: tilesetSpacing,
+          margin: tilesetMargin,
+          ...(manualMaterials.length > 0 ? { materials: manualMaterials } : {}),
+          ...(manualThemes.length > 0 ? { themes: manualThemes } : {}),
+          ...(manualTileNames.trim()
+            ? { namedTiles: parseManualNamedTiles(manualTileNames, tilesetAnalysis.slice.metadata.tileCount) }
+            : {})
+        };
+      }
+
       const asset = await onUpload(file, {
         name: name.trim(),
         type,
@@ -271,8 +449,10 @@ export function AssetUploadModalEnhanced({
           spriteSelections: spriteSelections,
           frameCount: spriteSelections.length,
           spacing: 0,
-          margin: 0
-        } : undefined
+          margin: 0,
+          selectionMode: 'manual'
+        } : undefined,
+        tilesetMetadata: tilesetMetadataForUpload
       });
 
       if (asset) {
@@ -288,14 +468,36 @@ export function AssetUploadModalEnhanced({
       setMode('basic');
       setSpriteSelections([]);
       setDetectionResult(null);
-      
+      setMaterialsInput('');
+      setThemesInput('');
+      setManualTileNames('');
+      setTilesetImage(null);
+      setTilesetError(null);
+      setLastAnalyzedPreview(null);
+
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setIsUploading(false);
     }
-  }, [file, name, type, tags, mode, spriteSelections, onUpload, onClose, onUploadComplete]);
+  }, [
+    file,
+    name,
+    type,
+    tags,
+    mode,
+    spriteSelections,
+    onUpload,
+    onClose,
+    onUploadComplete,
+    tilesetAnalysis,
+    materialsInput,
+    themesInput,
+    manualTileNames,
+    tilesetSpacing,
+    tilesetMargin
+  ]);
 
   const handleVisualDetection = useCallback(async () => {
     if (!preview) return;
@@ -314,7 +516,7 @@ export function AssetUploadModalEnhanced({
       
       // Convert detected sprites to selections (REPLACES all existing selections)
       const selections = detectedSpritesToSelections(result.sprites, baseName);
-      console.log('🎯 Auto-Detect Complete (WHOLE IMAGE):', {
+      console.info('🎯 Auto-Detect Complete (WHOLE IMAGE):', {
         spritesDetected: result.sprites.length,
         selections: selections,
         gridDetected: result.gridDetected,
@@ -330,7 +532,7 @@ export function AssetUploadModalEnhanced({
       // Show success message
       if (result.sprites.length > 0) {
         setError(null);
-        console.log(`✅ Detected ${result.sprites.length} sprites automatically from ENTIRE image!`);
+        console.info(`✅ Detected ${result.sprites.length} sprites automatically from ENTIRE image!`);
       } else {
         setError('No sprites detected. Try manual selection or adjust the image.');
       }
@@ -351,6 +553,22 @@ export function AssetUploadModalEnhanced({
     setError(null);
   }, []);
 
+  const handleTilesetAutoDetect = useCallback(() => {
+    if (preview && type === 'tileset') {
+      prepareTilesetPreview(preview, true);
+    }
+  }, [prepareTilesetPreview, preview, type]);
+
+  useEffect(() => {
+    if (type !== 'spritesheet') return;
+    if (detectionResult?.inferredMaterials && materialsInput.length === 0) {
+      setMaterialsInput(detectionResult.inferredMaterials.join(', '));
+    }
+    if (detectionResult?.inferredThemes && themesInput.length === 0) {
+      setThemesInput(detectionResult.inferredThemes.join(', '));
+    }
+  }, [detectionResult, materialsInput.length, themesInput.length, type]);
+
   // Auto-run visual detection when switching to manual mode
   useEffect(() => {
     if (mode === 'manual-select' && preview && !detectionResult && spriteSelections.length === 0) {
@@ -361,333 +579,238 @@ export function AssetUploadModalEnhanced({
 
   if (!isOpen) return null;
 
+  const tilesetMetadata = tilesetAnalysis?.slice?.metadata;
+  const tilesetValidation = tilesetAnalysis?.validation;
+  const tilesetWarnings = tilesetValidation && tilesetValidation.warnings.length > 0 ? tilesetValidation.warnings : [];
+  const spriteSummary = detectionResult ? {
+    count: detectionResult.sprites?.length ?? 0,
+    grid: detectionResult.gridDetected ? detectionResult.suggestedTileSize : null
+  } : null;
+
+  const spriteReady = type !== 'spritesheet' || spriteSelections.length > 0;
+  const tilesetReady = type !== 'tileset' || Boolean(tilesetAnalysis?.slice);
+  const canUpload = !isUploading && name.trim().length > 0 && spriteReady && tilesetReady;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[95vh] flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-200">
-          <h2 className="text-2xl font-bold text-gray-800">Upload Asset</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl max-h-[95vh] flex flex-col overflow-hidden">
+        <header className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-800">Upload Asset</h2>
+            {file && <p className="text-xs text-slate-500">{file.name}</p>}
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-2xl w-8 h-8 flex items-center justify-center"
+            className="text-slate-500 hover:text-slate-700 text-xl flex items-center justify-center w-8 h-8"
             disabled={isUploading}
           >
             ×
           </button>
-        </div>
+        </header>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {!file ? (
-            /* File upload area */
-            <div className="p-6">
-              <div
-                className="border-2 border-dashed rounded-lg p-12 text-center transition-colors border-gray-300 hover:border-gray-400"
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-              >
-                <div className="mb-4">
-                  <svg
-                    className="mx-auto h-16 w-16 text-gray-400"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-                <p className="text-gray-600 mb-3 text-lg">Drag and drop your image here, or</p>
-                <div className="relative inline-block">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleFileSelect(e.target.files[0]);
-                      }
-                    }}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    title="Browse Files"
+        {!file ? (
+          <div className="flex-1 overflow-auto bg-slate-50 p-8">
+            <div
+              className="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center bg-white shadow-inner hover:border-slate-400 transition-colors"
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            >
+              <div className="mb-6 text-slate-400">
+                <svg className="mx-auto h-16 w-16" viewBox="0 0 48 48" fill="none" stroke="currentColor">
+                  <path
+                    d="M28 8H12a4 4 0 00-4 4v24a4 4 0 004 4h24a4 4 0 004-4V20"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
-                  <div className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium pointer-events-none">
-                    Browse Files
-                  </div>
-                </div>
-                <p className="text-sm text-gray-500 mt-3">
-                  Supported: PNG, JPG, WEBP (max 10MB)
-                </p>
+                  <path
+                    d="M20 24l4 4 12-12"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </div>
-
-              {/* Type selection */}
-              <div className="mt-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  What type of asset is this?
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    onClick={() => setType('image')}
-                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
-                      type === 'image'
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-semibold">Single Image</div>
-                    <div className="text-xs text-gray-500 mt-1">Individual sprite or icon</div>
-                  </button>
-                  <button
-                    onClick={() => setType('spritesheet')}
-                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
-                      type === 'spritesheet'
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-semibold">Sprite Sheet</div>
-                    <div className="text-xs text-gray-500 mt-1">Multiple sprites (trees, items)</div>
-                  </button>
-                  <button
-                    onClick={() => setType('tileset')}
-                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
-                      type === 'tileset'
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="font-semibold">Tileset</div>
-                    <div className="text-xs text-gray-500 mt-1">Uniform grid tiles</div>
-                  </button>
+              <p className="text-slate-600 text-lg mb-4">Drag & drop art here</p>
+              <div className="relative inline-flex">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      handleFileSelect(e.target.files[0]);
+                    }
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="px-6 py-2.5 bg-blue-600 text-white rounded-md text-sm font-medium shadow hover:bg-blue-700 transition-colors pointer-events-none">
+                  Browse Files
                 </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-3">PNG, JPG, WEBP up to 10MB</p>
+            </div>
+
+            <div className="mt-8">
+              <span className="block text-sm font-medium text-slate-700 mb-2">Asset type</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <button
+                  onClick={() => setType('image')}
+                  className={`rounded-lg border px-4 py-3 text-left shadow-sm transition ${type === 'image' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                >
+                  <div className="font-semibold">Single Image</div>
+                  <div className="text-xs text-slate-500 mt-1">Standalone sprite or icon</div>
+                </button>
+                <button
+                  onClick={() => { setType('spritesheet'); setMode('manual-select'); }}
+                  className={`rounded-lg border px-4 py-3 text-left shadow-sm transition ${type === 'spritesheet' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                >
+                  <div className="font-semibold">Sprite Sheet</div>
+                  <div className="text-xs text-slate-500 mt-1">Multiple sprites (trees, items)</div>
+                </button>
+                <button
+                  onClick={() => setType('tileset')}
+                  className={`rounded-lg border px-4 py-3 text-left shadow-sm transition ${type === 'tileset' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                >
+                  <div className="font-semibold">Tileset</div>
+                  <div className="text-xs text-slate-500 mt-1">Uniform grid tiles</div>
+                </button>
               </div>
             </div>
-          ) : (
-            /* Configuration area */
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Tabs */}
-              <div className="border-b border-gray-200 px-6">
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => setMode('basic')}
-                    className={`px-4 py-3 font-medium transition-colors border-b-2 ${
-                      mode === 'basic'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    Basic Info
-                  </button>
-                  {(type === 'spritesheet' || type === 'tileset') && (
-                    <button
-                      onClick={() => setMode('manual-select')}
-                      className={`px-4 py-3 font-medium transition-colors border-b-2 ${
-                        mode === 'manual-select'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700'
-                      }`}
-                    >
-                      Sprite Selection
-                      {spriteSelections.length > 0 && (
-                        <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800">
-                          {spriteSelections.length}
-                        </span>
-                      )}
-                    </button>
+          </div>
+        ) : (
+          <div className="flex flex-1 overflow-hidden">
+            <div className="flex-1 flex flex-col bg-slate-50">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 text-xs text-slate-600">
+                <div className="flex items-center gap-4">
+                  <span className="uppercase tracking-wide text-[10px] text-slate-500">{type.toUpperCase()}</span>
+                  {type === 'spritesheet' && spriteSummary && (
+                    <span>{spriteSummary.count} sprites{spriteSummary.grid ? ` • grid ${spriteSummary.grid.width}×${spriteSummary.grid.height}` : ''}</span>
+                  )}
+                  {type === 'tileset' && tilesetMetadata && (
+                    <span>{tilesetMetadata.columns}×{tilesetMetadata.rows} • {tilesetMetadata.tileCount} tiles</span>
                   )}
                 </div>
-              </div>
-
-              {/* Tab content */}
-              <div className="flex-1 overflow-auto">
-                {mode === 'basic' && (
-                  <div className="p-6 space-y-4 max-w-2xl">
-                    {/* Preview */}
-                    {preview && (
-                      <div className="border rounded-lg p-4 bg-gray-50">
-                        <img src={preview} alt="Preview" className="max-w-full max-h-64 mx-auto rounded" />
-                      </div>
-                    )}
-
-                    {/* Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Asset Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g., forest_trees"
-                      />
-                    </div>
-
-                    {/* Tags */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-                      <div className="flex gap-2 mb-2">
+                <div className="flex items-center gap-3">
+                  {type === 'spritesheet' && (
+                    <>
+                      <button
+                        onClick={handleVisualDetection}
+                        disabled={isDetectingSprites}
+                        className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-medium shadow hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {isDetectingSprites ? 'Detecting…' : 'Auto Detect'}
+                      </button>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-600">
+                        <span>Grid</span>
                         <input
-                          type="text"
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Add tags..."
+                          type="number"
+                          min={8}
+                          max={512}
+                          value={manualGridWidth}
+                          onChange={(e) => setManualGridWidth(Math.max(8, Number(e.target.value) || 8))}
+                          className="w-12 px-1 py-0.5 border border-slate-300 rounded"
+                        />
+                        <span>×</span>
+                        <input
+                          type="number"
+                          min={8}
+                          max={512}
+                          value={manualGridHeight}
+                          onChange={(e) => setManualGridHeight(Math.max(8, Number(e.target.value) || 8))}
+                          className="w-12 px-1 py-0.5 border border-slate-300 rounded"
+                        />
+                        <span>Space</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={64}
+                          value={spacing}
+                          onChange={(e) => setSpacing(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-10 px-1 py-0.5 border border-slate-300 rounded"
+                        />
+                        <span>Margin</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={64}
+                          value={margin}
+                          onChange={(e) => setMargin(Math.max(0, Number(e.target.value) || 0))}
+                          className="w-10 px-1 py-0.5 border border-slate-300 rounded"
                         />
                         <button
-                          onClick={handleAddTag}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                          onClick={handleManualGridDetection}
+                          disabled={isDetectingSprites || (useRegion && !region)}
+                          className="px-2 py-1 bg-slate-200 hover:bg-slate-300 rounded text-[11px] font-medium disabled:opacity-50"
                         >
-                          Add
+                          Apply
                         </button>
-                      </div>
-                      {tags.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                            >
-                              {tag}
-                              <button onClick={() => handleRemoveTag(tag)} className="hover:text-blue-900">
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* File info */}
-                    <div className="text-sm text-gray-600">
-                      <p>File: {file.name}</p>
-                      <p>Size: {(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-
-                    <button
-                      onClick={handleReset}
-                      className="text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      Choose different file
-                    </button>
-                  </div>
-                )}
-
-                {mode === 'manual-select' && preview && (
-                  <div className="flex flex-col h-full">
-                    {/* Compact Controls Toolbar */}
-                    <div className="p-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={handleVisualDetection}
-                          disabled={isDetectingSprites}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 text-xs font-medium"
-                        >
-                          {isDetectingSprites ? (
-                            <>
-                              <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
-                              Detecting...
-                            </>
-                          ) : (
-                            <>Auto-Detect</>
-                          )}
-                        </button>
-                        
-                        <div className="w-px h-6 bg-gray-300" />
-                        
-                        <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                        <label className="inline-flex items-center gap-1 ml-2 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={useRegion}
                             onChange={(e) => setUseRegion(e.target.checked)}
                             className="rounded"
                           />
-                          Region
+                          <span>Region</span>
                         </label>
-                        
-                        <span className="text-xs text-gray-600">Grid:</span>
-                        <input
-                          type="number"
-                          min="8"
-                          max="256"
-                          value={manualGridWidth}
-                          onChange={(e) => setManualGridWidth(Math.max(8, parseInt(e.target.value) || 8))}
-                          className="w-14 px-1.5 py-1 border border-gray-300 rounded text-xs"
-                        />
-                        <span className="text-xs text-gray-500">×</span>
-                        <input
-                          type="number"
-                          min="8"
-                          max="256"
-                          value={manualGridHeight}
-                          onChange={(e) => setManualGridHeight(Math.max(8, parseInt(e.target.value) || 8))}
-                          className="w-14 px-1.5 py-1 border border-gray-300 rounded text-xs"
-                        />
-                        
-                        <span className="text-xs text-gray-600">Spacing:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="32"
-                          value={spacing}
-                          onChange={(e) => setSpacing(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="w-12 px-1.5 py-1 border border-gray-300 rounded text-xs"
-                          title="Space between tiles (px)"
-                        />
-                        
-                        <span className="text-xs text-gray-600">Margin:</span>
-                        <input
-                          type="number"
-                          min="0"
-                          max="32"
-                          value={margin}
-                          onChange={(e) => setMargin(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="w-12 px-1.5 py-1 border border-gray-300 rounded text-xs"
-                          title="Margin around entire grid (px)"
-                        />
-                        
-                        <button
-                          onClick={handleManualGridDetection}
-                          disabled={isDetectingSprites || (useRegion && !region)}
-                          className="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50 text-xs font-medium"
-                          title={useRegion && !region ? "Draw a region first" : "Apply grid to " + (useRegion ? "selected region" : "entire image")}
-                        >
-                          Apply {useRegion && region ? "to Region" : ""}
-                        </button>
-                        
-                        {useRegion && region && (
-                          <button
-                            onClick={() => setRegion(null)}
-                            className="px-2 py-1.5 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-xs"
-                            title="Clear the selected region"
-                          >
-                            Clear Region
-                          </button>
-                        )}
                       </div>
-                      
-                      {/* Detection result - compact */}
-                      {detectionResult && (
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-600">Detected: <span className="font-semibold text-gray-900">{detectionResult.sprites.length}</span></span>
-                          {detectionResult.gridDetected && detectionResult.suggestedTileSize && (
-                            <span className="text-gray-600">({detectionResult.suggestedTileSize.width}×{detectionResult.suggestedTileSize.height}px)</span>
-                          )}
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
-                        <span>{spriteSelections.length} sprites</span>
-                      </div>
+                    </>
+                  )}
+                  {type === 'tileset' && (
+                    <button
+                      onClick={handleTilesetAutoDetect}
+                      disabled={tilesetDetecting}
+                      className="px-3 py-1.5 rounded-md bg-blue-600 text-white text-xs font-medium shadow hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {tilesetDetecting ? 'Detecting…' : 'Auto Detect Grid'}
+                    </button>
+                  )}
+                  {type === 'tileset' && (
+                    <label className="inline-flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={tilesetShowGrid}
+                        onChange={(e) => setTilesetShowGrid(e.target.checked)}
+                        className="rounded"
+                      />
+                      Grid Overlay
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto">
+                {type === 'tileset' && tilesetImage ? (
+                  <div className="p-4 flex flex-col gap-3">
+                    <div className="flex flex-wrap gap-3 text-xs text-slate-600">
+                      <span>Tile: {tilesetTileWidth}×{tilesetTileHeight}px</span>
+                      {tilesetMetadata && <span>Tiles: {tilesetMetadata.tileCount}</span>}
+                      {tilesetWarnings.length > 0 && <span className="text-amber-600">Warnings: {tilesetWarnings.length}</span>}
                     </div>
-                    
-                    {/* Manual Sprite Selector */}
-                    <div className="flex-1 overflow-hidden">
+                    <div className="flex justify-center">
+                      <canvas
+                        ref={tilesetCanvasRef}
+                        className="border border-slate-300 bg-white rounded shadow-inner"
+                        style={{ imageRendering: 'pixelated', maxWidth: '100%', maxHeight: '70vh' }}
+                      />
+                    </div>
+                    {tilesetError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded">
+                        {tilesetError}
+                      </div>
+                    )}
+                    {tilesetWarnings.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs px-3 py-2 rounded space-y-1">
+                        {tilesetWarnings.map((warn, idx) => (
+                          <div key={idx}>⚠️ {warn}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : type === 'spritesheet' && preview ? (
+                  <div className="h-full flex flex-col">
+                    <div className="flex-1">
                       <ManualSpriteSelector
                         imageUrl={preview}
                         onSelectionsChange={(selections) => setSpriteSelections(selections)}
@@ -698,47 +821,243 @@ export function AssetUploadModalEnhanced({
                       />
                     </div>
                   </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center p-6">
+                    {preview && (
+                      <img src={preview} alt="Preview" className="max-h-[70vh] max-w-full rounded shadow" />
+                    )}
+                  </div>
                 )}
               </div>
-
-              {/* Error message */}
-              {error && (
-                <div className="mx-6 mb-4 bg-red-50 border border-red-200 rounded p-3">
-                  <p className="text-sm text-red-800">{error}</p>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="border-t border-gray-200 p-6 flex justify-between">
-                <button
-                  onClick={handleReset}
-                  disabled={isUploading}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                >
-                  Start Over
-                </button>
-                <div className="flex gap-3">
-                  <button
-                    onClick={onClose}
-                    disabled={isUploading}
-                    className="px-6 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleUpload}
-                    disabled={!file || !name.trim() || isUploading}
-                    className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isUploading ? 'Uploading...' : 'Upload Asset'}
-                  </button>
-                </div>
-              </div>
             </div>
-          )}
-        </div>
+
+            <aside className="w-full md:w-80 border-l border-slate-200 bg-white flex flex-col overflow-y-auto">
+              <div className="p-4 space-y-5">
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-600">Asset Type</label>
+                  <div className="flex gap-2">
+                    {(['image', 'spritesheet', 'tileset'] as AssetType[]).map(option => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          setType(option);
+                          if (option === 'spritesheet') setMode('manual-select');
+                        }}
+                        className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium border ${type === option ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-200 hover:border-slate-300 text-slate-600'}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Asset Name</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    placeholder="forest_tileset"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Tags</label>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddTag();
+                        }
+                      }}
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      placeholder="environment, forest"
+                    />
+                    <button
+                      onClick={handleAddTag}
+                      className="px-3 py-2 bg-slate-200 text-slate-700 rounded text-xs font-medium hover:bg-slate-300"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map(tag => (
+                        <span key={tag} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-[11px]">
+                          {tag}
+                          <button onClick={() => handleRemoveTag(tag)} className="hover:text-blue-900">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Materials</label>
+                    <input
+                      type="text"
+                      value={materialsInput}
+                      onChange={(e) => setMaterialsInput(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="grass, stone"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Themes</label>
+                    <input
+                      type="text"
+                      value={themesInput}
+                      onChange={(e) => setThemesInput(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="forest, dungeon"
+                    />
+                  </div>
+                </div>
+
+                {type === 'tileset' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <label className="flex flex-col gap-1">
+                        <span className="font-semibold text-slate-600">Tile Width</span>
+                        <input
+                          type="number"
+                          value={tilesetTileWidth}
+                          min={1}
+                          onChange={(e) => setTilesetTileWidth(Math.max(1, Number(e.target.value) || 1))}
+                          className="px-2 py-1 border border-slate-300 rounded"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="font-semibold text-slate-600">Tile Height</span>
+                        <input
+                          type="number"
+                          value={tilesetTileHeight}
+                          min={1}
+                          onChange={(e) => setTilesetTileHeight(Math.max(1, Number(e.target.value) || 1))}
+                          className="px-2 py-1 border border-slate-300 rounded"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="font-semibold text-slate-600">Spacing</span>
+                        <input
+                          type="number"
+                          value={tilesetSpacing}
+                          min={0}
+                          onChange={(e) => setTilesetSpacing(Math.max(0, Number(e.target.value) || 0))}
+                          className="px-2 py-1 border border-slate-300 rounded"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="font-semibold text-slate-600">Margin</span>
+                        <input
+                          type="number"
+                          value={tilesetMargin}
+                          min={0}
+                          onChange={(e) => setTilesetMargin(Math.max(0, Number(e.target.value) || 0))}
+                          className="px-2 py-1 border border-slate-300 rounded"
+                        />
+                      </label>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Manual Tile Names</label>
+                      <textarea
+                        value={manualTileNames}
+                        onChange={(e) => setManualTileNames(e.target.value)}
+                        rows={4}
+                        className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="grass.center = 0\nwater.edge = 5"
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">One per line, optional index.</p>
+                    </div>
+                  </div>
+                )}
+
+                {type === 'spritesheet' && spriteSelections.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-slate-600">Sprite Metadata</span>
+                      <span className="text-[11px] text-slate-500">{spriteSelections.length} sprites</span>
+                    </div>
+                    <div className="max-h-48 overflow-auto space-y-2 pr-1">
+                      {spriteSelections.map(sprite => (
+                        <div key={sprite.id} className="border border-slate-200 rounded p-2 bg-slate-50 text-xs space-y-1">
+                          <div className="flex items-center justify-between text-[11px] text-slate-500">
+                            <span>{sprite.name}</span>
+                            <span>{sprite.width}×{sprite.height}</span>
+                          </div>
+                          <input
+                            type="text"
+                            value={sprite.category || ''}
+                            onChange={(e) => updateSpriteMetadata(sprite.id, { category: e.target.value || undefined })}
+                            className="w-full px-2 py-1 border border-slate-300 rounded"
+                            placeholder="category (tree, rock)"
+                          />
+                          <input
+                            type="text"
+                            value={(sprite.tags || []).join(', ')}
+                            onChange={(e) => updateSpriteMetadata(sprite.id, { tags: parseCsvList(e.target.value) })}
+                            className="w-full px-2 py-1 border border-slate-300 rounded"
+                            placeholder="tags"
+                          />
+                          <textarea
+                            value={sprite.notes || ''}
+                            onChange={(e) => updateSpriteMetadata(sprite.id, { notes: e.target.value || undefined })}
+                            rows={2}
+                            className="w-full px-2 py-1 border border-slate-300 rounded"
+                            placeholder="notes"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-xs px-3 py-2 rounded">
+                    {error}
+                  </div>
+                )}
+              </div>
+            </aside>
+          </div>
+        )}
+
+        <footer className="px-5 py-3 border-t border-slate-200 bg-white flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div className="flex items-center gap-3 text-xs text-slate-500">
+            {type === 'spritesheet' && !spriteReady && <span className="text-amber-600">Select at least one sprite.</span>}
+            {type === 'tileset' && !tilesetReady && <span className="text-amber-600">Adjust grid settings to slice tileset.</span>}
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={handleReset}
+              disabled={isUploading}
+              className="px-4 py-2 text-xs font-medium text-slate-600 border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50"
+            >
+              Start Over
+            </button>
+            <button
+              onClick={onClose}
+              disabled={isUploading}
+              className="px-4 py-2 text-xs font-medium text-slate-600 border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleUpload}
+              disabled={!canUpload}
+              className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 rounded shadow hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isUploading ? 'Uploading…' : 'Upload Asset'}
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   );
 }
-
