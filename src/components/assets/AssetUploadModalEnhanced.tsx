@@ -865,6 +865,7 @@ export function AssetUploadModalEnhanced({
     }
   }, [tilesetMetadata]);
 
+
   useEffect(() => {
     if (!tilesetCanvasRef.current || !tilesetImage) return;
 

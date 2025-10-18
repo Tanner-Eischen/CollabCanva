@@ -34,6 +34,24 @@ const EXAMPLE_COMMANDS = [
   'Align all shapes to the left',
 ];
 
+const ADVANCED_COMMANDS = [
+  {
+    label: 'Procedural Terrain (60×60)',
+    command: 'Generate a 60x60 natural terrain tilemap using Perlin noise with beaches and mountain ridges.',
+    hint: 'Great base map with smooth autotiled transitions.',
+  },
+  {
+    label: 'Cave Dungeon Generator',
+    command: 'Create a 48x48 cave dungeon using cellular automata at 45% density and 6 iterations.',
+    hint: 'Organic rooms with winding corridors.',
+  },
+  {
+    label: 'Autotile River Path',
+    command: 'Paint an autotiled river running diagonally across the map using the selected water tiles.',
+    hint: 'Leverages auto-tiling variants for natural banks.',
+  },
+];
+
 export const AIChatPanel: React.FC<AIChatPanelProps> = ({
   canvasId,
   userId,
@@ -47,8 +65,10 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+  const [showAdvancedCommands, setShowAdvancedCommands] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const advancedCommandsRef = useRef<HTMLDivElement>(null);
 
   const { messages, isLoading, error, sendMessage, clearMessages } = useAIChat({
     canvasId,
@@ -72,10 +92,44 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
     }
   }, [isCollapsed, showPopup]);
 
+  useEffect(() => {
+    if (!showAdvancedCommands) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (advancedCommandsRef.current && !advancedCommandsRef.current.contains(event.target as Node)) {
+        setShowAdvancedCommands(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowAdvancedCommands(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [showAdvancedCommands]);
+
+  useEffect(() => {
+    if (isCollapsed) {
+      setShowAdvancedCommands(false);
+    }
+  }, [isCollapsed]);
+
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
 
     const assetContext = getAssetAIContext({ tileSize: tilemapMeta?.tileSize });
+
+    setShowAdvancedCommands(false);
 
     sendMessage(input, {
       selectedShapes,
@@ -97,6 +151,13 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
   const handleExampleClick = (command: string) => {
     setInput(command);
+    setShowAdvancedCommands(false);
+    inputRef.current?.focus();
+  };
+
+  const handleAdvancedCommand = (command: string) => {
+    setInput(command);
+    setShowAdvancedCommands(false);
     inputRef.current?.focus();
   };
 
@@ -341,7 +402,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
       </div>
 
       {/* Inline Status Bar AI Chat - Rendered in status bar left slot */}
-      <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto flex-1 min-w-0">
+      <div className="relative flex items-center gap-1 sm:gap-2 pointer-events-auto flex-1 min-w-0">
         {/* AI Indicator */}
         <div className="flex items-center gap-1 flex-shrink-0">
           <div className="w-1 h-1 bg-green-400 rounded-full animate-pulse" />
@@ -359,6 +420,43 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
           className="flex-1 min-w-[80px] max-w-md px-2 py-0.5 text-[10px] focus:outline-none bg-white/10 text-white placeholder-white/50 rounded border border-white/20 focus:border-blue-400 transition-colors"
           disabled={isLoading}
         />
+
+        {/* Advanced commands bubble */}
+        <div ref={advancedCommandsRef} className="relative flex-shrink-0">
+          <button
+            onClick={() => setShowAdvancedCommands((prev) => !prev)}
+            className={`p-1 rounded-full transition-colors text-white/80 hover:text-white hover:bg-purple-500/40 ${
+              showAdvancedCommands ? 'bg-purple-500/40' : 'bg-white/10'
+            }`}
+            title="Advanced AI commands"
+          >
+            ✨
+          </button>
+
+          {showAdvancedCommands && (
+            <div className="absolute bottom-full right-0 mb-2 w-64 bg-slate-950/95 border border-white/15 rounded-xl shadow-2xl backdrop-blur-md p-3 space-y-2 z-50">
+              <div className="text-xs font-semibold text-white flex items-center gap-2">
+                <span>Advanced Commands</span>
+                <span className="text-[10px] text-white/60">AI-ready prompts</span>
+              </div>
+              <ul className="space-y-1.5">
+                {ADVANCED_COMMANDS.map((item, index) => (
+                  <li key={`${item.label}-${index}`}>
+                    <button
+                      onClick={() => handleAdvancedCommand(item.command)}
+                      className="w-full text-left text-[11px] text-white/90 hover:text-white hover:bg-white/10 rounded-lg px-2 py-1.5 transition-colors"
+                    >
+                      <div className="font-medium truncate" title={item.command}>{item.label}</div>
+                      {item.hint && (
+                        <div className="text-[10px] text-white/60 truncate">{item.hint}</div>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
 
         {/* Mode indicator - hide on very small screens */}
         <span className="hidden sm:inline text-[10px] text-white/70 flex-shrink-0">
