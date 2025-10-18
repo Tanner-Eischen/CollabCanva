@@ -1,20 +1,32 @@
 /**
  * TilePalette Component
- * Left-side panel for selecting tiles, modes, and tile size
- * Reuses Toolbar styling for consistency
+ * Tilemap toolbar styled like the primary canvas toolbar with nested popovers
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { TileMode, PaletteColor } from '../../types/tilemap'
 import { hasSpriteAsset, getTilePath } from '../../constants/tilemapDefaults'
 import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
+import { ToolButton } from '../toolbar/ToolButton'
+import type { TilemapQuickAction } from '../ai/AIQuickActionsPanel'
+
+// Icon asset paths from public/assets used throughout the palette toolbar
+const paintBrushIcon = '/assets/paint-brush-32.png'
+const eraserIcon = '/assets/eraser-32.png'
+const paintBucketIcon = '/assets/paint-bucket-32.png'
+const eyedropperIcon = '/assets/eyedropper-32.png'
+const handToolIcon = '/assets/hand-tool-32.svg'
+const autoTileIcon = '/assets/auto-tile-32.svg'
+const gridIcon = '/assets/grid-32.svg'
+const tilePaletteIcon = '/assets/tile-palette-32.svg'
+const aiSparkIcon = '/assets/ai-spark-32.svg'
 
 interface TilePaletteProps {
   palette: PaletteColor[]
   selectedIndex: number
   onSelectIndex: (index: number) => void
   selectedVariant?: number
-  onVariantChange?: (variant: number) => void
+  onVariantChange?: (variant: number | undefined) => void
   plainColor?: string
   onPlainColorChange?: (color: string) => void
   autoTilingEnabled?: boolean
@@ -27,12 +39,50 @@ interface TilePaletteProps {
   cursorPosition?: { x: number; y: number }
   showGrid?: boolean
   onToggleGrid?: () => void
+  isPanModeActive?: boolean
+  onPanModeToggle?: () => void
+  isAIQuickActionsVisible?: boolean
+  onAIQuickActionsToggle?: () => void
+  isAdvancedAIOpen?: boolean
+  onAdvancedAIToggle?: () => void
+  quickActionsPreview?: TilemapQuickAction[]
 }
 
-/**
- * Tile palette panel - Figma-style vertical panel
- * Shows palette colors, drawing modes, and tile size selector
- */
+const MODE_BUTTONS: Array<{
+  mode: TileMode
+  iconPath?: string
+  icon?: string
+  label: string
+  shortcut: string
+}> = [
+  {
+    mode: 'stamp',
+    iconPath: paintBrushIcon,
+    label: 'Paint',
+    shortcut: 'B'
+  },
+  {
+    mode: 'erase',
+    iconPath: eraserIcon,
+    label: 'Erase',
+    shortcut: 'E'
+  },
+  {
+    mode: 'fill',
+    iconPath: paintBucketIcon,
+    label: 'Fill',
+    shortcut: 'F'
+  },
+  {
+    mode: 'pick',
+    iconPath: eyedropperIcon,
+    label: 'Eyedropper',
+    shortcut: 'I'
+  },
+]
+
+const VARIANT_COUNT = 9
+
 export default function TilePalette({
   palette,
   selectedIndex,
@@ -51,41 +101,39 @@ export default function TilePalette({
   cursorPosition,
   showGrid = true,
   onToggleGrid,
+  isPanModeActive = false,
+  onPanModeToggle,
+  isAIQuickActionsVisible = false,
+  onAIQuickActionsToggle,
+  isAdvancedAIOpen = false,
+  onAdvancedAIToggle,
+  quickActionsPreview,
 }: TilePaletteProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isTilePanelOpen, setIsTilePanelOpen] = useState(false)
+  const [isAIOptionsOpen, setIsAIOptionsOpen] = useState(false)
   const [variantPopupTile, setVariantPopupTile] = useState<number | null>(null)
-  const [backdropActive, setBackdropActive] = useState(false)
+
   const selectedTile = palette[selectedIndex]
   const isPlainTile = selectedTile?.type === 'plain'
-  const hasSprite = selectedTile && hasSpriteAsset(selectedTile.type)
+  const hasSprite = selectedTile ? hasSpriteAsset(selectedTile.type) : false
+  const previewTilePath = hasSprite ? getTilePath(selectedTile.type, selectedVariant ?? 4) : null
+
   const topOffset = PRESENCE_BAR_HEIGHT + HUD_SAFE_MARGIN
   const bottomOffset = TILE_STATUS_BAR_HEIGHT + HUD_SAFE_MARGIN
-  
-  // Activate backdrop after a brief delay to prevent immediate closure
-  useEffect(() => {
-    if (variantPopupTile !== null) {
-      const timer = setTimeout(() => setBackdropActive(true), 100)
-      return () => clearTimeout(timer)
-    } else {
-      setBackdropActive(false)
-    }
-  }, [variantPopupTile])
-  // Keyboard shortcuts for palette selection (1-9)
+
+  // Keyboard shortcuts for palette selection and mode switching
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
-      
-      // Number keys 1-9 for palette selection
-      const key = parseInt(e.key)
+
+      const key = parseInt(e.key, 10)
       if (key >= 1 && key <= Math.min(9, palette.length)) {
         onSelectIndex(key - 1)
         e.preventDefault()
       }
-      
-      // Mode shortcuts
+
       switch (e.key.toLowerCase()) {
         case 'b':
           onModeChange('stamp')
@@ -105,366 +153,444 @@ export default function TilePalette({
           break
       }
     }
-    
+
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [palette.length, onSelectIndex, onModeChange])
-  
-  const modes: Array<{
-    mode: TileMode
-    iconPath?: string
-    icon?: string
-    label: string
-    shortcut: string
-  }> = [
-    { 
-      mode: 'stamp', 
-      iconPath: '/assets/paint-brush-32.png',
-      label: 'Paint', 
-      shortcut: 'B' 
-    },
-    { 
-      mode: 'erase', 
-      iconPath: '/assets/eraser-32.png',
-      label: 'Erase', 
-      shortcut: 'E' 
-    },
-    { 
-      mode: 'fill', 
-      iconPath: '/assets/paint-bucket-32.png',
-      label: 'Fill', 
-      shortcut: 'F' 
-    },
-    { 
-      mode: 'pick', 
-      iconPath: '/assets/eyedropper-32.png',
-      label: 'Eyedropper', 
-      shortcut: 'I' 
-    },
-  ]
-  
+
+  // Close variant selector when auto-tiling changes or panel closes
+  useEffect(() => {
+    if (!isTilePanelOpen || autoTilingEnabled) {
+      setVariantPopupTile(null)
+    }
+  }, [isTilePanelOpen, autoTilingEnabled])
+
+  const tilePreviewBackground = useMemo(() => {
+    if (isPlainTile) {
+      return plainColor
+    }
+    return '#2a2a2a'
+  }, [isPlainTile, plainColor])
+
+  const aiToolbarActive = isAIOptionsOpen || isAIQuickActionsVisible || isAdvancedAIOpen
+  const quickActionsSummary = useMemo(
+    () => (quickActionsPreview ?? []).slice(0, 5),
+    [quickActionsPreview]
+  )
+
+  const handleTileSelect = (index: number) => {
+    onSelectIndex(index)
+
+    const tile = palette[index]
+    if (!autoTilingEnabled && tile && hasSpriteAsset(tile.type)) {
+      setVariantPopupTile(index)
+    } else {
+      setVariantPopupTile(null)
+    }
+  }
+
   return (
     <>
-    <div 
-      className="shadow-lg flex flex-col absolute z-50 rounded-lg transition-all duration-300 ease-in-out overflow-hidden bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md"
-      style={{
-        width: isExpanded ? '206px' : '60px',
-        left: '8px',
-        top: `${topOffset}px`,
-        bottom: `${bottomOffset}px`,
-      }}
-      onMouseEnter={() => setIsExpanded(true)}
-      onMouseLeave={() => setIsExpanded(false)}
-    >
-      {/* Dot pattern overlay */}
-      <div 
-        className="absolute inset-0 pointer-events-none" 
+      <div
+        className="absolute left-2 z-50"
         style={{
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)',
-          backgroundSize: '16px 16px'
+          top: `${topOffset}px`,
+          bottom: `${bottomOffset}px`,
         }}
-      ></div>
+      >
+        <div className="w-12 h-full rounded-lg shadow-lg relative overflow-hidden bg-gradient-to-br from-slate-900/95 to-slate-800/95 backdrop-blur-md">
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)',
+              backgroundSize: '16px 16px'
+            }}
+          />
 
-      {/* Content */}
-      <div className={`relative z-10 flex flex-col h-full overflow-y-auto overflow-x-hidden tilemap-panel-scroll ${isExpanded ? 'p-1.75 gap-1.75' : 'p-1.75 gap-1.75'}`}>
-        {/* Header */}
-        {isExpanded && (
-          <div className="text-white/90 font-bold text-[14px] flex-shrink-0 uppercase tracking-wider px-2 py-1.5 rounded bg-gradient-to-r from-slate-900/95 to-slate-800/95 border border-white/10">
-            Tilemap
-        </div>
-        )}
-        
-        {/* Mode Buttons */}
-        <div className="flex flex-col gap-0.5 flex-shrink-0">
-          {isExpanded && (
-            <div className="text-white/90 text-[8px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-gradient-to-r from-slate-900/95 to-slate-800/95 border border-white/10">Mode</div>
-          )}
-          <div className="flex flex-col gap-0.5">
-            {modes.map((modeOption) => (
-              <button
+          <div className="relative z-10 w-full h-full flex flex-col items-center gap-2 py-3 overflow-y-auto overflow-x-hidden toolbar-scrollable">
+            {MODE_BUTTONS.map((modeOption) => (
+              <ToolButton
                 key={modeOption.mode}
+                icon={modeOption.icon}
+                iconPath={modeOption.iconPath}
+                label={modeOption.label}
+                shortcut={modeOption.shortcut}
+                active={mode === modeOption.mode}
                 onClick={() => onModeChange(modeOption.mode)}
-                className={`
-                  rounded transition-all flex items-center gap-2
-                  ${mode === modeOption.mode
-                    ? 'bg-white/30 text-white shadow-lg'
-                    : 'bg-white/5 text-white/60 hover:bg-white/15 hover:text-white'
-                  }
-                  ${isExpanded ? 'justify-start p-1.5' : 'justify-center p-1.5'}
-                `}
-                      title={`${modeOption.label} (${modeOption.shortcut})`}
-                    >
-                      {modeOption.iconPath ? (
-                        <img 
-                          src={modeOption.iconPath} 
-                          alt={modeOption.label}
-                          className="flex-shrink-0 w-4 h-4"
-                          style={{ filter: mode === modeOption.mode ? 'brightness(1)' : 'brightness(0.7)' }}
-                        />
-                      ) : (
-                        <span className="flex-shrink-0 text-base leading-none">{modeOption.icon}</span>
-                      )}
-                      {isExpanded && <span className="text-[10px] font-medium">{modeOption.label}</span>}
-              </button>
+                themed
+              />
             ))}
-          </div>
-        </div>
-        
-        {/* Brush Size Control */}
-        {onBrushSizeChange && (
-          <div className="flex flex-col gap-0.5 flex-shrink-0">
-            {isExpanded && (
-              <div className="text-white/90 text-[8px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-gradient-to-r from-slate-900/95 to-slate-800/95 border border-white/10">Brush</div>
-            )}
-            {isExpanded ? (
-              <div className="flex flex-col gap-0.5">
-                <input
-                  type="range"
-                  min="1"
-                  max="5"
-                  step="1"
-                  value={brushSize}
-                  onChange={(e) => onBrushSizeChange(Number(e.target.value))}
-                  className="w-full cursor-pointer brush-slider"
-                  style={{
-                    background: `linear-gradient(to right, white 0%, white ${((brushSize - 1) / 4) * 100}%, rgba(255,255,255,0.2) ${((brushSize - 1) / 4) * 100}%, rgba(255,255,255,0.2) 100%)`
-                  }}
-                />
-                <div className="text-white/70 text-[9px] text-center font-mono">{brushSize}×{brushSize}</div>
-              </div>
-            ) : (
-              <div className="text-white/90 text-[9px] text-center font-mono bg-white/5 py-1 rounded">
-                {brushSize}
-          </div>
-            )}
-        </div>
-        )}
-        
-                {/* Grid Toggle */}
-                {onToggleGrid && (
-                  <button
-                    onClick={onToggleGrid}
-                    className={`
-                      rounded transition-all flex items-center gap-2 p-1.5
-                      ${showGrid
-                        ? 'bg-white/30 text-white shadow-md'
-                        : 'bg-white/5 text-white/60 hover:bg-white/15'
-                      }
-                      ${isExpanded ? 'justify-start' : 'justify-center'}
-                    `}
-                    title="Toggle Grid (G)"
-                  >
-                    <span className="flex-shrink-0 text-base leading-none">#</span>
-                    {isExpanded && <span className="text-[10px] font-medium">Grid</span>}
-                  </button>
-                )}
-        
-        {/* Palette Tiles */}
-        <div className={`flex flex-col flex-shrink-0 ${isExpanded ? 'gap-1' : 'gap-0.5'}`}>
-          {isExpanded && (
-            <div className="text-white/90 text-[8px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-gradient-to-r from-slate-900/95 to-slate-800/95 border border-white/10">
-              Tiles
-          </div>
-        )}
-          <div className={`flex flex-col ${isExpanded ? 'gap-1' : 'gap-0.5'}`}>
-            {palette.map((paletteColor, index) => {
-              const hasSprite = hasSpriteAsset(paletteColor.type)
-              const tilePath = hasSprite ? getTilePath(paletteColor.type, 4) : null // Use variant 4 (center) for preview
-              const isPlain = paletteColor.type === 'plain'
-              
-              return (
-                <button
-                  key={index}
-                  onClick={(e) => {
-                    e.stopPropagation() // Prevent click from bubbling to backdrop
-                    onSelectIndex(index)
-                    // Show variant popup if auto-tiling is off and this is a sprite tile
-                    if (!autoTilingEnabled && hasSpriteAsset(paletteColor.type)) {
-                      setVariantPopupTile(index)
-                    }
-                  }}
-                  className={`
-                    rounded transition-all relative overflow-hidden flex items-center gap-2
-                    ${selectedIndex === index
-                      ? 'ring-2 ring-white/60 bg-white/25 shadow-md'
-                      : 'ring-1 ring-white/10 hover:ring-white/30 hover:bg-white/10'
-                    }
-                    ${isExpanded ? 'p-1.5' : 'p-1 justify-center'}
-                  `}
-                  title={`${paletteColor.name}${index < 9 ? ` (${index + 1})` : ''}`}
-                >
-                  {/* Tile Preview */}
-                  <div 
-                    className={`rounded flex-shrink-0 overflow-hidden flex items-center justify-center ${isExpanded ? 'w-6 h-6' : 'w-5 h-5'}`}
-                    style={{ 
-                      backgroundColor: isPlain ? (index === selectedIndex ? plainColor : paletteColor.color) : '#2a2a2a',
-                      border: '1px solid rgba(255,255,255,0.2)'
-                    }}
-                  >
-                    {hasSprite && tilePath ? (
-                      <img
-                        src={tilePath}
-                        alt={paletteColor.name}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'contain',
-                          imageRendering: 'pixelated',
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                  
-                  {isExpanded && (
-                    <>
-                      {/* Tile name */}
-                      <span className="text-white/90 text-[10px] font-medium flex-1 text-left">
-                        {paletteColor.name}
-                      </span>
-                      
-                      {/* Keyboard shortcut */}
-                {index < 9 && (
-                        <span className="text-[8px] font-mono text-white/40">
-                    {index + 1}
-                        </span>
-                      )}
-                    </>
-                )}
-              </button>
-              )
-            })}
-          </div>
-        </div>
-        
-        {/* Color Picker for Plain Tile */}
-        {isPlainTile && isExpanded && (
-          <div className="flex flex-col gap-1 flex-shrink-0">
-            <div className="text-white/90 text-[8px] uppercase tracking-wider font-semibold px-2 py-1 rounded bg-gradient-to-r from-slate-900/95 to-slate-800/95 border border-white/10">
-              Color
-            </div>
-            <input
-              type="color"
-              value={plainColor}
-              onChange={(e) => onPlainColorChange?.(e.target.value)}
-              className="w-full h-8 rounded cursor-pointer border border-white/20"
-            />
-            </div>
-          )}
-        
-                {/* Auto-Tiling Toggle (only show for sprite tiles) */}
-                {hasSprite && onToggleAutoTiling && (
-                  <button
-                    onClick={onToggleAutoTiling}
-                    className={`
-                      rounded transition-all flex items-center gap-2 p-1.5
-                      ${autoTilingEnabled
-                        ? 'bg-white/30 text-white shadow-md'
-                        : 'bg-white/5 text-white/60 hover:bg-white/15'
-                      }
-                      ${isExpanded ? 'justify-start' : 'justify-center'}
-                    `}
-                    title="Toggle Auto-Tiling (A)"
-                  >
-                    <span className="flex-shrink-0 text-base leading-none">⚡</span>
-                    {isExpanded && <span className="text-[10px] font-medium">Auto-Tile</span>}
-                  </button>
-                )}
-        
-        {/* Variant info (only show when auto-tiling is OFF) - removed in favor of popup */}
-        
-        {/* Status Info (only show when expanded) */}
-        {isExpanded && (
-          <div className="flex flex-col gap-1 text-[8px] flex-shrink-0 mt-auto pt-2 border-t border-white/10">
-            {cursorPosition && (
-              <div className="flex justify-between text-white/50 px-1">
-                <span className="font-semibold">Position</span>
-                <span className="font-mono text-white/80">
-                  {cursorPosition.x},{cursorPosition.y}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between text-white/50 px-1">
-              <span className="font-semibold">Tiles</span>
-              <span className="font-mono text-white/80">{tileCount}</span>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
 
-    {/* Horizontal Variant Popup (shows when clicking a tile with auto-tiling off) */}
-    {variantPopupTile !== null && !autoTilingEnabled && (
-      <>
-        {/* Backdrop to close popup */}
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => {
-            if (backdropActive) {
-              setVariantPopupTile(null)
-            }
-          }}
-        />
-        
-        {/* Variant selector popup - positioned relative to the toolbar */}
-        <div 
-          className="absolute z-50 bg-gradient-to-br from-slate-700 to-slate-800 rounded-xl shadow-2xl p-2 border border-white/20"
-          onClick={(e) => e.stopPropagation()}
+            <div className="w-9 h-px my-1 bg-white/20" />
+
+            <ToolButton
+              iconPath={handToolIcon}
+              label="Hand Tool"
+              shortcut="Space"
+              active={isPanModeActive}
+              onClick={() => onPanModeToggle?.()}
+              themed
+            />
+
+            <ToolButton
+              iconPath={autoTileIcon}
+              label="Auto-Tile"
+              shortcut="A"
+              active={autoTilingEnabled}
+              onClick={() => onToggleAutoTiling?.()}
+              themed
+              disabled={!onToggleAutoTiling}
+            />
+
+            <ToolButton
+              iconPath={gridIcon}
+              label="Toggle Grid"
+              shortcut="G"
+              active={showGrid}
+              onClick={() => onToggleGrid?.()}
+              themed
+              disabled={!onToggleGrid}
+            />
+
+            <div className="flex-1" />
+
+            <ToolButton
+              iconPath={tilePaletteIcon}
+              label="Tile Palette"
+              shortcut="T"
+              active={isTilePanelOpen}
+              ariaHasPopup="dialog"
+              ariaExpanded={isTilePanelOpen}
+              ariaControls="tile-palette-popover"
+              onClick={() => {
+                setIsTilePanelOpen(prev => !prev)
+                setIsAIOptionsOpen(false)
+              }}
+              themed
+            />
+
+            <ToolButton
+              iconPath={aiSparkIcon}
+              label="AI Commands"
+              active={aiToolbarActive}
+              ariaHasPopup="menu"
+              ariaExpanded={isAIOptionsOpen}
+              ariaControls="tile-ai-popover"
+              onClick={() => {
+                setIsAIOptionsOpen(prev => !prev)
+                setIsTilePanelOpen(false)
+              }}
+              themed
+            />
+          </div>
+        </div>
+      </div>
+
+      {isTilePanelOpen && (
+        <div
+          id="tile-palette-popover"
+          className="absolute z-40"
           style={{
-            left: isExpanded ? '234px' : '88px', // Position to the right of toolbar (8px + width + 8px margin)
-            top: '50%',
-            transform: 'translateY(-50%)',
-            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)',
-            backgroundSize: '16px 16px'
+            left: '72px',
+            top: `${topOffset}px`,
+            bottom: `${bottomOffset}px`,
+            width: '260px',
           }}
         >
-            <div className="text-white/90 text-[10px] font-semibold mb-2 px-1">
-              {palette[variantPopupTile]?.name} Variants
+          <div className="h-full flex flex-col rounded-xl shadow-2xl bg-gradient-to-br from-slate-900/95 to-slate-800/95 border border-white/10 backdrop-blur-md overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+              <div className="text-white/80 text-[11px] uppercase tracking-wide font-semibold">Tile Palette</div>
+              <button
+                onClick={() => setIsTilePanelOpen(false)}
+                className="text-white/60 hover:text-white transition-colors text-sm"
+                aria-label="Close tile palette"
+              >
+                ✕
+              </button>
             </div>
-            <div className="flex gap-1">
-              {Array.from({ length: 9 }, (_, variant) => {
-                const tilePath = getTilePath(palette[variantPopupTile].type, variant)
-                
-                return (
-                  <button
-                    key={variant}
-                    onClick={() => {
-                      onVariantChange?.(variant)
-                      setVariantPopupTile(null)
-                    }}
-                    className={`
-                      w-10 h-10 rounded-lg transition-all relative overflow-hidden flex items-center justify-center
-                      ${selectedVariant === variant
-                        ? 'ring-2 ring-white/70 bg-white/30 shadow-lg'
-                        : 'ring-1 ring-white/20 hover:ring-white/50 hover:bg-white/15'
-                      }
-                    `}
-                    style={{ 
-                      backgroundColor: selectedVariant === variant ? undefined : '#2a2a2a',
-                      padding: '2px',
-                    }}
-                    title={`Variant ${variant + 1}`}
-                  >
+
+            <div className="flex-1 px-3 py-3 space-y-3 overflow-y-auto overflow-x-hidden tilemap-panel-scroll">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-12 h-12 rounded-lg border border-white/20 flex items-center justify-center overflow-hidden"
+                  style={{
+                    backgroundColor: tilePreviewBackground,
+                  }}
+                >
+                  {hasSprite && previewTilePath ? (
                     <img
-                      src={tilePath}
-                      alt={`Variant ${variant + 1}`}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'contain',
-                        imageRendering: 'pixelated',
-                      }}
+                      src={previewTilePath}
+                      alt={selectedTile?.name || 'Tile preview'}
+                      className="w-full h-full object-contain"
+                      style={{ imageRendering: 'pixelated' }}
                     />
-                    <div className="absolute bottom-0 right-0 text-[7px] font-mono bg-black/80 text-white px-1 leading-none rounded-tl">
-                      {variant + 1}
-                    </div>
-                  </button>
-                )
-              })}
+                  ) : null}
+                </div>
+                <div className="flex-1 text-white/80 text-xs leading-tight space-y-1">
+                  <div className="font-semibold text-sm text-white">{selectedTile?.name || 'Select a tile'}</div>
+                  <div className="text-white/50">Type: {selectedTile?.type || '—'}</div>
+                  <div className="text-white/50">Brush: {brushSize}×{brushSize}</div>
+                </div>
+              </div>
+
+              {isPlainTile && (
+                <div className="space-y-1">
+                  <div className="text-white/70 text-[10px] uppercase tracking-wide font-semibold">Plain Tile Color</div>
+                  <input
+                    type="color"
+                    value={plainColor}
+                    onChange={(e) => onPlainColorChange?.(e.target.value)}
+                    className="w-full h-8 rounded cursor-pointer border border-white/20"
+                  />
+                </div>
+              )}
+
+              {onBrushSizeChange && (
+                <div className="space-y-2">
+                  <div className="text-white/70 text-[10px] uppercase tracking-wide font-semibold">Brush Size</div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="5"
+                    step="1"
+                    value={brushSize}
+                    onChange={(e) => onBrushSizeChange(Number(e.target.value))}
+                    className="w-full cursor-pointer brush-slider"
+                    style={{
+                      background: `linear-gradient(to right, white 0%, white ${((brushSize - 1) / 4) * 100}%, rgba(255,255,255,0.2) ${((brushSize - 1) / 4) * 100}%, rgba(255,255,255,0.2) 100%)`
+                    }}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <div className="text-white/70 text-[10px] uppercase tracking-wide font-semibold">Tiles</div>
+                <div className="flex flex-col gap-1">
+                  {palette.map((paletteColor, index) => {
+                    const sprite = hasSpriteAsset(paletteColor.type)
+                    const tilePath = sprite ? getTilePath(paletteColor.type, 4) : null
+                    const isPlain = paletteColor.type === 'plain'
+
+                    return (
+                      <button
+                        key={paletteColor.type + index}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleTileSelect(index)
+                        }}
+                        className={`
+                          w-full rounded-lg transition-all relative overflow-hidden flex items-center gap-2 p-2
+                          ${selectedIndex === index
+                            ? 'ring-2 ring-white/60 bg-white/20 shadow-lg'
+                            : 'ring-1 ring-white/10 hover:ring-white/30 hover:bg-white/10'
+                          }
+                        `}
+                        title={`${paletteColor.name}${index < 9 ? ` (${index + 1})` : ''}`}
+                      >
+                        <div
+                          className="w-8 h-8 rounded flex-shrink-0 border border-white/20 overflow-hidden flex items-center justify-center"
+                          style={{
+                            backgroundColor: isPlain ? (index === selectedIndex ? plainColor : paletteColor.color) : '#2a2a2a'
+                          }}
+                        >
+                          {sprite && tilePath ? (
+                            <img
+                              src={tilePath}
+                              alt={paletteColor.name}
+                              className="w-full h-full object-contain"
+                              style={{ imageRendering: 'pixelated' }}
+                            />
+                          ) : null}
+                        </div>
+                        <div className="flex-1 flex items-center justify-between">
+                          <span className="text-white/90 text-sm font-medium text-left truncate">
+                            {paletteColor.name}
+                          </span>
+                          {index < 9 && (
+                            <span className="text-[9px] font-mono text-white/40">{index + 1}</span>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {!autoTilingEnabled && variantPopupTile !== null && palette[variantPopupTile] && (
+                <div className="space-y-2 border border-white/10 rounded-lg p-2 bg-white/5">
+                  <div className="flex items-center justify-between text-white/80 text-[11px] font-semibold">
+                    <span>{palette[variantPopupTile].name} Variants</span>
+                    <button
+                      onClick={() => setVariantPopupTile(null)}
+                      className="text-white/50 hover:text-white text-xs"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Array.from({ length: VARIANT_COUNT }, (_, variant) => {
+                      const tilePath = getTilePath(palette[variantPopupTile].type, variant)
+
+                      return (
+                        <button
+                          key={variant}
+                          onClick={() => {
+                            onVariantChange?.(variant)
+                            setVariantPopupTile(null)
+                          }}
+                          className={`
+                            w-full aspect-square rounded-lg transition-all relative overflow-hidden flex items-center justify-center
+                            ${selectedVariant === variant
+                              ? 'ring-2 ring-white/70 bg-white/20 shadow-lg'
+                              : 'ring-1 ring-white/20 hover:ring-white/50 hover:bg-white/10'
+                            }
+                          `}
+                          style={{
+                            backgroundColor: selectedVariant === variant ? undefined : '#2a2a2a',
+                            padding: '2px',
+                          }}
+                          title={`Variant ${variant + 1}`}
+                        >
+                          <img
+                            src={tilePath}
+                            alt={`Variant ${variant + 1}`}
+                            className="w-full h-full object-contain"
+                            style={{ imageRendering: 'pixelated' }}
+                          />
+                          <div className="absolute bottom-0 right-0 text-[8px] font-mono bg-black/80 text-white px-1 leading-none rounded-tl">
+                            {variant + 1}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[10px] text-white/50">
+                    Auto-tiling is off. Pick a specific edge variant to paint.
+                  </p>
+                </div>
+              )}
+
+              {hasSprite && onToggleAutoTiling && (
+                <button
+                  onClick={onToggleAutoTiling}
+                  className={`
+                    w-full rounded-lg px-3 py-2 text-left text-sm transition-all
+                    ${autoTilingEnabled
+                      ? 'bg-white/20 text-white shadow-md'
+                      : 'bg-white/10 text-white/70 hover:bg-white/15'}
+                  `}
+                >
+                  {autoTilingEnabled ? 'Auto-Tiling Enabled' : 'Enable Auto-Tiling'}
+                </button>
+              )}
+
+              <div className="grid grid-cols-2 gap-2 text-[10px] text-white/60 pt-1">
+                {cursorPosition && (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-semibold uppercase tracking-wide">Position</span>
+                    <span className="font-mono text-white/80">
+                      {cursorPosition.x},{cursorPosition.y}
+                    </span>
+                  </div>
+                )}
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-semibold uppercase tracking-wide">Tiles</span>
+                  <span className="font-mono text-white/80">{tileCount}</span>
+                </div>
+              </div>
             </div>
           </div>
-        </>
+        </div>
+      )}
+
+      {isAIOptionsOpen && (
+        <div
+          id="tile-ai-popover"
+          className="absolute z-40"
+          style={{
+            left: '72px',
+            top: `${topOffset}px`,
+            width: '220px',
+          }}
+        >
+          <div className="rounded-xl shadow-2xl bg-gradient-to-br from-slate-900/95 to-slate-800/95 border border-white/10 backdrop-blur-md overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+              <div className="text-white/80 text-[11px] uppercase tracking-wide font-semibold">AI Commands</div>
+              <button
+                onClick={() => setIsAIOptionsOpen(false)}
+                className="text-white/60 hover:text-white transition-colors text-sm"
+                aria-label="Close AI options"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3 space-y-3 text-sm text-white/80">
+              <div>
+                <p className="text-xs text-white/60 leading-snug">
+                  Choose which AI interface you want to open.
+                </p>
+                <div className="mt-2 flex flex-col gap-2">
+                  <button
+                    className={`w-full px-3 py-2 rounded-lg text-left transition-all flex items-center gap-2 ${isAIQuickActionsVisible ? 'bg-white/25 text-white shadow-md' : 'bg-white/10 hover:bg-white/20'}`}
+                    onClick={() => {
+                      onAIQuickActionsToggle?.()
+                      setIsAIOptionsOpen(false)
+                    }}
+                  >
+                    <span>✨</span>
+                    <span className="font-medium">Quick Commands</span>
+                  </button>
+                  <button
+                    className={`w-full px-3 py-2 rounded-lg text-left transition-all flex items-center gap-2 ${isAdvancedAIOpen ? 'bg-white/25 text-white shadow-md' : 'bg-white/10 hover:bg-white/20'}`}
+                    onClick={() => {
+                      onAdvancedAIToggle?.()
+                      setIsAIOptionsOpen(false)
+                    }}
+                  >
+                    <span>🧠</span>
+                    <span className="font-medium">Advanced Commands</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10">
+                <div className="text-[10px] uppercase tracking-wide text-white/50 font-semibold">
+                  Quick command previews
+                </div>
+                {quickActionsSummary.length > 0 ? (
+                  <ul className="mt-2 space-y-2 text-xs text-white/80">
+                    {quickActionsSummary.map((action) => (
+                      <li
+                        key={action.id}
+                        className="flex gap-2 items-start bg-white/5 rounded-lg px-2 py-1.5"
+                      >
+                        <span className="text-base leading-tight flex-shrink-0">
+                          {action.icon ?? '•'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-white font-medium leading-tight">
+                            {action.text}
+                          </div>
+                          <div className="text-[10px] text-white/60 leading-snug break-words">
+                            {action.prompt}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-[11px] text-white/60 leading-snug">
+                    Start painting your map to unlock context-aware quick commands.
+                  </p>
+                )}
+                <p className="mt-2 text-[10px] text-white/40 leading-snug">
+                  Use “Quick Commands” to open the full list and run one instantly.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
 }
-
