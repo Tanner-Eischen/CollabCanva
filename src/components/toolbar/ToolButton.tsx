@@ -10,6 +10,9 @@ interface ToolButtonProps {
   disabled?: boolean
   onClick: () => void
   themed?: boolean
+  ariaControls?: string
+  ariaExpanded?: boolean
+  ariaHasPopup?: boolean | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog'
 }
 
 /**
@@ -25,14 +28,23 @@ export function ToolButton({
   disabled = false,
   onClick,
   themed = false,
+  ariaControls,
+  ariaExpanded,
+  ariaHasPopup,
 }: ToolButtonProps) {
   const tooltipContent = shortcut ? `${label} (${shortcut})` : label
 
   return (
     <Tooltip content={tooltipContent} side="right">
       <button
+        type="button"
         onClick={onClick}
         disabled={disabled}
+        aria-pressed={active}
+        aria-label={tooltipContent}
+        aria-controls={ariaControls}
+        aria-expanded={ariaExpanded}
+        aria-haspopup={ariaHasPopup}
         className={`
           w-9 h-9 rounded-lg flex items-center justify-center
           transition-all duration-150 relative
@@ -53,14 +65,23 @@ export function ToolButton({
         `}
       >
         {iconPath ? (
-          <img 
-            src={iconPath} 
+          <img
+            src={iconPath}
             alt={label}
-            className="w-4 h-4"
-            style={{ 
-              filter: themed 
-                ? (active ? 'brightness(2) invert(1)' : disabled ? 'brightness(0.5) invert(1)' : 'brightness(1.5) invert(1)') 
-                : (active ? 'brightness(1)' : disabled ? 'brightness(0.5)' : 'brightness(0.9)'),
+            className="w-5 h-5"
+            draggable={false}
+            style={{
+              filter: themed
+                ? active
+                  ? 'drop-shadow(0 0 4px rgba(255,255,255,0.45))'
+                  : disabled
+                    ? 'grayscale(0.7) opacity(0.6)'
+                    : 'brightness(1.1)'
+                : active
+                  ? 'brightness(1.05)'
+                  : disabled
+                    ? 'grayscale(0.8) opacity(0.6)'
+                    : 'none',
               display: 'block',
               visibility: 'visible',
               opacity: 1

@@ -12,7 +12,7 @@ import type { TileLayerMeta } from '../../types/tileLayer'
 import { detectGameType } from '../../services/ai/gameTypeDetection'
 import { PRESENCE_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 
-interface TilemapQuickAction {
+export interface TilemapQuickAction {
   id: string
   text: string
   prompt: string // What to send to AI
@@ -42,7 +42,7 @@ export default function AIQuickActionsPanel({
 
   // Generate context-aware actions
   useEffect(() => {
-    const newActions = generateTilemapActions(tilemapMeta, tileCount, layers, selectedLayer)
+    const newActions = generateTilemapQuickActions(tilemapMeta, tileCount, layers, selectedLayer)
     setActions(newActions.slice(0, maxActions))
   }, [tilemapMeta, tileCount, layers, selectedLayer, maxActions])
 
@@ -124,7 +124,7 @@ export default function AIQuickActionsPanel({
 /**
  * Generate tilemap-specific actions
  */
-function generateTilemapActions(
+export function generateTilemapQuickActions(
   meta: TilemapMeta,
   tileCount: number,
   layers: TileLayerMeta[],
