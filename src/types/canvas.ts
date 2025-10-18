@@ -72,6 +72,19 @@ export interface Shape {
 }
 
 /**
+ * Area on the canvas to focus the viewport on.
+ */
+export interface CanvasFocusArea {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  padding?: number
+  timestamp: number
+}
+
+/**
  * Canvas configuration constants
  */
 export interface CanvasConfig {

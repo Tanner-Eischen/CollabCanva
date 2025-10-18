@@ -4,6 +4,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { ManualSpriteSelector } from './ManualSpriteSelector';
 import { detectSpritesByTransparency, detectedSpritesToSelections } from '../../utils/tilemap/spriteDetection';
 import {
@@ -13,6 +14,7 @@ import {
   getImageData,
   loadImage
 } from '../../utils/tilemap/tilesetSlicer';
+import { buildTileSemanticGroups } from '../../services/assets/metadataUtils';
 import type {
   Asset,
   AssetType,
@@ -77,6 +79,29 @@ function parseCsvList(value: string): string[] {
     .split(',')
     .map(token => token.trim())
     .filter(Boolean);
+}
+
+interface TileAssignment {
+  key: string;
+  label: string;
+}
+
+function sanitizeKeySegment(segment: string, fallback: string): string {
+  const normalized = segment.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized || fallback;
+}
+
+function toDisplayName(segment: string): string {
+  const cleaned = segment.replace(/[_-]+/g, ' ').trim();
+  if (!cleaned) return segment;
+  return cleaned.replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function labelFromKey(key: string): string {
+  return key
+    .split('.')
+    .map(part => toDisplayName(part))
+    .join(' • ');
 }
 
 type UploadMetadata = {
@@ -146,6 +171,11 @@ export function AssetUploadModalEnhanced({
   const [manualTileNames, setManualTileNames] = useState('');
   const [materialsInput, setMaterialsInput] = useState('');
   const [themesInput, setThemesInput] = useState('');
+  const [tileAssignments, setTileAssignments] = useState<Record<number, TileAssignment>>({});
+  const [selectedTiles, setSelectedTiles] = useState<number[]>([]);
+  const [assignmentGroup, setAssignmentGroup] = useState('');
+  const [assignmentVariants, setAssignmentVariants] = useState('');
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
 
   // Manual grid detection function
   const handleManualGridDetection = useCallback(async () => {
@@ -180,16 +210,13 @@ export function AssetUploadModalEnhanced({
       const selections: SpriteSelection[] = [...spriteSelections]; // Keep existing selections
       
       // Calculate grid accounting for spacing and margin
-      // Formula: margin + (tileSize + spacing) * n + tileSize <= totalSize
-      // Simplified: (tileSize + spacing) * n <= totalSize - margin
-      const effectiveTileWidth = manualGridWidth + spacing;
-      const effectiveTileHeight = manualGridHeight + spacing;
-      const availableWidth = processRegion.width - margin;
-      const availableHeight = processRegion.height - margin;
-      
-      const cols = Math.floor((availableWidth - manualGridWidth + spacing) / effectiveTileWidth) + 1;
-      const rows = Math.floor((availableHeight - manualGridHeight + spacing) / effectiveTileHeight) + 1;
-      
+      // Matches the formula used by sliceTileset/validateTilesetConfig for consistency
+      const availableWidth = Math.max(0, processRegion.width - margin * 2);
+      const availableHeight = Math.max(0, processRegion.height - margin * 2);
+
+      const cols = Math.floor((availableWidth + spacing) / (manualGridWidth + spacing));
+      const rows = Math.floor((availableHeight + spacing) / (manualGridHeight + spacing));
+
       // Get base name from filename (without extension)
       const baseName = file ? file.name.replace(/\.[^/.]+$/, '') : 'sprite';
       
@@ -199,9 +226,9 @@ export function AssetUploadModalEnhanced({
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           // Apply margin + spacing formula
-          const x = processRegion.x + margin + (col * effectiveTileWidth);
-          const y = processRegion.y + margin + (row * effectiveTileHeight);
-          
+          const x = processRegion.x + margin + col * (manualGridWidth + spacing);
+          const y = processRegion.y + margin + row * (manualGridHeight + spacing);
+
           // Skip if outside image bounds
           if (x + manualGridWidth > img.width || y + manualGridHeight > img.height) {
             continue;
@@ -348,6 +375,11 @@ export function AssetUploadModalEnhanced({
       setTilesetImage(null);
       setTilesetError(null);
       setLastAnalyzedPreview(null);
+      setTileAssignments({});
+      setSelectedTiles([]);
+      setAssignmentGroup('');
+      setAssignmentVariants('');
+      setAssignmentError(null);
     } else {
       setLastAnalyzedPreview(null);
     }
@@ -379,6 +411,57 @@ export function AssetUploadModalEnhanced({
     }
   }, [tilesetImage, tilesetTileWidth, tilesetTileHeight, tilesetSpacing, tilesetMargin]);
 
+  const assignmentEntries = useMemo(
+    () =>
+      Object.entries(tileAssignments)
+        .map(([indexStr, assignment]) => ({
+          index: Number(indexStr),
+          assignment,
+        }))
+        .filter(entry => !Number.isNaN(entry.index))
+        .sort((a, b) => a.index - b.index),
+    [tileAssignments]
+  );
+
+  const assignmentNamedTiles = useMemo(() => {
+    const map: Record<string, number> = {};
+    assignmentEntries.forEach(({ index, assignment }) => {
+      map[assignment.key] = index;
+    });
+    return map;
+  }, [assignmentEntries]);
+
+  const selectionPreview = useMemo(() => {
+    if (selectedTiles.length === 0) return 'none';
+    const preview = selectedTiles.slice(0, 10).join(', ');
+    return selectedTiles.length > 10
+      ? `${preview} … (+${selectedTiles.length - 10} more)`
+      : preview;
+  }, [selectedTiles]);
+
+  useEffect(() => {
+    if (!tilesetAnalysis?.slice) {
+      setTileAssignments(prev => (Object.keys(prev).length === 0 ? prev : {}));
+      setSelectedTiles(prev => (prev.length === 0 ? prev : []));
+      return;
+    }
+
+    const tileCount = tilesetAnalysis.slice.metadata.tileCount;
+    setTileAssignments(prev => {
+      const filteredEntries = Object.entries(prev).filter(([index]) => Number(index) < tileCount);
+      if (filteredEntries.length === Object.keys(prev).length) {
+        return prev;
+      }
+
+      const next: Record<number, TileAssignment> = {};
+      filteredEntries.forEach(([index, assignment]) => {
+        next[Number(index)] = assignment;
+      });
+      return next;
+    });
+    setSelectedTiles(prev => prev.filter(index => index < tileCount));
+  }, [tilesetAnalysis]);
+
   useEffect(() => {
     if (!tilesetCanvasRef.current || !tilesetImage) return;
 
@@ -393,14 +476,202 @@ export function AssetUploadModalEnhanced({
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(tilesetImage, 0, 0);
 
-    if (tilesetShowGrid && tilesetAnalysis?.slice) {
+    if (!tilesetAnalysis?.slice) {
+      return;
+    }
+
+    const tiles = tilesetAnalysis.slice.tiles;
+    const selectionSet = new Set(selectedTiles);
+
+    if (Object.keys(tileAssignments).length > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#60a5fa';
+      tiles.forEach(tile => {
+        if (tileAssignments[tile.index]) {
+          ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
+        }
+      });
+      ctx.restore();
+    }
+
+    if (selectionSet.size > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = '#facc15';
+      tiles.forEach(tile => {
+        if (selectionSet.has(tile.index)) {
+          ctx.fillRect(tile.x, tile.y, tile.width, tile.height);
+        }
+      });
+      ctx.restore();
+
+      ctx.save();
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 1.5;
+      selectionSet.forEach(index => {
+        const tile = tiles[index];
+        if (tile) {
+          ctx.strokeRect(tile.x + 0.75, tile.y + 0.75, tile.width - 1.5, tile.height - 1.5);
+        }
+      });
+      ctx.restore();
+    }
+
+    if (tilesetShowGrid) {
+      ctx.save();
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
       ctx.lineWidth = 1;
-      tilesetAnalysis.slice.tiles.forEach(tile => {
+      tiles.forEach(tile => {
         ctx.strokeRect(tile.x + 0.5, tile.y + 0.5, tile.width, tile.height);
       });
+      ctx.restore();
     }
-  }, [tilesetAnalysis, tilesetImage, tilesetShowGrid]);
+
+    if (Object.keys(tileAssignments).length > 0) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      const fontSize = Math.max(10, Math.min(tilesetTileWidth, tilesetTileHeight) / 2.2);
+      ctx.font = `${fontSize}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      tiles.forEach(tile => {
+        const assignment = tileAssignments[tile.index];
+        if (assignment) {
+          ctx.fillText(assignment.label, tile.x + tile.width / 2, tile.y + tile.height / 2, tile.width - 4);
+        }
+      });
+      ctx.restore();
+    }
+  }, [
+    tilesetAnalysis,
+    tilesetImage,
+    tilesetShowGrid,
+    tileAssignments,
+    selectedTiles,
+    tilesetTileHeight,
+    tilesetTileWidth,
+  ]);
+
+  const handleTilesetCanvasClick = useCallback(
+    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+      if (!tilesetCanvasRef.current || !tilesetAnalysis?.slice) return;
+
+      const canvas = tilesetCanvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (event.clientX - rect.left) * scaleX;
+      const y = (event.clientY - rect.top) * scaleY;
+
+      let hitIndex: number | null = null;
+      for (const tile of tilesetAnalysis.slice.tiles) {
+        if (x >= tile.x && x < tile.x + tile.width && y >= tile.y && y < tile.y + tile.height) {
+          hitIndex = tile.index;
+          break;
+        }
+      }
+
+      if (hitIndex === null) {
+        return;
+      }
+
+      setSelectedTiles(prev => {
+        if (event.shiftKey || event.metaKey || event.ctrlKey) {
+          if (prev.includes(hitIndex)) {
+            return prev.filter(idx => idx !== hitIndex);
+          }
+          return [...prev, hitIndex].sort((a, b) => a - b);
+        }
+
+        return prev.length === 1 && prev[0] === hitIndex ? [] : [hitIndex];
+      });
+      setAssignmentError(null);
+    },
+    [tilesetAnalysis]
+  );
+
+  const handleAssignSelection = useCallback(() => {
+    if (selectedTiles.length === 0) {
+      setAssignmentError('Select at least one tile from the preview before assigning.');
+      return;
+    }
+
+    if (!assignmentGroup.trim()) {
+      setAssignmentError('Enter a tile type name to assign to the selected tiles.');
+      return;
+    }
+
+    const sanitizedGroup = sanitizeKeySegment(assignmentGroup, 'tile');
+    const variants = parseCsvList(assignmentVariants);
+    const selection = [...selectedTiles].sort((a, b) => a - b);
+    const selectionSet = new Set(selection);
+
+    setTileAssignments(prev => {
+      const assignedKeys = new Set(
+        Object.entries(prev)
+          .filter(([index]) => !selectionSet.has(Number(index)))
+          .map(([, assignment]) => assignment.key)
+      );
+
+      const updated: Record<number, TileAssignment> = { ...prev };
+
+      selection.forEach((tileIndex, idx) => {
+        const existing = updated[tileIndex];
+        if (existing) {
+          assignedKeys.delete(existing.key);
+        }
+
+        const providedVariant = variants[idx] ?? (variants.length === 1 ? variants[0] : null);
+        const fallbackVariant = selection.length === 1 ? 'center' : `variant_${idx + 1}`;
+        const sanitizedVariant = providedVariant
+          ? sanitizeKeySegment(providedVariant, fallbackVariant)
+          : sanitizeKeySegment(fallbackVariant, fallbackVariant);
+
+        const baseKey = sanitizedVariant ? `${sanitizedGroup}.${sanitizedVariant}` : sanitizedGroup;
+        let uniqueKey = baseKey;
+        let suffix = 2;
+        while (assignedKeys.has(uniqueKey)) {
+          uniqueKey = `${baseKey}_${suffix++}`;
+        }
+
+        assignedKeys.add(uniqueKey);
+        updated[tileIndex] = {
+          key: uniqueKey,
+          label: labelFromKey(uniqueKey),
+        };
+      });
+
+      return updated;
+    });
+
+    setAssignmentError(null);
+  }, [assignmentGroup, assignmentVariants, selectedTiles]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedTiles(prev => (prev.length === 0 ? prev : []));
+  }, []);
+
+  const handleClearAssignments = useCallback(() => {
+    setTileAssignments(prev => (Object.keys(prev).length === 0 ? prev : {}));
+    setSelectedTiles(prev => (prev.length === 0 ? prev : []));
+  }, []);
+
+  const handleRemoveAssignment = useCallback((index: number) => {
+    setTileAssignments(prev => {
+      if (!prev[index]) return prev;
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+    setSelectedTiles(prev => prev.filter(i => i !== index));
+  }, []);
+
+  const handleCopyAssignmentsToManual = useCallback(() => {
+    if (assignmentEntries.length === 0) return;
+    const lines = assignmentEntries.map(({ index, assignment }) => `${assignment.key} = ${index}`);
+    setManualTileNames(lines.join('\n'));
+  }, [assignmentEntries]);
 
   const handleUpload = useCallback(async () => {
     if (!file || !name.trim()) {
@@ -428,16 +699,31 @@ export function AssetUploadModalEnhanced({
 
         const manualMaterials = parseCsvList(materialsInput);
         const manualThemes = parseCsvList(themesInput);
+        const manualNamedTiles = manualTileNames.trim()
+          ? parseManualNamedTiles(manualTileNames, tilesetAnalysis.slice.metadata.tileCount)
+          : {};
+
+        const mergedNamedTiles = {
+          ...manualNamedTiles,
+          ...assignmentNamedTiles,
+        };
+
+        const tileGroups = Object.keys(mergedNamedTiles).length > 0
+          ? buildTileSemanticGroups(mergedNamedTiles, {
+              materials: manualMaterials.length > 0 ? manualMaterials : undefined,
+              themes: manualThemes.length > 0 ? manualThemes : undefined,
+            })
+          : undefined;
 
         tilesetMetadataForUpload = {
           ...tilesetAnalysis.slice.metadata,
           spacing: tilesetSpacing,
           margin: tilesetMargin,
+          tiles: tilesetAnalysis.slice.tiles,
           ...(manualMaterials.length > 0 ? { materials: manualMaterials } : {}),
           ...(manualThemes.length > 0 ? { themes: manualThemes } : {}),
-          ...(manualTileNames.trim()
-            ? { namedTiles: parseManualNamedTiles(manualTileNames, tilesetAnalysis.slice.metadata.tileCount) }
-            : {})
+          ...(Object.keys(mergedNamedTiles).length > 0 ? { namedTiles: mergedNamedTiles } : {}),
+          ...(tileGroups && Object.keys(tileGroups).length > 0 ? { tileGroups } : {}),
         };
       }
 
@@ -474,6 +760,11 @@ export function AssetUploadModalEnhanced({
       setTilesetImage(null);
       setTilesetError(null);
       setLastAnalyzedPreview(null);
+      setTileAssignments({});
+      setSelectedTiles([]);
+      setAssignmentGroup('');
+      setAssignmentVariants('');
+      setAssignmentError(null);
 
       onClose();
     } catch (err) {
@@ -496,7 +787,8 @@ export function AssetUploadModalEnhanced({
     themesInput,
     manualTileNames,
     tilesetSpacing,
-    tilesetMargin
+    tilesetMargin,
+    assignmentNamedTiles
   ]);
 
   const handleVisualDetection = useCallback(async () => {
@@ -792,6 +1084,7 @@ export function AssetUploadModalEnhanced({
                       <canvas
                         ref={tilesetCanvasRef}
                         className="border border-slate-300 bg-white rounded shadow-inner"
+                        onClick={handleTilesetCanvasClick}
                         style={{ imageRendering: 'pixelated', maxWidth: '100%', maxHeight: '70vh' }}
                       />
                     </div>
@@ -974,6 +1267,85 @@ export function AssetUploadModalEnhanced({
                         placeholder="grass.center = 0\nwater.edge = 5"
                       />
                       <p className="text-[11px] text-slate-500 mt-1">One per line, optional index.</p>
+                    </div>
+                    <div className="space-y-2 border border-slate-200 rounded p-3 bg-slate-50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-600">Tile Type Assignments</span>
+                        {assignmentEntries.length > 0 && (
+                          <button
+                            onClick={handleCopyAssignmentsToManual}
+                            className="text-[11px] text-blue-600 hover:text-blue-700"
+                          >
+                            Copy to manual field
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Click tiles in the preview to select them. Hold Shift/Cmd to select multiple tiles at once.
+                      </p>
+                      <div className="grid grid-cols-1 gap-2">
+                        <input
+                          type="text"
+                          value={assignmentGroup}
+                          onChange={(e) => setAssignmentGroup(e.target.value)}
+                          className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Tile type (e.g., grass)"
+                        />
+                        <input
+                          type="text"
+                          value={assignmentVariants}
+                          onChange={(e) => setAssignmentVariants(e.target.value)}
+                          className="px-3 py-2 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Variants (center, edge_n, edge_s)"
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                        <span>Selected tiles: {selectionPreview}</span>
+                        <button
+                          onClick={handleAssignSelection}
+                          disabled={selectedTiles.length === 0 || !assignmentGroup.trim()}
+                          className="px-2 py-1 rounded bg-blue-600 text-white font-medium shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Assign to selection
+                        </button>
+                        <button
+                          onClick={handleClearSelection}
+                          disabled={selectedTiles.length === 0}
+                          className="px-2 py-1 rounded border border-slate-300 hover:bg-slate-100"
+                        >
+                          Clear selection
+                        </button>
+                        {assignmentEntries.length > 0 && (
+                          <button
+                            onClick={handleClearAssignments}
+                            className="px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50"
+                          >
+                            Clear assignments
+                          </button>
+                        )}
+                      </div>
+                      {assignmentError && (
+                        <div className="text-[11px] text-rose-600">{assignmentError}</div>
+                      )}
+                      {assignmentEntries.length > 0 && (
+                        <div className="max-h-36 overflow-auto border border-slate-200 rounded bg-white divide-y divide-slate-100">
+                          {assignmentEntries.map(({ index, assignment }) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between px-2 py-1.5 text-[11px] text-slate-600"
+                            >
+                              <span className="font-mono text-slate-500">#{String(index).padStart(3, '0')}</span>
+                              <span className="flex-1 ml-2 truncate">{assignment.label}</span>
+                              <button
+                                onClick={() => handleRemoveAssignment(index)}
+                                className="ml-2 text-rose-500 hover:text-rose-600"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
