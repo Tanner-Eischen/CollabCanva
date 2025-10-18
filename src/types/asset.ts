@@ -190,6 +190,41 @@ export interface AssetUploadProgress {
 }
 
 /**
+ * Aggregated asset statistics exposed to the AI context builder.
+ */
+export interface AssetLibraryStats {
+  totalTilesets: number
+  availableTileSizes: number[]
+  availableThemes: string[]
+  availableMaterials: string[]
+  hasAutotileSets: boolean
+  hasAnimatedSets: boolean
+  hasPropSets: boolean
+}
+
+/**
+ * Suggestion generated for the AI describing which tileset fits the current canvas.
+ */
+export interface TilesetSuggestion {
+  id: string
+  name: string
+  reason: string
+}
+
+/**
+ * Payload that can be attached to AI requests so the backend prompt has access to asset data.
+ */
+export interface AssetAIContextPayload {
+  availableAssets: {
+    tilesets: number
+    spritesheets: number
+    animations: number
+  }
+  assetStats: AssetLibraryStats
+  tilesetSuggestions?: TilesetSuggestion[]
+}
+
+/**
  * Asset folder for organization
  */
 export interface AssetFolder {

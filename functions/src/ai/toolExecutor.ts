@@ -19,6 +19,21 @@ interface CanvasContext {
   viewport: any;
   mode: 'shapes' | 'tilemap';
   tilemapMeta?: any;
+  availableAssets?: {
+    tilesets: number;
+    spritesheets: number;
+    animations: number;
+  };
+  assetStats?: {
+    totalTilesets: number;
+    availableTileSizes: number[];
+    availableThemes: string[];
+    availableMaterials: string[];
+    hasAutotileSets: boolean;
+    hasAnimatedSets: boolean;
+    hasPropSets: boolean;
+  };
+  tilesetSuggestions?: Array<{ id: string; name: string; reason: string }>;
 }
 
 interface ExecutionResult {

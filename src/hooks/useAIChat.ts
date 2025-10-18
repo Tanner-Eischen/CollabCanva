@@ -7,6 +7,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { sendAICommand } from '../services/ai/ai';
 import type { AIRequest, AIResponse } from '../services/ai/ai';
+import type { AssetAIContextPayload } from '../types/asset';
 
 export type ChatMessage = {
   id: string;
@@ -46,6 +47,7 @@ export function useAIChat(options: UseAIChatOptions) {
       viewport: any;
       mode: 'shapes' | 'tilemap';
       tilemapMeta?: any;
+      assetContext?: AssetAIContextPayload;
     }
   ) => {
     if (!message.trim() || isLoading) return;
@@ -73,6 +75,9 @@ export function useAIChat(options: UseAIChatOptions) {
           viewport: context.viewport,
           mode: context.mode,
           tilemapMeta: context.tilemapMeta,
+          availableAssets: context.assetContext?.availableAssets,
+          assetStats: context.assetContext?.assetStats,
+          tilesetSuggestions: context.assetContext?.tilesetSuggestions,
         },
       };
 
@@ -137,7 +142,7 @@ export function useAIChat(options: UseAIChatOptions) {
   /**
    * Retry last message
    */
-  const retryLastMessage = useCallback((context: any) => {
+  const retryLastMessage = useCallback((context: Parameters<typeof sendMessage>[1]) => {
     const lastUserMessage = messagesRef.current
       .filter(msg => msg.role === 'user')
       .pop();

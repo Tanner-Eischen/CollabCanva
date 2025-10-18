@@ -19,6 +19,7 @@ import { calculateTileVariant, calculateAutoTileUpdates } from '../../utils/tile
 import { updateLayer as updateLayerInFirebase } from '../../services/tilemap/tilemapSync'
 import { useLayerContext } from '../../hooks/useLayerManagement'
 import { useAIOrchestrator } from '../../hooks/useAIOrchestrator'
+import { useAssetLibrary } from '../../hooks/useAssetLibrary'
 import Cursor from '../Cursor'
 import TilemapGrid from './TilemapGrid'
 import TileRenderer from './TileRenderer'
@@ -126,6 +127,10 @@ export default function TilemapCanvas({
 
   // AI Orchestration
   const { previewTiles, executeAICommand, isExecuting, error: aiError } = useAIOrchestrator()
+  const { getAssetAIContext } = useAssetLibrary({
+    userId: user?.uid || 'anonymous',
+    enableSync: Boolean(user?.uid)
+  })
 
   // Tilemap hook
   const {
@@ -168,9 +173,10 @@ export default function TilemapCanvas({
           height: containerHeight / viewport.scale,
           zoom: viewport.scale,
         },
+        assetContext: getAssetAIContext({ tileSize: meta.tileSize }),
       })
     },
-    [user, meta, canvasId, viewport, containerWidth, containerHeight, executeAICommand]
+    [user, meta, canvasId, viewport, containerWidth, containerHeight, executeAICommand, getAssetAIContext]
   )
 
   // Load visible chunks whenever viewport changes

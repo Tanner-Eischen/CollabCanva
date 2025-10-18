@@ -40,6 +40,21 @@ interface CanvasContext {
   viewport: { x: number; y: number; width: number; height: number; zoom: number };
   mode: 'shapes' | 'tilemap';
   tilemapMeta?: any;
+  availableAssets?: {
+    tilesets: number;
+    spritesheets: number;
+    animations: number;
+  };
+  assetStats?: {
+    totalTilesets: number;
+    availableTileSizes: number[];
+    availableThemes: string[];
+    availableMaterials: string[];
+    hasAutotileSets: boolean;
+    hasAnimatedSets: boolean;
+    hasPropSets: boolean;
+  };
+  tilesetSuggestions?: Array<{ id: string; name: string; reason: string }>;
 }
 
 interface AIRequest {

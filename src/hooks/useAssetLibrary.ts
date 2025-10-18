@@ -3,7 +3,7 @@
  * Manages asset library state, uploads, and organization
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { ref as dbRef, onValue, off } from 'firebase/database'
 import { db } from '../services/firebase'
 import {
@@ -18,8 +18,10 @@ import type {
   AssetFilter,
   AssetUploadProgress,
   TilesetMetadata,
-  SpriteSheetMetadata
+  SpriteSheetMetadata,
+  AssetAIContextPayload
 } from '../types/asset'
+import { buildAssetAIContext } from '../utils/ai/assetContext'
 
 interface UseAssetLibraryOptions {
   userId: string
@@ -63,6 +65,7 @@ interface UseAssetLibraryReturn {
   getFilteredAssets: () => Asset[]
   getAssetsByType: (type: AssetType) => Asset[]
   getAssetById: (assetId: string) => Asset | null
+  getAssetAIContext: (options?: { tileSize?: number }) => AssetAIContextPayload
   // Tags
   getAllTags: () => string[]
   addTagToAsset: (assetId: string, tag: string) => Promise<void>
@@ -89,6 +92,12 @@ export function useAssetLibrary(options: UseAssetLibraryOptions): UseAssetLibrar
       setError(null)
 
       try {
+        if (!userId) {
+          setAssets([])
+          setIsLoading(false)
+          return
+        }
+
         if (enableSync) {
           // Subscribe to real-time updates
           const assetsRef = dbRef(db, `assets/${userId}`)
@@ -108,7 +117,7 @@ export function useAssetLibrary(options: UseAssetLibraryOptions): UseAssetLibrar
 
           onValue(assetsRef, handler)
           unsubscribe = () => off(assetsRef, 'value', handler)
-        } else {
+        } else if (userId) {
           // Load once without sync
           const assetsList = await getUserAssets(userId)
           setAssets(assetsList)
@@ -165,6 +174,13 @@ export function useAssetLibrary(options: UseAssetLibraryOptions): UseAssetLibrar
       }
     },
     [userId]
+  )
+
+  const getAssetAIContext = useCallback(
+    (options?: { tileSize?: number }): AssetAIContextPayload => {
+      return buildAssetAIContext(assets, options)
+    },
+    [assets]
   )
 
   // Delete asset
@@ -349,6 +365,7 @@ export function useAssetLibrary(options: UseAssetLibraryOptions): UseAssetLibrar
     getFilteredAssets,
     getAssetsByType,
     getAssetById,
+    getAssetAIContext,
     getAllTags,
     addTagToAsset,
     removeTagFromAsset
