@@ -20,6 +20,7 @@ import { updateLayer as updateLayerInFirebase } from '../../services/tilemap/til
 import { useLayerContext } from '../../hooks/useLayerManagement'
 import { useAIOrchestrator } from '../../hooks/useAIOrchestrator'
 import { useAssetLibrary } from '../../hooks/useAssetLibrary'
+import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 import Cursor from '../Cursor'
 import TilemapGrid from './TilemapGrid'
 import TileRenderer from './TileRenderer'
@@ -95,7 +96,8 @@ export default function TilemapCanvas({
   const currentStrokeRef = useRef<Array<{ x: number; y: number; oldTile: TileData | undefined; newTile: TileData | null }>>([])
   
   const containerWidth = window.innerWidth
-  const containerHeight = window.innerHeight
+  const containerHeight = Math.max(0, window.innerHeight - (PRESENCE_BAR_HEIGHT + TILE_STATUS_BAR_HEIGHT))
+  const topOffset = PRESENCE_BAR_HEIGHT + HUD_SAFE_MARGIN
 
   // Viewport hook
   const {
@@ -823,7 +825,7 @@ export default function TilemapCanvas({
       <button
         onClick={() => setShowAIActions(!showAIActions)}
         className={`
-          fixed top-14 right-4 z-40
+          fixed right-4 z-40
           w-10 h-10 rounded-full
           flex items-center justify-center
           transition-all duration-200
@@ -834,6 +836,7 @@ export default function TilemapCanvas({
           text-white text-xl
           backdrop-blur-sm
         `}
+        style={{ top: topOffset }}
         title={showAIActions ? 'Hide AI Actions' : 'Show AI Actions'}
       >
         {showAIActions ? '✨' : '🤖'}
