@@ -865,7 +865,6 @@ export function AssetUploadModalEnhanced({
     }
   }, [tilesetMetadata]);
 
-
   useEffect(() => {
     if (!tilesetCanvasRef.current || !tilesetImage) return;
 
@@ -1107,23 +1106,71 @@ export function AssetUploadModalEnhanced({
           }
         });
 
-        const tilesForUpload = tilesetAnalysis.slice.tiles.filter(tile => selectedIndexSet.has(tile.index));
+        if (selectedIndexSet.size === 0) {
+          setError('Select at least one tile (or include tile indices in manual names) before uploading.');
+          setIsUploading(false);
+          return;
+        }
 
-        const tileGroups = Object.keys(mergedNamedTiles).length > 0
-          ? buildTileSemanticGroups(mergedNamedTiles, {
+        const orderedSelection = [...selectedIndexSet].sort((a, b) => a - b);
+        const remappedIndex = new Map<number, number>();
+        orderedSelection.forEach((originalIndex, newIndex) => {
+          remappedIndex.set(originalIndex, newIndex);
+        });
+
+        const tilesForUpload = tilesetAnalysis.slice.tiles
+          .filter(tile => remappedIndex.has(tile.index))
+          .map(tile => ({
+            ...tile,
+            index: remappedIndex.get(tile.index) ?? tile.index,
+          }));
+
+        const filteredNamedTiles = Object.entries(mergedNamedTiles).reduce<Record<string, number>>((acc, [key, index]) => {
+          const numericIndex = Number(index);
+          const mapped = remappedIndex.get(numericIndex);
+          if (mapped !== undefined) {
+            acc[key] = mapped;
+          }
+          return acc;
+        }, {});
+
+        const tileGroups = Object.keys(filteredNamedTiles).length > 0
+          ? buildTileSemanticGroups(filteredNamedTiles, {
               materials: manualMaterials.length > 0 ? manualMaterials : undefined,
               themes: manualThemes.length > 0 ? manualThemes : undefined,
             })
           : undefined;
 
+        let derivedColumns = tilesetAnalysis.slice.metadata.columns;
+        let derivedRows = tilesetAnalysis.slice.metadata.rows;
+
+        if (derivedColumns > 0 && orderedSelection.length > 0) {
+          const rowIndices = orderedSelection.map(index => Math.floor(index / derivedColumns));
+          const colIndices = orderedSelection.map(index => index % derivedColumns);
+          const minRow = Math.min(...rowIndices);
+          const maxRow = Math.max(...rowIndices);
+          const minCol = Math.min(...colIndices);
+          const maxCol = Math.max(...colIndices);
+
+          derivedColumns = Math.max(1, maxCol - minCol + 1);
+          derivedRows = Math.max(1, maxRow - minRow + 1);
+        }
+
+        if (!derivedRows || derivedRows <= 0) {
+          derivedRows = Math.ceil(tilesForUpload.length / Math.max(1, derivedColumns));
+        }
+
         tilesetMetadataForUpload = {
           ...tilesetAnalysis.slice.metadata,
+          columns: derivedColumns,
+          rows: derivedRows,
+          tileCount: tilesForUpload.length,
           spacing: tilesetSpacing,
           margin: tilesetMargin,
           ...(tilesForUpload.length > 0 ? { tiles: tilesForUpload } : {}),
           ...(manualMaterials.length > 0 ? { materials: manualMaterials } : {}),
           ...(manualThemes.length > 0 ? { themes: manualThemes } : {}),
-          ...(Object.keys(mergedNamedTiles).length > 0 ? { namedTiles: mergedNamedTiles } : {}),
+          ...(Object.keys(filteredNamedTiles).length > 0 ? { namedTiles: filteredNamedTiles } : {}),
           ...(tileGroups && Object.keys(tileGroups).length > 0 ? { tileGroups } : {}),
         };
       }
