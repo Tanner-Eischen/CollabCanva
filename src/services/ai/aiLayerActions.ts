@@ -15,7 +15,7 @@ export type AILayerAction =
   | { type: 'paintTiles'; layerId: string; tiles: Array<{ x: number; y: number; tile: TileData }> }
   | { type: 'eraseTiles'; layerId: string; tiles: Array<{ x: number; y: number }> }
   | { type: 'fillArea'; layerId: string; x: number; y: number; width: number; height: number; tile: TileData }
-  | { type: 'generateTerrain'; layerId: string; algorithm: 'perlin' | 'cellular' | 'randomWalk'; params: any }
+  | { type: 'generateTerrain'; layerId: string; algorithm: 'perlin' | 'cellular' | 'randomWalk' | 'wfc'; params: any }
   | { type: 'modifyLayer'; layerId: string; updates: Partial<TileLayerMeta> }
   | { type: 'createLayer'; layer: TileLayerMeta }
   | { type: 'deleteLayer'; layerId: string }
@@ -242,6 +242,30 @@ export class AILayerExecutor {
         generateFn = randomWalkModule.generateRandomWalkPath
         break
 
+      case 'wfc':
+        const wfcModule = await import('../../algorithms/waveFunctionCollapse')
+        generateFn = (w: number, h: number, generatorParams: any) => {
+          const tilesetChoice = (generatorParams.tileset || generatorParams.wfcTileset || 'platform') as
+            | 'platform'
+            | 'dungeon'
+            | 'terrain'
+          let tileset = wfcModule.createPlatformTileset()
+          if (tilesetChoice === 'dungeon') {
+            tileset = wfcModule.createDungeonTileset()
+          } else if (tilesetChoice === 'terrain') {
+            tileset = wfcModule.createTerrainTileset()
+          }
+
+          return wfcModule.generateWFCMap({
+            width: w,
+            height: h,
+            tiles: tileset,
+            seed: generatorParams.seed,
+            maxAttempts: generatorParams.maxAttempts,
+          })
+        }
+        break
+
       default:
         throw new Error(`Unknown algorithm: ${algorithm}`)
     }
@@ -370,67 +394,200 @@ export function parseAIResponseToActions(
   meta: TilemapMeta
 ): AILayerAction[] {
   const actions: AILayerAction[] = []
+  const defaultLayerId = meta.layers?.[0]?.id || 'ground'
+  const fallbackColor = meta.palette?.[0]?.color || '#ffffff'
+  const paletteColorMap = new Map<string, string>(
+    (meta.palette || []).map((entry) => [entry.type, entry.color])
+  )
 
-  for (const result of toolResults) {
-    if (!result.success) continue
+  const toNumber = (value: unknown): number | undefined => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value)
+      if (!Number.isNaN(parsed)) {
+        return parsed
+      }
+    }
+    return undefined
+  }
 
-    switch (result.tool) {
-      case 'paintTiles':
+  const getLayerId = (candidate: unknown): string => {
+    return typeof candidate === 'string' && candidate.length > 0
+      ? candidate
+      : defaultLayerId
+  }
+
+  const getColorForType = (type: string | undefined, override?: unknown): string => {
+    if (typeof override === 'string' && override.trim().length > 0) {
+      return override
+    }
+    if (!type) {
+      return fallbackColor
+    }
+    return paletteColorMap.get(type) || fallbackColor
+  }
+
+  for (const rawResult of toolResults || []) {
+    if (!rawResult || rawResult.success === false) continue
+
+    const toolName: string | undefined = rawResult.toolName || rawResult.tool
+    if (!toolName) continue
+
+    const params: Record<string, any> = rawResult.params || rawResult.arguments || {}
+    const layerId = getLayerId(params.layerId)
+
+    switch (toolName) {
+      case 'paintTileRegion': {
+        const startRow = toNumber(params.startRow)
+        const startCol = toNumber(params.startCol)
+        const endRow = toNumber(params.endRow)
+        const endCol = toNumber(params.endCol)
+        const tileType = typeof params.tileType === 'string' ? params.tileType : undefined
+
+        if (
+          startRow === undefined ||
+          startCol === undefined ||
+          endRow === undefined ||
+          endCol === undefined ||
+          !tileType
+        ) {
+          break
+        }
+
+        const minRow = Math.min(startRow, endRow)
+        const maxRow = Math.max(startRow, endRow)
+        const minCol = Math.min(startCol, endCol)
+        const maxCol = Math.max(startCol, endCol)
+        const variant = toNumber(params.variant)
+        const tileColor = getColorForType(tileType, params.tileColor)
+
+        const tiles: Array<{ x: number; y: number; tile: TileData }> = []
+        for (let row = minRow; row <= maxRow; row++) {
+          for (let col = minCol; col <= maxCol; col++) {
+            const tile: TileData = {
+              type: tileType,
+              color: tileColor,
+            }
+            if (variant !== undefined) {
+              tile.variant = variant
+            }
+            tiles.push({ x: col, y: row, tile })
+          }
+        }
+
         actions.push({
           type: 'paintTiles',
-          layerId: result.layerId || meta.layers?.[0]?.id || 'ground',
-          tiles: result.tiles || [],
+          layerId,
+          tiles,
         })
         break
+      }
 
-      case 'eraseTiles':
+      case 'eraseTileRegion': {
+        const startRow = toNumber(params.startRow)
+        const startCol = toNumber(params.startCol)
+        const endRow = toNumber(params.endRow)
+        const endCol = toNumber(params.endCol)
+
+        if (
+          startRow === undefined ||
+          startCol === undefined ||
+          endRow === undefined ||
+          endCol === undefined
+        ) {
+          break
+        }
+
+        const minRow = Math.min(startRow, endRow)
+        const maxRow = Math.max(startRow, endRow)
+        const minCol = Math.min(startCol, endCol)
+        const maxCol = Math.max(startCol, endCol)
+
+        const tiles: Array<{ x: number; y: number }> = []
+        for (let row = minRow; row <= maxRow; row++) {
+          for (let col = minCol; col <= maxCol; col++) {
+            tiles.push({ x: col, y: row })
+          }
+        }
+
         actions.push({
           type: 'eraseTiles',
-          layerId: result.layerId || meta.layers?.[0]?.id || 'ground',
-          tiles: result.tiles || [],
+          layerId,
+          tiles,
         })
         break
+      }
 
-      case 'fillArea':
-        actions.push({
-          type: 'fillArea',
-          layerId: result.layerId || meta.layers?.[0]?.id || 'ground',
-          x: result.x,
-          y: result.y,
-          width: result.width,
-          height: result.height,
-          tile: result.tile,
-        })
-        break
+      case 'generateTilemap': {
+        const algorithmParam: string | undefined =
+          (typeof params.algorithm === 'string' && params.algorithm) ||
+          (typeof rawResult.result?.data?.algorithm === 'string'
+            ? rawResult.result.data.algorithm
+            : undefined)
 
-      case 'generateTerrain':
+        if (!algorithmParam) {
+          break
+        }
+
+        const algorithmMap: Record<string, 'perlin' | 'cellular' | 'randomWalk' | 'wfc'> = {
+          'perlin-noise': 'perlin',
+          'cellular-automata': 'cellular',
+          'random-walk': 'randomWalk',
+          'wave-function-collapse': 'wfc',
+          noise: 'perlin',
+          caves: 'cellular',
+          paths: 'randomWalk',
+          island: 'perlin',
+        }
+
+        const mappedAlgorithm = algorithmMap[algorithmParam]
+        if (!mappedAlgorithm) {
+          break
+        }
+
+        const width = toNumber(params.width) || meta.width
+        const height = toNumber(params.height) || meta.height
+
+        const actionParams: Record<string, any> = {
+          ...params,
+          width,
+          height,
+        }
+
+        if (params.wfcTileset) {
+          actionParams.tileset = params.wfcTileset
+        }
+
         actions.push({
           type: 'generateTerrain',
-          layerId: result.layerId || meta.layers?.[0]?.id || 'ground',
-          algorithm: result.algorithm,
-          params: result.params,
+          layerId,
+          algorithm: mappedAlgorithm,
+          params: actionParams,
         })
         break
+      }
 
       case 'modifyLayer':
         actions.push({
           type: 'modifyLayer',
-          layerId: result.layerId,
-          updates: result.updates,
+          layerId: params.layerId,
+          updates: rawResult.updates ?? rawResult.result?.data?.updates ?? params.updates,
         })
         break
 
       case 'createLayer':
         actions.push({
           type: 'createLayer',
-          layer: result.layer,
+          layer: rawResult.layer || rawResult.result?.data?.layer || params.layer,
         })
         break
 
       case 'deleteLayer':
         actions.push({
           type: 'deleteLayer',
-          layerId: result.layerId,
+          layerId: params.layerId || rawResult.layerId,
         })
         break
     }
