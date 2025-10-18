@@ -1100,24 +1100,63 @@ export function AssetUploadModalEnhanced({
 
         const manualMaterials = parseCsvList(materialsInput);
         const manualThemes = parseCsvList(themesInput);
+        const tileCountLimit = tilesetAnalysis.slice.metadata.tileCount;
+
         const manualNamedTiles = manualTileNames.trim()
-          ? parseManualNamedTiles(manualTileNames, tilesetAnalysis.slice.metadata.tileCount)
+          ? parseManualNamedTiles(manualTileNames, tileCountLimit)
           : {};
 
         let assignmentNamedTilesForUpload: Record<string, number> = assignmentNamedTiles;
 
-        if (
-          Object.keys(manualNamedTiles).length === 0 &&
-          Object.keys(assignmentNamedTilesForUpload).length === 0 &&
-          assignmentGroup.trim() &&
-          selectedTiles.length > 0
-        ) {
-          const generatedEntries = computeAssignmentEntries(selectedTiles, assignmentGroup, assignmentVariants);
+        const existingKeySet = new Set<string>([
+          ...Object.keys(manualNamedTiles),
+          ...Object.keys(assignmentNamedTilesForUpload),
+        ]);
+
+        const existingIndexSet = new Set<number>();
+
+        const trackIndex = (value: number | string) => {
+          const numericIndex = Number(value);
+          if (!Number.isNaN(numericIndex) && numericIndex >= 0 && numericIndex < tileCountLimit) {
+            existingIndexSet.add(numericIndex);
+          }
+        };
+
+        Object.values(manualNamedTiles).forEach(trackIndex);
+        Object.values(assignmentNamedTilesForUpload).forEach(trackIndex);
+
+        const missingSelectedTiles = assignmentGroup.trim()
+          ? selectedTiles.filter(
+              index =>
+                index >= 0 &&
+                index < tileCountLimit &&
+                !existingIndexSet.has(index)
+            )
+          : [];
+
+        if (missingSelectedTiles.length > 0) {
+          const generatedEntries = computeAssignmentEntries(
+            missingSelectedTiles,
+            assignmentGroup,
+            assignmentVariants,
+            new Set(existingKeySet)
+          );
+
           if (generatedEntries.length > 0) {
-            assignmentNamedTilesForUpload = generatedEntries.reduce<Record<string, number>>((acc, entry) => {
+            const generatedMap = generatedEntries.reduce<Record<string, number>>((acc, entry) => {
               acc[entry.key] = entry.index;
               return acc;
             }, {});
+
+            assignmentNamedTilesForUpload = {
+              ...assignmentNamedTilesForUpload,
+              ...generatedMap,
+            };
+
+            generatedEntries.forEach(({ key, index }) => {
+              existingKeySet.add(key);
+              existingIndexSet.add(index);
+            });
           }
         }
 
@@ -1127,7 +1166,6 @@ export function AssetUploadModalEnhanced({
         };
 
         const selectedIndexSet = new Set<number>();
-        const tileCountLimit = tilesetAnalysis.slice.metadata.tileCount;
 
         Object.values(mergedNamedTiles).forEach(index => {
           const numericIndex = Number(index);
@@ -1154,13 +1192,6 @@ export function AssetUploadModalEnhanced({
           remappedIndex.set(originalIndex, newIndex);
         });
 
-        const tilesForUpload = tilesetAnalysis.slice.tiles
-          .filter(tile => remappedIndex.has(tile.index))
-          .map(tile => ({
-            ...tile,
-            index: remappedIndex.get(tile.index) ?? tile.index,
-          }));
-
         const filteredNamedTiles = Object.entries(mergedNamedTiles).reduce<Record<string, number>>((acc, [key, index]) => {
           const numericIndex = Number(index);
           const mapped = remappedIndex.get(numericIndex);
@@ -1169,6 +1200,30 @@ export function AssetUploadModalEnhanced({
           }
           return acc;
         }, {});
+
+        const nameLookup = new Map<number, string>();
+        Object.entries(filteredNamedTiles).forEach(([key, index]) => {
+          nameLookup.set(index, key);
+        });
+
+        const tilesForUpload = tilesetAnalysis.slice.tiles
+          .filter(tile => remappedIndex.has(tile.index))
+          .map(tile => {
+            const mappedIndex = remappedIndex.get(tile.index) ?? tile.index;
+            const namedTile = nameLookup.get(mappedIndex);
+            const nextTile: typeof tile & { name?: string } = {
+              ...tile,
+              index: mappedIndex,
+            };
+
+            if (namedTile) {
+              nextTile.name = namedTile;
+            } else if ('name' in nextTile) {
+              delete nextTile.name;
+            }
+
+            return nextTile;
+          });
 
         const tileGroups = Object.keys(filteredNamedTiles).length > 0
           ? buildTileSemanticGroups(filteredNamedTiles, {
