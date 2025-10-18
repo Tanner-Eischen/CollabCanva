@@ -32,24 +32,24 @@ export async function analyzeTileset(
   imageUrl: string,
   baseMetadata: Pick<TilesetMetadata, 'tileWidth' | 'tileHeight' | 'columns' | 'rows' | 'spacing' | 'margin'>
 ): Promise<TilesetAnalysisResult> {
-  console.log('🔬 [ANALYZER] Starting tileset analysis...')
-  console.log('🔬 [ANALYZER] Base metadata:', baseMetadata)
+  console.info('🔬 [ANALYZER] Starting tileset analysis...')
+  console.info('🔬 [ANALYZER] Base metadata:', baseMetadata)
   
   // Load image
-  console.log('🔬 [ANALYZER] Slicing tileset image...')
+  console.info('🔬 [ANALYZER] Slicing tileset image...')
   const tiles = await sliceTilesetImage(imageUrl, baseMetadata)
-  console.log(`🔬 [ANALYZER] Sliced ${tiles.length} tiles`)
+  console.info(`🔬 [ANALYZER] Sliced ${tiles.length} tiles`)
   
   // Try pattern detection (template matching)
-  console.log('🔬 [ANALYZER] Detecting patterns...')
+  console.info('🔬 [ANALYZER] Detecting patterns...')
   const blob16 = detectBlob16Pattern(tiles, baseMetadata)
-  console.log(`🔬 [ANALYZER] Blob16 confidence: ${blob16.confidence.toFixed(3)}`, blob16)
+  console.info(`🔬 [ANALYZER] Blob16 confidence: ${blob16.confidence.toFixed(3)}`, blob16)
   
   const blob47 = detectBlob47Pattern(tiles, baseMetadata)
-  console.log(`🔬 [ANALYZER] Blob47 confidence: ${blob47.confidence.toFixed(3)}`, blob47)
+  console.info(`🔬 [ANALYZER] Blob47 confidence: ${blob47.confidence.toFixed(3)}`, blob47)
   
   const wang = detectWangPattern(tiles, baseMetadata)
-  console.log(`🔬 [ANALYZER] Wang confidence: ${wang.confidence.toFixed(3)}`, wang)
+  console.info(`🔬 [ANALYZER] Wang confidence: ${wang.confidence.toFixed(3)}`, wang)
   
   // Pick best match
   const patterns = [
@@ -59,7 +59,7 @@ export async function analyzeTileset(
   ].sort((a, b) => b.result.confidence - a.result.confidence)
   
   const bestPattern = patterns[0]
-  console.log(`🔬 [ANALYZER] Best pattern: ${bestPattern.type} (confidence: ${bestPattern.result.confidence.toFixed(3)})`)
+  console.info(`🔬 [ANALYZER] Best pattern: ${bestPattern.type} (confidence: ${bestPattern.result.confidence.toFixed(3)})`)
   
   // Detect props (isolated, non-grid sprites)
   const props = detectProps(tiles, baseMetadata)
@@ -75,28 +75,28 @@ export async function analyzeTileset(
   
   // Add auto-tile names if detected
   if (bestPattern.result.confidence > 0.6) {
-    console.log(`🔬 [ANALYZER] Adding auto-tile names (confidence > 0.6)`)
-    console.log(`🔬 [ANALYZER] Auto-tile named tiles:`, bestPattern.result.namedTiles)
+    console.info(`🔬 [ANALYZER] Adding auto-tile names (confidence > 0.6)`)
+    console.info(`🔬 [ANALYZER] Auto-tile named tiles:`, bestPattern.result.namedTiles)
     Object.assign(namedTiles, bestPattern.result.namedTiles)
   } else {
-    console.log(`🔬 [ANALYZER] ⚠️ Confidence too low (${bestPattern.result.confidence.toFixed(3)} < 0.6) - skipping auto-tile names`)
+    console.info(`🔬 [ANALYZER] ⚠️ Confidence too low (${bestPattern.result.confidence.toFixed(3)} < 0.6) - skipping auto-tile names`)
   }
   
   // Add prop names
-  console.log(`🔬 [ANALYZER] Detected ${props.length} props`)
+  console.info(`🔬 [ANALYZER] Detected ${props.length} props`)
   props.forEach((prop, idx) => {
     namedTiles[`prop.${idx}`] = prop.tileIndex
   })
   
   // Add decal names
-  console.log(`🔬 [ANALYZER] Detected ${decals.length} decals`)
+  console.info(`🔬 [ANALYZER] Detected ${decals.length} decals`)
   decals.forEach((decal, idx) => {
     namedTiles[`decal.${idx}`] = decal.tileIndex
   })
   
-  console.log(`🔬 [ANALYZER] Total named tiles: ${Object.keys(namedTiles).length}`)
+  console.info(`🔬 [ANALYZER] Total named tiles: ${Object.keys(namedTiles).length}`)
   if (Object.keys(namedTiles).length > 0) {
-    console.log(`🔬 [ANALYZER] Sample named tiles:`, Object.entries(namedTiles).slice(0, 10))
+    console.info(`🔬 [ANALYZER] Sample named tiles:`, Object.entries(namedTiles).slice(0, 10))
   }
   
   // Calculate overall confidence
@@ -123,7 +123,7 @@ export async function analyzeTileset(
     ]
   }
   
-  console.log('🔬 [ANALYZER] ✅ Analysis complete. Result:', result)
+  console.info('🔬 [ANALYZER] ✅ Analysis complete. Result:', result)
   
   return result
 }
@@ -270,8 +270,8 @@ function checkBlob16Pattern(tiles: ImageData[], startIdx: number, columns: numbe
  * Detect blob47 (8-neighbor) auto-tile pattern
  */
 function detectBlob47Pattern(
-  tiles: ImageData[],
-  metadata: Pick<TilesetMetadata, 'columns' | 'rows'>
+  _tiles: ImageData[],
+  _metadata: Pick<TilesetMetadata, 'columns' | 'rows'>
 ): { confidence: number; namedTiles: Record<string, number> } {
   // Blob47 is more complex, typically arranged in specific layouts
   // For now, return low confidence (implement if needed)
@@ -282,8 +282,8 @@ function detectBlob47Pattern(
  * Detect Wang tile pattern
  */
 function detectWangPattern(
-  tiles: ImageData[],
-  metadata: Pick<TilesetMetadata, 'columns' | 'rows'>
+  _tiles: ImageData[],
+  _metadata: Pick<TilesetMetadata, 'columns' | 'rows'>
 ): { confidence: number; namedTiles: Record<string, number> } {
   // Wang tiles have specific edge color patterns
   // For now, return low confidence (implement if needed)
@@ -295,7 +295,7 @@ function detectWangPattern(
  */
 function detectProps(
   tiles: ImageData[],
-  metadata: Pick<TilesetMetadata, 'columns' | 'rows'>
+  _metadata: Pick<TilesetMetadata, 'columns' | 'rows'>
 ): Array<{ tileIndex: number; type: string }> {
   const props: Array<{ tileIndex: number; type: string }> = []
   
@@ -338,7 +338,7 @@ function detectDecals(tiles: ImageData[]): Array<{ tileIndex: number }> {
  */
 function detectAnimationFrames(
   tiles: ImageData[],
-  metadata: Pick<TilesetMetadata, 'columns'>
+  _metadata: Pick<TilesetMetadata, 'columns'>
 ): Array<{ startIndex: number; frameCount: number }> {
   const animations: Array<{ startIndex: number; frameCount: number }> = []
   
@@ -459,14 +459,14 @@ function calculateCenterConcentration(tile: ImageData): number {
  * Generate basic numeric index as fallback
  */
 export function generateBasicIndex(metadata: Pick<TilesetMetadata, 'tileCount'>): Record<string, number> {
-  console.log(`🔬 [ANALYZER] Generating basic index for ${metadata.tileCount} tiles (fallback mode)`)
+  console.info(`🔬 [ANALYZER] Generating basic index for ${metadata.tileCount} tiles (fallback mode)`)
   const index: Record<string, number> = {}
   
   for (let i = 0; i < metadata.tileCount; i++) {
     index[`tile.${i}`] = i
   }
   
-  console.log(`🔬 [ANALYZER] Basic index created with ${Object.keys(index).length} entries`)
+  console.info(`🔬 [ANALYZER] Basic index created with ${Object.keys(index).length} entries`)
   
   return index
 }

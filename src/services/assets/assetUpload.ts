@@ -486,6 +486,55 @@ export async function uploadAsset(
 
           // === REMOVED DUPLICATE - Handled by universal analyzer above ===
 
+          if (enrichedSpriteSheetMetadata?.spriteSelections) {
+            const colorCounts = new Map<string, number>()
+            const inferredMaterials = new Set<string>()
+            const inferredThemes = new Set<string>()
+
+            enrichedSpriteSheetMetadata.spriteSelections.forEach(selection => {
+              selection.dominantColors?.forEach(color => {
+                colorCounts.set(color, (colorCounts.get(color) || 0) + 1)
+              })
+
+              if (selection.category) {
+                const category = selection.category.toLowerCase()
+                if (category.includes('tree') || category.includes('bush')) {
+                  inferredMaterials.add('wood')
+                  inferredMaterials.add('foliage')
+                  inferredThemes.add('forest')
+                }
+                if (category.includes('water')) {
+                  inferredMaterials.add('water')
+                  inferredThemes.add('water')
+                }
+                if (category.includes('crystal')) {
+                  inferredMaterials.add('crystal')
+                  inferredThemes.add('mystic')
+                }
+                if (category.includes('structure')) {
+                  inferredMaterials.add('stone')
+                }
+                if (category.includes('light')) {
+                  inferredMaterials.add('light')
+                }
+              }
+            })
+
+            const palette = Array.from(colorCounts.entries())
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 8)
+              .map(([color]) => color)
+
+            if (palette.length > 0) {
+              enrichedSpriteSheetMetadata.palette = palette
+            }
+            if (inferredMaterials.size > 0) {
+              enrichedSpriteSheetMetadata.inferredMaterials = Array.from(inferredMaterials)
+            }
+            if (inferredThemes.size > 0) {
+              enrichedSpriteSheetMetadata.inferredThemes = Array.from(inferredThemes)
+            }
+          }
 
           // Create asset document (filter out undefined values for Firebase)
           const asset: Asset = {

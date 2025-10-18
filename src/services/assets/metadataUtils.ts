@@ -92,9 +92,16 @@ export function cloneSpriteSheetMetadata(metadata: SpriteSheetMetadata): SpriteS
     spacing: metadata.spacing,
     margin: metadata.margin,
     spriteSelections: metadata.spriteSelections
-      ? metadata.spriteSelections.map(sprite => ({ ...sprite }))
+      ? metadata.spriteSelections.map(sprite => ({
+          ...sprite,
+          dominantColors: sprite.dominantColors ? [...sprite.dominantColors] : undefined,
+          tags: sprite.tags ? [...sprite.tags] : undefined
+        }))
       : undefined,
-    selectionMode: metadata.selectionMode
+    selectionMode: metadata.selectionMode,
+    palette: metadata.palette ? [...metadata.palette] : undefined,
+    inferredMaterials: metadata.inferredMaterials ? [...metadata.inferredMaterials] : undefined,
+    inferredThemes: metadata.inferredThemes ? [...metadata.inferredThemes] : undefined
   }
 }
 
