@@ -20,6 +20,7 @@ interface PathProps {
   onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (points: number[], x: number, y: number) => void
+  locked?: boolean
 }
 
 /**
@@ -39,29 +40,33 @@ export default function Path({
   onDragStart,
   onDragEnd,
   onTransformEnd,
+  locked = false,
 }: PathProps) {
   const shapeRef = useRef<Konva.Line>(null)
   const trRef = useRef<Konva.Transformer>(null)
 
   // Attach transformer to shape when selected
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
+    if (isSelected && !locked && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current])
       trRef.current.getLayer()?.batchDraw()
     }
-  }, [isSelected])
+  }, [isSelected, locked])
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragStart(node.x(), node.y())
   }
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragEnd(node.x(), node.y())
   }
 
   const handleTransformEnd = () => {
+    if (locked) return
     const node = shapeRef.current
     if (!node) return
 
@@ -100,7 +105,7 @@ export default function Path({
         lineCap="round"
         lineJoin="round"
         bezier={tension > 0}
-        draggable
+        draggable={!locked}
         onClick={onSelect}
         onTap={onSelect}
         onDragStart={handleDragStart}
@@ -109,7 +114,7 @@ export default function Path({
       />
 
       {/* Transformer for resize/rotate handles */}
-      {isSelected && (
+      {isSelected && !locked && (
         <Transformer
           ref={trRef}
           rotateEnabled={true}

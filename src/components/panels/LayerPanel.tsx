@@ -6,7 +6,7 @@
 import { useState, useMemo } from 'react'
 import { LayerItem } from '../LayerItem'
 import { ColorPicker } from '../ui/ColorPicker'
-import type { Layer } from '../../types/layer'
+import type { Layer, LayerLock, LayerVisibility } from '../../types/layer'
 import type { Shape } from '../../types/canvas'
 import type { Group } from '../../types/group'
 
@@ -25,7 +25,7 @@ interface LayerPanelProps {
   recentColors?: string[]
   onRequestColorSample?: (callback: (color: string) => void) => void
   // Theme for collab spaces
-  collabTheme?: { 
+  collabTheme?: {
     primary: string
     secondary: string
     gradient: string
@@ -33,6 +33,10 @@ interface LayerPanelProps {
     softBg: string
     softBorder: string
   } | null
+  visibility?: LayerVisibility
+  locks?: LayerLock
+  onFocusLayer?: (id: string) => void
+  onMoveLayer?: (id: string, direction: 'forward' | 'backward' | 'front' | 'back') => void
 }
 
 /**
@@ -53,6 +57,10 @@ export function LayerPanel({
   recentColors = [],
   onRequestColorSample,
   collabTheme,
+  visibility,
+  locks,
+  onFocusLayer,
+  onMoveLayer,
 }: LayerPanelProps) {
   const [activeTab, setActiveTab] = useState<'layers' | 'design'>('layers')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -144,12 +152,15 @@ export function LayerPanel({
             layerName = `${shape.type} ${shape.id.slice(-4)}`
         }
         
+        const shapeVisible = visibility ? visibility[shape.id] !== false : true
+        const shapeLocked = locks ? locks[shape.id] === true : false
+
         layers.push({
           id: shape.id,
           name: layerName,
           type: 'shape',
-          visible: true,
-          locked: false,
+          visible: shapeVisible,
+          locked: shapeLocked,
           zIndex: shape.zIndex || 0,
         })
       }
@@ -166,9 +177,8 @@ export function LayerPanel({
         group.memberIds.forEach((memberId) => {
           const shape = shapes.find((s) => s.id === memberId)
           const childGroup = groups.find((g) => g.id === memberId)
-          
+
           if (shape) {
-            // Use same naming as ungrouped shapes
             let childName = ''
             switch (shape.type) {
               case 'rectangle': childName = `Rectangle ${shape.id.slice(-4)}`; break
@@ -181,45 +191,61 @@ export function LayerPanel({
               case 'roundRect': childName = `Rounded Rect ${shape.id.slice(-4)}`; break
               default: childName = `${shape.type} ${shape.id.slice(-4)}`
             }
-            
+
+            const childVisible = visibility ? visibility[shape.id] !== false : true
+            const childLocked = locks ? locks[shape.id] === true : false
+
             children.push({
               id: shape.id,
               name: childName,
               type: 'shape',
-              visible: true,
-              locked: false,
+              visible: childVisible,
+              locked: childLocked,
               zIndex: shape.zIndex || 0,
               parentId: group.id,
             })
           } else if (childGroup) {
-            // Nested group
+            const nestedVisible = visibility ? visibility[childGroup.id] !== false : childGroup.visible
+            const nestedLocked = locks ? locks[childGroup.id] === true : childGroup.locked
+
             children.push({
               id: childGroup.id,
               name: childGroup.name,
               type: 'group',
-              visible: childGroup.visible,
-              locked: childGroup.locked,
+              visible: nestedVisible,
+              locked: nestedLocked,
               zIndex: childGroup.zIndex || 0,
               parentId: group.id,
             })
           }
         })
-        
+
+        const groupVisible = visibility ? visibility[group.id] !== false : group.visible
+        const groupLocked = locks ? locks[group.id] === true : group.locked
+
         layers.push({
           id: group.id,
           name: group.name,
           type: 'group',
-          visible: group.visible,
-          locked: group.locked,
+          visible: groupVisible,
+          locked: groupLocked,
           zIndex: group.zIndex || 0,
           children,
         })
       }
     })
-    
+
     // Sort by z-index (highest first in layer panel)
-    return layers.sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
-  }, [shapes, groups])
+    layers.sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
+
+    layers.forEach((layer) => {
+      if (layer.children) {
+        layer.children = [...layer.children].sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0))
+      }
+    })
+
+    return layers
+  }, [shapes, groups, visibility, locks])
 
   const toggleGroupExpand = (groupId: string) => {
     const newExpanded = new Set(expandedGroups)
@@ -231,9 +257,18 @@ export function LayerPanel({
     setExpandedGroups(newExpanded)
   }
 
-  const renderLayer = (layer: Layer, level: number = 0): React.ReactNode => {
+  const renderLayer = (
+    layer: Layer,
+    level: number = 0,
+    index: number = 0,
+    siblings: Layer[] = layerTree
+  ): React.ReactNode => {
     const isSelected = selectedIds.has(layer.id)
     const isExpanded = expandedGroups.has(layer.id)
+    const isRoot = level === 0
+    const totalSiblings = siblings.length
+    const canMoveUp = isRoot && index > 0
+    const canMoveDown = isRoot && index < totalSiblings - 1
 
     return (
       <LayerItem
@@ -251,8 +286,14 @@ export function LayerPanel({
           layer.type === 'group' ? () => toggleGroupExpand(layer.id) : undefined
         }
         themed={!!collabTheme}
+        onFocusLayer={onFocusLayer}
+        onMoveLayer={isRoot ? onMoveLayer : undefined}
+        canMoveUp={isRoot ? canMoveUp : undefined}
+        canMoveDown={isRoot ? canMoveDown : undefined}
       >
-        {layer.children?.map((child) => renderLayer(child, level + 1))}
+        {layer.children?.map((child, childIndex, arr) =>
+          renderLayer(child, level + 1, childIndex, arr)
+        )}
       </LayerItem>
     )
   }
@@ -341,7 +382,7 @@ export function LayerPanel({
                 No layers yet
               </div>
             ) : (
-              layerTree.map((layer) => renderLayer(layer))
+              layerTree.map((layer, index, arr) => renderLayer(layer, 0, index, arr))
             )}
           </div>
         ) : (

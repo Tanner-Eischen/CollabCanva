@@ -89,12 +89,17 @@ function TilemapCanvasInner({
   const [isPainting, setIsPainting] = useState(false)
   const [hoverTile, setHoverTile] = useState<{ x: number; y: number } | null>(null)
   const [isSpacePressed, setIsSpacePressed] = useState(false)
+  const [isPanLocked, setIsPanLocked] = useState(false)
   const [lastPanPosition, setLastPanPosition] = useState<{ x: number; y: number } | null>(null)
   const [showAIActions, setShowAIActions] = useState(false)
+  const [showAdvancedAIPanel, setShowAdvancedAIPanel] = useState(false)
+  const [advancedPrompt, setAdvancedPrompt] = useState('')
   
   // Track stroke for bulk undo/redo
   const currentStrokeRef = useRef<Array<{ x: number; y: number; oldTile: TileData | undefined; newTile: TileData | null }>>([])
   
+  const isPanMode = isSpacePressed || isPanLocked
+
   const containerWidth = window.innerWidth
   const containerHeight = Math.max(0, window.innerHeight - (PRESENCE_BAR_HEIGHT + TILE_STATUS_BAR_HEIGHT))
   const topOffset = PRESENCE_BAR_HEIGHT + HUD_SAFE_MARGIN
@@ -191,6 +196,34 @@ function TilemapCanvasInner({
       })
     },
     [user, meta, canvasId, viewport, containerWidth, containerHeight, executeAICommand, getAssetAIContext]
+  )
+
+  const togglePanLock = useCallback(() => {
+    setIsPanLocked(prev => {
+      const next = !prev
+      if (!next) {
+        setLastPanPosition(null)
+      }
+      return next
+    })
+    setIsPainting(false)
+  }, [setLastPanPosition, setIsPainting, setIsPanLocked])
+
+  const handleAdvancedExecute = useCallback(async () => {
+    const prompt = advancedPrompt.trim()
+    if (!prompt || !meta) return
+
+    await handleAIAction(prompt)
+    setAdvancedPrompt('')
+  }, [advancedPrompt, handleAIAction, meta, setAdvancedPrompt])
+
+  const advancedExamples = useMemo(
+    () => [
+      'Generate a 40x40 cave network with branching tunnels',
+      'Add ruined pillars near the spawn area',
+      'Carve a river from left to right with two bridges',
+    ],
+    []
   )
 
   // Load visible chunks whenever viewport changes
@@ -313,35 +346,38 @@ function TilemapCanvasInner({
   // Handle painting/erasing tiles with command pattern
   const paintTileAt = useCallback((tileX: number, tileY: number, isStrokePainting: boolean = false) => {
     const affectedTiles = getBrushTiles(tileX, tileY)
-    
+    const workingTiles = new Map(tiles)
+
     if (tileMode === 'stamp') {
       // Collect changes for all tiles in brush
       const changes: Array<{x: number, y: number, oldTile: TileData | undefined, newTile: TileData}> = []
-      
+
       // Paint all tiles in the brush area
       affectedTiles.forEach(({x, y}) => {
-        const oldTile = getTile(x, y)
-        
+        const key = coordToKey(x, y)
+        const oldTile = workingTiles.get(key)
+
         // Calculate variant if this tile type has sprite assets
         let variant: number | undefined
         if (hasSpriteAsset(selectedPalette.type)) {
           if (autoTilingEnabled) {
             // Auto-tiling: calculate based on neighbors
-            variant = calculateTileVariant(x, y, tiles, selectedPalette.type)
+            variant = calculateTileVariant(x, y, workingTiles, selectedPalette.type)
           } else {
             // Manual mode: use selected variant or default to center (variant 4)
             variant = selectedVariant !== undefined ? selectedVariant : 4
           }
         }
-        
+
         const newTile: TileData = {
           type: selectedPalette.type,
           color: effectiveColor,
           variant,
         }
-        
+
         changes.push({x, y, oldTile, newTile})
-        
+        workingTiles.set(key, newTile)
+
         // Only update tiles immediately during stroke (for visual feedback)
         if (isStrokePainting) {
           setTile(x, y, newTile)
@@ -352,22 +388,30 @@ function TilemapCanvasInner({
       const neighborUpdates: Array<{x: number, y: number, oldTile: TileData, newTile: TileData}> = []
       if (autoTilingEnabled && hasSpriteAsset(selectedPalette.type)) {
         affectedTiles.forEach(({x, y}) => {
-          const updates = calculateAutoTileUpdates(x, y, tiles, selectedPalette.type)
+          const updates = calculateAutoTileUpdates(x, y, workingTiles, selectedPalette.type)
           updates.forEach(update => {
-            const existingTile = getTile(update.x, update.y)
-            if (existingTile && !affectedTiles.some(t => t.x === update.x && t.y === update.y)) {
+            const neighborKey = coordToKey(update.x, update.y)
+            const existingTile = workingTiles.get(neighborKey)
+            if (
+              existingTile &&
+              !affectedTiles.some(t => t.x === update.x && t.y === update.y) &&
+              existingTile.variant !== update.variant
+            ) {
+              const updatedTile = { ...existingTile, variant: update.variant }
               // Only update neighbors, not the tiles we just painted
               neighborUpdates.push({
                 x: update.x,
                 y: update.y,
                 oldTile: existingTile,
-                newTile: { ...existingTile, variant: update.variant }
+                newTile: updatedTile
               })
-              
+
               // Apply immediately during stroke for visual feedback
               if (isStrokePainting) {
-                setTile(update.x, update.y, { ...existingTile, variant: update.variant })
+                setTile(update.x, update.y, updatedTile)
               }
+
+              workingTiles.set(neighborKey, updatedTile)
             }
           })
         })
@@ -397,39 +441,46 @@ function TilemapCanvasInner({
     } else if (tileMode === 'erase') {
       // Erase all tiles in brush area
       const changes: Array<{x: number, y: number, oldTile: TileData | undefined}> = []
-      
+
       affectedTiles.forEach(({x, y}) => {
-        const oldTile = getTile(x, y)
+        const key = coordToKey(x, y)
+        const oldTile = workingTiles.get(key)
         if (oldTile) {
           changes.push({x, y, oldTile})
-          
+
           // Apply immediately during stroke
           if (isStrokePainting) {
             deleteTile(x, y)
           }
+
+          workingTiles.delete(key)
         }
       })
-      
+
       // Collect neighbor variant updates if auto-tiling is enabled
       const neighborUpdates: Array<{x: number, y: number, oldTile: TileData, newTile: TileData}> = []
       affectedTiles.forEach(({x, y}) => {
-        const oldTile = getTile(x, y)
+        const oldTile = tiles.get(coordToKey(x, y))
         if (oldTile && autoTilingEnabled && hasSpriteAsset(oldTile.type)) {
-          const updates = calculateAutoTileUpdates(x, y, tiles, null)
+          const updates = calculateAutoTileUpdates(x, y, workingTiles, null)
           updates.forEach(update => {
-            const existingTile = getTile(update.x, update.y)
-            if (existingTile) {
+            const neighborKey = coordToKey(update.x, update.y)
+            const existingTile = workingTiles.get(neighborKey)
+            if (existingTile && existingTile.variant !== update.variant) {
+              const updatedTile = { ...existingTile, variant: update.variant }
               neighborUpdates.push({
                 x: update.x,
                 y: update.y,
                 oldTile: existingTile,
-                newTile: { ...existingTile, variant: update.variant }
+                newTile: updatedTile
               })
-              
+
               // Apply immediately during stroke
               if (isStrokePainting) {
-                setTile(update.x, update.y, { ...existingTile, variant: update.variant })
+                setTile(update.x, update.y, updatedTile)
               }
+
+              workingTiles.set(neighborKey, updatedTile)
             }
           })
         }
@@ -606,8 +657,8 @@ function TilemapCanvasInner({
     const pointer = stage.getPointerPosition()
     if (!pointer) return
 
-    // If spacebar is pressed, initialize panning (don't paint)
-    if (isSpacePressed) {
+    // If pan mode is active, initialize panning (don't paint)
+    if (isPanMode) {
       setLastPanPosition({ x: pointer.x, y: pointer.y })
       return
     }
@@ -624,7 +675,7 @@ function TilemapCanvasInner({
       // For stamp/erase, start stroke painting
       paintTileAt(tileX, tileY, true)
     }
-  }, [screenToTileCoords, paintTileAt, isSpacePressed, tileMode])
+  }, [screenToTileCoords, paintTileAt, isPanMode, tileMode])
 
   const handleStageMouseMove = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => {
     const stage = stageRef.current
@@ -633,8 +684,8 @@ function TilemapCanvasInner({
     const pointer = stage.getPointerPosition()
     if (!pointer) return
 
-    // If spacebar is pressed, enable panning (no click required)
-    if (isSpacePressed) {
+    // If pan mode is active, enable panning (no click required)
+    if (isPanMode) {
       if (lastPanPosition) {
         // Pan is active - calculate delta and update viewport
         const dx = pointer.x - lastPanPosition.x
@@ -653,10 +704,10 @@ function TilemapCanvasInner({
 
     const { x: tileX, y: tileY } = screenToTileCoords(pointer.x, pointer.y)
     
-    // Update hover tile for preview (don't show hover when spacebar is pressed)
+    // Update hover tile for preview (don't show hover when pan mode is active)
     setHoverTile({ x: tileX, y: tileY })
-    
-    // Continue painting if mouse is down and spacebar is not pressed
+
+    // Continue painting if mouse is down and pan mode is not active
     if (isPainting && tileMode !== 'fill' && tileMode !== 'pick') {
       paintTileAt(tileX, tileY, true) // Stroke painting
     }
@@ -665,7 +716,7 @@ function TilemapCanvasInner({
     const canvasX = (pointer.x - viewport.x) / viewport.scale
     const canvasY = (pointer.y - viewport.y) / viewport.scale
     updateCursorPosition(canvasX, canvasY)
-  }, [screenToTileCoords, isPainting, tileMode, paintTileAt, viewport, updateCursorPosition, isSpacePressed, lastPanPosition, setViewport])
+  }, [screenToTileCoords, isPainting, tileMode, paintTileAt, viewport, updateCursorPosition, isPanMode, lastPanPosition, setViewport])
 
   const handleStageMouseUp = useCallback(() => {
     // Finalize stroke painting - create command for all accumulated changes
@@ -715,7 +766,7 @@ function TilemapCanvasInner({
 
   return (
     <div className="w-full h-full bg-gray-100 overflow-hidden relative">
-      <div className="w-full h-full relative" style={{ cursor: lastPanPosition ? 'grabbing' : (isSpacePressed ? 'grab' : 'default') }}>
+      <div className="w-full h-full relative" style={{ cursor: lastPanPosition ? 'grabbing' : (isPanMode ? 'grab' : 'default') }}>
         <Stage
           ref={stageRef}
           width={containerWidth}
@@ -805,6 +856,28 @@ function TilemapCanvasInner({
         cursorPosition={hoverTile || undefined}
         showGrid={showGrid}
         onToggleGrid={onGridToggle}
+        isPanModeActive={isPanMode}
+        onPanModeToggle={togglePanLock}
+        isAIQuickActionsVisible={showAIActions}
+        onAIQuickActionsToggle={() => {
+          setShowAIActions(prev => {
+            const next = !prev
+            if (next) {
+              setShowAdvancedAIPanel(false)
+            }
+            return next
+          })
+        }}
+        isAdvancedAIOpen={showAdvancedAIPanel}
+        onAdvancedAIToggle={() => {
+          setShowAdvancedAIPanel(prev => {
+            const next = !prev
+            if (next) {
+              setShowAIActions(false)
+            }
+            return next
+          })
+        }}
       />
 
       {/* Status Bar - Fixed at bottom */}
@@ -833,26 +906,59 @@ function TilemapCanvasInner({
         />
       )}
 
-      {/* AI Toggle Button */}
-      <button
-        onClick={() => setShowAIActions(!showAIActions)}
-        className={`
-          fixed right-4 z-40
-          w-10 h-10 rounded-full
-          flex items-center justify-center
-          transition-all duration-200
-          ${showAIActions
-            ? 'bg-gradient-to-br from-blue-500 to-purple-500 shadow-lg scale-110'
-            : 'bg-slate-800/80 hover:bg-slate-700/80'
-          }
-          text-white text-xl
-          backdrop-blur-sm
-        `}
-        style={{ top: topOffset }}
-        title={showAIActions ? 'Hide AI Actions' : 'Show AI Actions'}
-      >
-        {showAIActions ? '✨' : '🤖'}
-      </button>
+      {showAdvancedAIPanel && (
+        <div
+          className="absolute z-40"
+          style={{
+            left: '72px',
+            top: `${topOffset}px`,
+            width: '320px',
+          }}
+        >
+          <div className="rounded-xl shadow-2xl bg-gradient-to-br from-slate-900/95 to-slate-800/95 border border-white/10 backdrop-blur-md overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+              <div className="text-white/80 text-[11px] uppercase tracking-wide font-semibold">Advanced AI Commands</div>
+              <button
+                onClick={() => setShowAdvancedAIPanel(false)}
+                className="text-white/60 hover:text-white transition-colors text-sm"
+                aria-label="Close advanced AI panel"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-3 space-y-3 text-sm text-white/80">
+              <p className="text-xs text-white/60">
+                Enter a custom instruction for the AI painter. Commands run inside the current viewport and use your active tile layers.
+              </p>
+              <textarea
+                value={advancedPrompt}
+                onChange={(e) => setAdvancedPrompt(e.target.value)}
+                className="w-full h-24 rounded-lg border border-white/20 bg-black/30 text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                placeholder="Describe the tilemap change you want..."
+              />
+              <div className="flex flex-wrap gap-2">
+                {advancedExamples.map(example => (
+                  <button
+                    key={example}
+                    type="button"
+                    onClick={() => setAdvancedPrompt(example)}
+                    className="px-2 py-1 rounded-lg text-xs bg-white/10 hover:bg-white/20 transition text-white/80"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleAdvancedExecute}
+                disabled={!meta || advancedPrompt.trim().length === 0 || isExecuting}
+                className="w-full px-3 py-2 rounded-lg bg-blue-500/80 hover:bg-blue-500 transition text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isExecuting ? 'Running…' : 'Run Advanced Command'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Execution Status */}
       {isExecuting && (

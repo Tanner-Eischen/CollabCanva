@@ -18,6 +18,7 @@ interface CircleProps {
   onDragStart: (x: number, y: number) => void
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (width: number, height: number, rotation: number, x: number, y: number) => void
+  locked?: boolean
 }
 
 /**
@@ -41,6 +42,7 @@ export default function Circle({
   onDragStart,
   onDragEnd,
   onTransformEnd,
+  locked = false,
 }: CircleProps) {
   const shapeRef = useRef<Konva.Circle>(null)
   const trRef = useRef<Konva.Transformer>(null)
@@ -50,23 +52,26 @@ export default function Circle({
 
   // Attach transformer to shape when selected
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
+    if (isSelected && !locked && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current])
       trRef.current.getLayer()?.batchDraw()
     }
-  }, [isSelected])
+  }, [isSelected, locked])
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragStart(node.x(), node.y())
   }
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragEnd(node.x(), node.y())
   }
 
   const handleTransformEnd = () => {
+    if (locked) return
     const node = shapeRef.current
     if (!node) return
 
@@ -100,7 +105,7 @@ export default function Circle({
         fill={fill}
         stroke={stroke || '#000000'}
         strokeWidth={strokeWidth || 0}
-        draggable
+        draggable={!locked}
         onClick={onSelect}
         onTap={onSelect}
         onDragStart={handleDragStart}
@@ -109,7 +114,7 @@ export default function Circle({
       />
 
       {/* Transformer for resize/rotate handles - Figma style (PR-20) */}
-      {isSelected && (
+      {isSelected && !locked && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(oldBox, newBox) => {

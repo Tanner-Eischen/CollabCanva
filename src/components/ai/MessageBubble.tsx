@@ -14,6 +14,17 @@ interface MessageBubbleProps {
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   const isUser = message.role === 'user';
   const isError = message.role === 'error';
+  const MAX_TOOL_RESULTS = 4;
+
+  const formatDuration = (duration?: unknown): string | null => {
+    if (typeof duration !== 'number' || Number.isNaN(duration)) {
+      return null;
+    }
+    if (duration >= 1000) {
+      return `${(duration / 1000).toFixed(1)}s`;
+    }
+    return `${Math.round(duration)}ms`;
+  };
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-2`}>
@@ -33,8 +44,51 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
         {/* Tool results indicator */}
         {message.toolResults && message.toolResults.length > 0 && (
-          <div className="mt-1 pt-1 border-t border-gray-300 text-[10px] opacity-75">
-            ✓ {message.toolResults.length} operation(s)
+          <div className="mt-2 pt-2 border-t border-gray-200">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
+              Tool Actions
+            </div>
+            <ul className="space-y-1">
+              {message.toolResults.slice(0, MAX_TOOL_RESULTS).map((toolResult, index) => {
+                const toolName = toolResult?.toolName || toolResult?.tool || `Tool ${index + 1}`;
+                const success = toolResult?.success !== false;
+                const summary =
+                  toolResult?.result?.summary ||
+                  toolResult?.result?.message ||
+                  toolResult?.error ||
+                  null;
+                const durationLabel = formatDuration(toolResult?.duration);
+
+                return (
+                  <li
+                    key={`${toolName}-${index}`}
+                    className="bg-white/70 rounded px-2 py-1 text-[10px] text-gray-700 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium truncate" title={toolName}>{toolName}</span>
+                      <span className={success ? 'text-emerald-600' : 'text-red-500'}>
+                        {success ? '✓' : '⚠️'}
+                      </span>
+                    </div>
+                    {summary && (
+                      <div className="mt-0.5 text-[9px] text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap" title={summary}>
+                        {summary}
+                      </div>
+                    )}
+                    {durationLabel && (
+                      <div className="mt-0.5 text-[9px] text-gray-400">
+                        {durationLabel}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {message.toolResults.length > MAX_TOOL_RESULTS && (
+              <div className="text-[9px] text-gray-500 mt-1">
+                +{message.toolResults.length - MAX_TOOL_RESULTS} more…
+              </div>
+            )}
           </div>
         )}
 
