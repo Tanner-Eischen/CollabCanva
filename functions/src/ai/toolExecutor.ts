@@ -24,6 +24,7 @@ interface CanvasContext {
 interface ExecutionResult {
   success: boolean;
   toolName: string;
+  params: Record<string, any>;
   result?: ToolResult;
   error?: string;
   duration: number;
@@ -47,6 +48,7 @@ export async function executeTool(
       return {
         success: false,
         toolName: name,
+        params,
         error: `Tool "${name}" not found`,
         duration: Date.now() - startTime,
       };
@@ -58,6 +60,7 @@ export async function executeTool(
       return {
         success: false,
         toolName: name,
+        params,
         error: `Invalid parameters: ${validation.errors.join(', ')}`,
         duration: Date.now() - startTime,
       };
@@ -82,6 +85,7 @@ export async function executeTool(
     return {
       success: true,
       toolName: name,
+      params,
       result,
       duration,
     };
@@ -98,6 +102,7 @@ export async function executeTool(
     return {
       success: false,
       toolName: name,
+      params,
       error: error.message || 'Unknown error occurred',
       duration,
     };
