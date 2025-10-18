@@ -491,8 +491,9 @@ export function validateTilesetConfig(
   tileHeight: number,
   spacing: number,
   margin: number
-): { valid: boolean; errors: string[] } {
+): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = []
+  const warnings: string[] = []
 
   if (tileWidth < 1 || tileHeight < 1) {
     errors.push('Tile dimensions must be at least 1x1 pixels')
@@ -506,16 +507,39 @@ export function validateTilesetConfig(
     errors.push('Spacing and margin cannot be negative')
   }
 
-  const columns = Math.floor((imageWidth - 2 * margin + spacing) / (tileWidth + spacing))
-  const rows = Math.floor((imageHeight - 2 * margin + spacing) / (tileHeight + spacing))
+  const usableWidth = imageWidth - 2 * margin
+  const usableHeight = imageHeight - 2 * margin
+  const columns = Math.floor((usableWidth + spacing) / (tileWidth + spacing))
+  const rows = Math.floor((usableHeight + spacing) / (tileHeight + spacing))
 
   if (columns < 1 || rows < 1) {
     errors.push('Configuration does not produce any complete tiles')
   }
 
+  if (columns >= 1) {
+    const usedWidth = columns * (tileWidth + spacing) - spacing
+    const leftoverWidth = usableWidth - usedWidth
+    if (leftoverWidth > 0) {
+      warnings.push('Tiles do not evenly cover the image width. Some pixels at the edges will be ignored.')
+    }
+  }
+
+  if (rows >= 1) {
+    const usedHeight = rows * (tileHeight + spacing) - spacing
+    const leftoverHeight = usableHeight - usedHeight
+    if (leftoverHeight > 0) {
+      warnings.push('Tiles do not evenly cover the image height. Some pixels at the edges will be ignored.')
+    }
+  }
+
+  if (tileWidth % 8 !== 0 || tileHeight % 8 !== 0) {
+    warnings.push('Tile dimensions are not multiples of 8px. Consider snapping to an 8px grid for retro/pixel art workflows.')
+  }
+
   return {
     valid: errors.length === 0,
-    errors
+    errors,
+    warnings
   }
 }
 

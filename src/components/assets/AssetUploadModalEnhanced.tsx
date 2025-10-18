@@ -375,7 +375,7 @@ export function AssetUploadModalEnhanced({
       return { validation, slice };
     } catch (err) {
       console.error('Failed to slice tileset preview:', err);
-      return { validation: { valid: false, errors: ['Failed to slice tileset image'] }, slice: null };
+      return { validation: { valid: false, errors: ['Failed to slice tileset image'], warnings: [] }, slice: null };
     }
   }, [tilesetImage, tilesetTileWidth, tilesetTileHeight, tilesetSpacing, tilesetMargin]);
 
@@ -581,7 +581,7 @@ export function AssetUploadModalEnhanced({
 
   const tilesetMetadata = tilesetAnalysis?.slice?.metadata;
   const tilesetValidation = tilesetAnalysis?.validation;
-  const tilesetWarnings = tilesetValidation && tilesetValidation.warnings.length > 0 ? tilesetValidation.warnings : [];
+  const tilesetWarnings = tilesetValidation?.warnings ?? [];
   const spriteSummary = detectionResult ? {
     count: detectionResult.sprites?.length ?? 0,
     grid: detectionResult.gridDetected ? detectionResult.suggestedTileSize : null

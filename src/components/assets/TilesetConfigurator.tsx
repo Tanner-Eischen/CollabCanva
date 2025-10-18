@@ -26,7 +26,7 @@ export function TilesetConfigurator({ asset, onSave, onClose }: TilesetConfigura
   const [margin, setMargin] = useState(0)
   const [isDetecting, setIsDetecting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [validation, setValidation] = useState<{ valid: boolean; errors: string[] } | null>(null)
+  const [validation, setValidation] = useState<{ valid: boolean; errors: string[]; warnings: string[] } | null>(null)
   const [previewImage, setPreviewImage] = useState<HTMLImageElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
