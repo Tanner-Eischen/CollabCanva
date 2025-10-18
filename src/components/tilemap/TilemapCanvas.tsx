@@ -18,7 +18,7 @@ import { DEFAULT_TILEMAP_PALETTE, hasSpriteAsset } from '../../constants/tilemap
 import { calculateTileVariant, calculateAutoTileUpdates } from '../../utils/tilemap/autoTile'
 import { updateLayer as updateLayerInFirebase } from '../../services/tilemap/tilemapSync'
 import { useLayerContext } from '../../hooks/useLayerManagement'
-import { useAIOrchestrator } from '../../hooks/useAIOrchestrator'
+import { AIOrchestratorProvider, useAIOrchestrator } from '../../hooks/useAIOrchestrator'
 import { useAssetLibrary } from '../../hooks/useAssetLibrary'
 import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 import Cursor from '../Cursor'
@@ -56,7 +56,7 @@ interface TilemapCanvasProps {
 
 const DEFAULT_PALETTE: PaletteColor[] = DEFAULT_TILEMAP_PALETTE
 
-export default function TilemapCanvas({
+function TilemapCanvasInner({
   canvasId,
   onViewportChange,
   onZoomChange,
@@ -128,7 +128,7 @@ export default function TilemapCanvas({
   const { setLayers, activeLayerId, setActiveLayer, togglePanel } = useLayerContext()
 
   // AI Orchestration
-  const { previewTiles, executeAICommand, isExecuting, error: aiError } = useAIOrchestrator()
+  const { previewTiles, executeAICommand, isExecuting, error: aiError, registerTileState } = useAIOrchestrator()
   const { getAssetAIContext } = useAssetLibrary({
     userId: user?.uid || 'anonymous',
     enableSync: Boolean(user?.uid)
@@ -151,6 +151,18 @@ export default function TilemapCanvas({
     canvasId,
     userId: user?.uid || '',
   })
+
+  const tilesRef = useRef(tiles)
+  useEffect(() => {
+    tilesRef.current = tiles
+  }, [tiles])
+
+  useEffect(() => {
+    return registerTileState({
+      getTileMap: () => tilesRef.current,
+      isAutoTilingEnabled: () => autoTilingEnabled,
+    })
+  }, [registerTileState, autoTilingEnabled])
 
   // Sync layers from meta to store
   useEffect(() => {
@@ -861,5 +873,13 @@ export default function TilemapCanvas({
         </div>
       )}
     </div>
+  )
+}
+
+export default function TilemapCanvas(props: TilemapCanvasProps) {
+  return (
+    <AIOrchestratorProvider>
+      <TilemapCanvasInner {...props} />
+    </AIOrchestratorProvider>
   )
 }
