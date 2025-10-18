@@ -520,6 +520,19 @@ export async function uploadAsset(
             }
           }
 
+          // Ensure tileset summary is set with defaults if not already set
+          if (!analysisSummary.tileset && assetType === 'tileset' && enrichedTilesetMetadata) {
+            analysisSummary.tileset = {
+              namedTileCount: Object.keys(enrichedTilesetMetadata.namedTiles || {}).length,
+              tileGroupCount: Object.keys(enrichedTilesetMetadata.tileGroups || {}).length,
+              themes: enrichedTilesetMetadata.themes || [],
+              materials: enrichedTilesetMetadata.materials || [],
+              autoTileSystem: enrichedTilesetMetadata.autoTileSystem,
+              detectionConfidence: enrichedTilesetMetadata.detectionConfidence,
+              warnings: enrichedTilesetMetadata.validation?.warnings
+            }
+          }
+
           const summaryPayload = {
             assetId,
             assetName,

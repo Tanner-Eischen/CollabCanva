@@ -178,7 +178,7 @@ export function buildTileSemanticGroups(
         groups[groupKey] = {
           label: groupKey.charAt(0).toUpperCase() + groupKey.slice(1),
           description: `Tiles in the ${groupKey} group`,
-          autoTileSystem: context?.autoTileSystem,
+          autoTileSystem: (context?.autoTileSystem as 'blob16' | 'blob47' | 'wang' | 'custom' | undefined),
           materials: context?.materials,
           themes: context?.themes,
           tiles: {},

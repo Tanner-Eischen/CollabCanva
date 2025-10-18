@@ -56,6 +56,20 @@
         ".write": "$userId === auth.uid"
       }
     },
+    "catalog": {
+      "tilesets": {
+        "$userId": {
+          ".read": "$userId === auth.uid",
+          ".write": "$userId === auth.uid"
+        }
+      },
+      "index": {
+        "$userId": {
+          ".read": "$userId === auth.uid",
+          ".write": "$userId === auth.uid"
+        }
+      }
+    },
     "animations": {
       "$canvasId": {
         ".read": "auth != null",
