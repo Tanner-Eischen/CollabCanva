@@ -16,7 +16,7 @@ import {
 } from '../services/ai/aiLayerActions'
 import { coordToKey, type TileData, type TilemapMeta } from '../types/tilemap'
 import type { AssetAIContextPayload } from '../types/asset'
-import { hasSpriteAsset } from '../constants/tilemapDefaults'
+import { tilesetRegistry } from '../services/tilemap/tilesetRegistry'
 import { calculateAutoTileUpdates } from '../utils/tilemap/autoTile'
 
 /**
@@ -117,6 +117,8 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
       setError(null)
 
       try {
+        tilesetRegistry.setActiveTileset(context.tilemapMeta?.activeTilesetId)
+
         const request: AIRequest = {
           message,
           context: {
@@ -140,7 +142,7 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
 
           // Enhance actions with auto-tiling neighbor updates when available
           if (actions.length > 0 && tileStateRef.current) {
-            actions = enhanceActionsWithAutoTiling(actions, tileStateRef.current)
+            actions = await enhanceActionsWithAutoTiling(actions, tileStateRef.current)
           }
 
           if (actions.length > 0) {
@@ -194,7 +196,7 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
         const executor = getExecutor(canvasId, userId)
         const actionsToExecute =
           tileStateRef.current && actions.length > 0
-            ? enhanceActionsWithAutoTiling(actions, tileStateRef.current)
+            ? await enhanceActionsWithAutoTiling(actions, tileStateRef.current)
             : actions
         const results: AIActionResult[] = []
 
@@ -435,7 +437,10 @@ function cloneTileMap(original: Map<string, TileData>): Map<string, TileData> {
 /**
  * Enhance AI actions with auto-tiling updates when the canvas provides state information
  */
-function enhanceActionsWithAutoTiling(actions: AILayerAction[], provider: TileStateProvider): AILayerAction[] {
+async function enhanceActionsWithAutoTiling(
+  actions: AILayerAction[],
+  provider: TileStateProvider
+): Promise<AILayerAction[]> {
   if (!provider.isAutoTilingEnabled()) {
     return actions
   }
@@ -443,28 +448,61 @@ function enhanceActionsWithAutoTiling(actions: AILayerAction[], provider: TileSt
   const sourceMap = provider.getTileMap()
   const workingMap = cloneTileMap(sourceMap)
   const enhanced: AILayerAction[] = []
+  const spriteAvailability = new Map<string, boolean>()
+
+  const supportsSprites = async (type: string | undefined): Promise<boolean> => {
+    if (!type) {
+      return false
+    }
+    if (!spriteAvailability.has(type)) {
+      spriteAvailability.set(type, await tilesetRegistry.hasSprite(type))
+    }
+    return spriteAvailability.get(type) ?? false
+  }
+
+  const sanitizeTile = (tile: TileData, allowVariants: boolean): TileData => {
+    const sanitized: TileData = { ...tile }
+    if (!allowVariants) {
+      delete sanitized.variant
+    } else if (sanitized.variant !== undefined) {
+      sanitized.variant = Math.max(0, Math.min(8, Math.floor(sanitized.variant)))
+    }
+    return sanitized
+  }
 
   for (const action of actions) {
     if (action.type === 'paintTiles') {
       const tilesToApply = new Map<string, { x: number; y: number; tile: TileData }>()
 
-      // Pre-apply tiles so neighbor calculations see the latest state
-      action.tiles.forEach(({ x, y, tile }) => {
+      for (const { x, y, tile } of action.tiles) {
         const key = coordToKey(x, y)
-        workingMap.set(key, { ...tile })
-        tilesToApply.set(key, { x, y, tile: { ...tile } })
-      })
+        const allowVariants = await supportsSprites(tile.type)
+        const sanitizedTile = sanitizeTile(tile, allowVariants)
+        workingMap.set(key, sanitizedTile)
+        tilesToApply.set(key, { x, y, tile: sanitizedTile })
+      }
 
-      // Update variants for center tiles and neighbors when needed
-      action.tiles.forEach(({ x, y, tile }) => {
-        if (!hasSpriteAsset(tile.type)) return
+      for (const { x, y, tile } of action.tiles) {
+        if (!(await supportsSprites(tile.type))) {
+          continue
+        }
 
         const updates = calculateAutoTileUpdates(x, y, workingMap, tile.type)
-        updates.forEach((update) => {
+        for (const update of updates) {
           const updateKey = coordToKey(update.x, update.y)
           const existing = workingMap.get(updateKey)
-          if (!existing || !hasSpriteAsset(existing.type)) {
-            return
+          if (!existing) {
+            continue
+          }
+
+          const allowVariants = await supportsSprites(existing.type)
+          if (!allowVariants) {
+            if (existing.variant !== undefined) {
+              const sanitized = sanitizeTile(existing, false)
+              workingMap.set(updateKey, sanitized)
+              tilesToApply.set(updateKey, { x: update.x, y: update.y, tile: sanitized })
+            }
+            continue
           }
 
           if (existing.variant !== update.variant) {
@@ -472,8 +510,8 @@ function enhanceActionsWithAutoTiling(actions: AILayerAction[], provider: TileSt
             workingMap.set(updateKey, updatedTile)
             tilesToApply.set(updateKey, { x: update.x, y: update.y, tile: updatedTile })
           }
-        })
-      })
+        }
+      }
 
       enhanced.push({
         ...action,
@@ -485,25 +523,35 @@ function enhanceActionsWithAutoTiling(actions: AILayerAction[], provider: TileSt
     if (action.type === 'eraseTiles') {
       const neighborUpdates = new Map<string, { x: number; y: number; tile: TileData }>()
 
-      action.tiles.forEach(({ x, y }) => {
+      for (const { x, y } of action.tiles) {
         const key = coordToKey(x, y)
         const existing = workingMap.get(key)
         if (!existing) {
-          return
+          continue
         }
 
         workingMap.delete(key)
 
-        if (!hasSpriteAsset(existing.type)) {
-          return
+        if (!(await supportsSprites(existing.type))) {
+          continue
         }
 
         const updates = calculateAutoTileUpdates(x, y, workingMap, null)
-        updates.forEach((update) => {
+        for (const update of updates) {
           const updateKey = coordToKey(update.x, update.y)
           const neighbor = workingMap.get(updateKey)
-          if (!neighbor || !hasSpriteAsset(neighbor.type)) {
-            return
+          if (!neighbor) {
+            continue
+          }
+
+          const allowVariants = await supportsSprites(neighbor.type)
+          if (!allowVariants) {
+            if (neighbor.variant !== undefined) {
+              const sanitized = sanitizeTile(neighbor, false)
+              workingMap.set(updateKey, sanitized)
+              neighborUpdates.set(updateKey, { x: update.x, y: update.y, tile: sanitized })
+            }
+            continue
           }
 
           if (neighbor.variant !== update.variant) {
@@ -511,8 +559,8 @@ function enhanceActionsWithAutoTiling(actions: AILayerAction[], provider: TileSt
             workingMap.set(updateKey, updatedTile)
             neighborUpdates.set(updateKey, { x: update.x, y: update.y, tile: updatedTile })
           }
-        })
-      })
+        }
+      }
 
       enhanced.push(action)
 
