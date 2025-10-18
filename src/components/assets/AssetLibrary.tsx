@@ -7,7 +7,9 @@ import { useState, useMemo } from 'react'
 import { AssetCard } from './AssetCard'
 import { AssetUploadModalEnhanced } from './AssetUploadModalEnhanced'
 import { useAssetLibrary } from '../../hooks/useAssetLibrary'
-import type { AssetType } from '../../types/asset'
+import { TilesetConfigurator } from './TilesetConfigurator'
+import { updateCatalogEntry } from '../../services/assets/assetCatalog'
+import type { Asset, AssetType, TilesetMetadata, SpriteSheetMetadata } from '../../types/asset'
 
 interface AssetLibraryProps {
   userId: string
@@ -17,6 +19,7 @@ interface AssetLibraryProps {
 
 export function AssetLibrary({ userId, onClose, onSelectAsset }: AssetLibraryProps) {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
+  const [tilesetToConfigure, setTilesetToConfigure] = useState<Asset | null>(null)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<AssetType | 'all'>('all')
@@ -28,6 +31,7 @@ export function AssetLibrary({ userId, onClose, onSelectAsset }: AssetLibraryPro
     selectedAssetId,
     uploadProgress,
     uploadAsset: handleUploadAsset,
+    updateAsset: handleUpdateAsset,
     deleteAsset: handleDeleteAsset,
     selectAsset,
     getFilteredAssets,
@@ -55,10 +59,51 @@ export function AssetLibrary({ userId, onClose, onSelectAsset }: AssetLibraryPro
   // Handle asset upload
   const handleUpload = async (
     file: File,
-    metadata: { name: string; type?: AssetType; tags: string[] }
+    metadata: {
+      name: string
+      type?: AssetType
+      tags: string[]
+      tilesetMetadata?: TilesetMetadata
+      spriteSheetMetadata?: SpriteSheetMetadata
+    }
   ) => {
-    await handleUploadAsset(file, metadata)
+    const asset = await handleUploadAsset(file, metadata)
+    return asset
+  }
+
+  const handleTilesetUploadComplete = (asset: Asset) => {
+    if (asset.type === 'tileset') {
+      setTilesetToConfigure(asset)
+    }
     setIsUploadModalOpen(false)
+  }
+
+  const handleTilesetSave = async (metadata: TilesetMetadata) => {
+    if (!tilesetToConfigure) return
+
+    try {
+      await handleUpdateAsset(tilesetToConfigure.id, { tilesetMetadata: metadata })
+
+      const updatedAsset: Asset = {
+        ...tilesetToConfigure,
+        tilesetMetadata: metadata,
+        updatedAt: Date.now()
+      }
+
+      try {
+        await updateCatalogEntry(updatedAsset)
+      } catch (error) {
+        console.warn('Failed to update tileset catalog entry:', error)
+      }
+
+      setTilesetToConfigure(null)
+    } catch (error) {
+      console.error('Failed to save tileset metadata:', error)
+    }
+  }
+
+  const handleTilesetConfiguratorClose = () => {
+    setTilesetToConfigure(null)
   }
 
   const handleAssetSelect = (assetId: string) => {
@@ -289,8 +334,11 @@ export function AssetLibrary({ userId, onClose, onSelectAsset }: AssetLibraryPro
                 onSelect={handleAssetSelect}
                 onDelete={handleDeleteAsset}
                 onUseAsTileset={() => {
-                  // TODO: Open tileset configurator
-                  console.log('Use as tileset:', asset.id)
+                  if (asset.type === 'tileset') {
+                    setTilesetToConfigure(asset)
+                  } else {
+                    console.warn('Tileset configuration is only available for tileset assets')
+                  }
                 }}
                 onCreateAnimation={() => {
                   // TODO: Open animation creator
@@ -307,7 +355,16 @@ export function AssetLibrary({ userId, onClose, onSelectAsset }: AssetLibraryPro
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onUpload={handleUpload}
+        onUploadComplete={handleTilesetUploadComplete}
       />
+
+      {tilesetToConfigure && (
+        <TilesetConfigurator
+          asset={tilesetToConfigure}
+          onClose={handleTilesetConfiguratorClose}
+          onSave={handleTilesetSave}
+        />
+      )}
     </div>
   )
 }

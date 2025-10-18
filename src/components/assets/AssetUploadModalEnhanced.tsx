@@ -6,7 +6,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ManualSpriteSelector } from './ManualSpriteSelector';
 import { detectSpritesByTransparency, detectedSpritesToSelections } from '../../utils/tilemap/spriteDetection';
-import type { AssetType, SpriteSelection } from '../../types/asset';
+import type {
+  Asset,
+  AssetType,
+  SpriteSelection,
+  SpriteSheetMetadata,
+  TilesetMetadata
+} from '../../types/asset';
 
 /**
  * Check if a grid cell contains any visible content
@@ -32,20 +38,19 @@ function checkIfCellHasContent(imageData: ImageData): boolean {
   return opaqueRatio > 0.10;
 }
 
+type UploadMetadata = {
+  name: string;
+  type?: AssetType;
+  tags: string[];
+  tilesetMetadata?: TilesetMetadata;
+  spriteSheetMetadata?: SpriteSheetMetadata;
+};
+
 interface AssetUploadModalEnhancedProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (file: File, metadata: {
-    name: string;
-    type?: AssetType;
-    tags: string[];
-    spriteSheetMetadata?: {
-      spriteSelections?: SpriteSelection[];
-      frameCount?: number;
-      spacing?: number;
-      margin?: number;
-    };
-  }) => Promise<void>;
+  onUpload: (file: File, metadata: UploadMetadata) => Promise<Asset>;
+  onUploadComplete?: (asset: Asset) => void;
 }
 
 type UploadMode = 'basic' | 'manual-select';
@@ -53,7 +58,8 @@ type UploadMode = 'basic' | 'manual-select';
 export function AssetUploadModalEnhanced({
   isOpen,
   onClose,
-  onUpload
+  onUpload,
+  onUploadComplete
 }: AssetUploadModalEnhancedProps) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -207,8 +213,10 @@ export function AssetUploadModalEnhanced({
       setPreview(url);
 
       // If sprite sheet or tileset, switch to sprite selection mode
-      if (type === 'spritesheet' || type === 'tileset') {
+      if (type === 'spritesheet') {
         setMode('manual-select');
+      } else if (type === 'tileset') {
+        setMode('basic');
       }
     } catch (err) {
       console.warn('Failed to process image:', err);
@@ -246,7 +254,7 @@ export function AssetUploadModalEnhanced({
     }
 
     // Validate configurations
-    if (mode === 'manual-select' && spriteSelections.length === 0) {
+    if (type === 'spritesheet' && mode === 'manual-select' && spriteSelections.length === 0) {
       setError('Please select at least one sprite');
       return;
     }
@@ -255,7 +263,7 @@ export function AssetUploadModalEnhanced({
     setError(null);
 
     try {
-      await onUpload(file, {
+      const asset = await onUpload(file, {
         name: name.trim(),
         type,
         tags,
@@ -266,6 +274,10 @@ export function AssetUploadModalEnhanced({
           margin: 0
         } : undefined
       });
+
+      if (asset) {
+        onUploadComplete?.(asset);
+      }
 
       // Reset form
       setFile(null);
@@ -283,7 +295,7 @@ export function AssetUploadModalEnhanced({
     } finally {
       setIsUploading(false);
     }
-  }, [file, name, type, tags, mode, spriteSelections, onUpload, onClose]);
+  }, [file, name, type, tags, mode, spriteSelections, onUpload, onClose, onUploadComplete]);
 
   const handleVisualDetection = useCallback(async () => {
     if (!preview) return;
