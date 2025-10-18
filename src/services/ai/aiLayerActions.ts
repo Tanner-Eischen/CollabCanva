@@ -7,6 +7,7 @@
 import type { TileData, TilemapMeta } from '../../types/tilemap'
 import type { TileLayerMeta } from '../../types/tileLayer'
 import { setTile, setTiles, deleteTile, deleteTiles } from '../tilemap/tilemapSync'
+import { tilesetRegistry } from '../tilemap/tilesetRegistry'
 
 /**
  * AI Action Types for Tilemap Operations
@@ -145,10 +146,12 @@ export class AILayerExecutor {
   ): Promise<AIActionResult> {
     const { layerId, tiles: tilesToPaint } = action
 
+    const normalizedTiles = await this.normalizeTileVariants(tilesToPaint)
+
     // Execute tile updates
     await setTiles(
       this.canvasId,
-      tilesToPaint.map((t) => ({ x: t.x, y: t.y, tile: t.tile })),
+      normalizedTiles.map((t) => ({ x: t.x, y: t.y, tile: t.tile })),
       this.userId,
       16, // chunkSize
       layerId
@@ -157,8 +160,38 @@ export class AILayerExecutor {
     return {
       success: true,
       action,
-      affectedTiles: tilesToPaint.length,
+      affectedTiles: normalizedTiles.length,
     }
+  }
+
+  private async normalizeTileVariants(
+    tiles: Array<{ x: number; y: number; tile: TileData }>
+  ): Promise<Array<{ x: number; y: number; tile: TileData }>> {
+    const uniqueTypes = new Set<string>()
+    tiles.forEach(({ tile }) => {
+      uniqueTypes.add(tile.type)
+    })
+
+    const spriteAvailability = new Map<string, boolean>()
+    await Promise.all(
+      Array.from(uniqueTypes).map(async (type) => {
+        const hasSprite = await tilesetRegistry.hasSprite(type)
+        spriteAvailability.set(type, hasSprite)
+      })
+    )
+
+    return tiles.map(({ x, y, tile }) => {
+      const supportsSprites = spriteAvailability.get(tile.type) ?? false
+      const normalizedTile: TileData = { ...tile }
+
+      if (!supportsSprites) {
+        delete normalizedTile.variant
+      } else if (normalizedTile.variant !== undefined) {
+        normalizedTile.variant = Math.max(0, Math.min(8, Math.floor(normalizedTile.variant)))
+      }
+
+      return { x, y, tile: normalizedTile }
+    })
   }
 
   /**
@@ -201,13 +234,15 @@ export class AILayerExecutor {
       }
     }
 
+    const normalizedTiles = await this.normalizeTileVariants(tilesToPaint)
+
     // Execute paint
-    await setTiles(this.canvasId, tilesToPaint, this.userId, 16, layerId)
+    await setTiles(this.canvasId, normalizedTiles, this.userId, 16, layerId)
 
     return {
       success: true,
       action,
-      affectedTiles: tilesToPaint.length,
+      affectedTiles: normalizedTiles.length,
     }
   }
 
@@ -285,25 +320,52 @@ export class AILayerExecutor {
     }
 
     // Apply auto-tiling variants in batch (only for sprite tiles)
-    const { hasSpriteAsset } = await import('../../constants/tilemapDefaults')
     const { calculateProceduralAutoTileUpdates } = await import('../../utils/tilemap/autoTile')
-    
+
     // Build temporary tile map for auto-tiling calculation
     const tempTileMap = new Map<string, TileData>()
     tilesToPaint.forEach(({ x, y, tile }) => {
       tempTileMap.set(`${x}_${y}`, tile)
     })
-    
+
     // Calculate variants for all tiles that need sprites
     const tileUpdates = calculateProceduralAutoTileUpdates(tilesToPaint, tempTileMap)
-    
+
+    // Precompute sprite availability per tile type
+    const uniqueTypes = new Set<string>()
+    tilesToPaint.forEach(({ tile }) => {
+      uniqueTypes.add(tile.type)
+    })
+
+    const spriteAvailability = new Map<string, boolean>()
+    await Promise.all(
+      Array.from(uniqueTypes).map(async (type) => {
+        const hasSprite = await tilesetRegistry.hasSprite(type)
+        spriteAvailability.set(type, hasSprite)
+      })
+    )
+
+    const updateMap = new Map<string, number>()
+    tileUpdates.forEach((update) => {
+      updateMap.set(`${update.x}_${update.y}`, update.variant)
+    })
+
     // Apply variants to tiles
     const finalTiles = tilesToPaint.map(({ x, y, tile }) => {
-      const update = tileUpdates.find(u => u.x === x && u.y === y)
-      if (update && hasSpriteAsset(tile.type)) {
-        return { x, y, tile: { ...tile, variant: update.variant } }
+      const supportsSprites = spriteAvailability.get(tile.type) ?? false
+      const updateVariant = updateMap.get(`${x}_${y}`)
+      const nextTile: TileData = { ...tile }
+
+      if (!supportsSprites) {
+        delete nextTile.variant
+        return { x, y, tile: nextTile }
       }
-      return { x, y, tile }
+
+      if (nextTile.variant === undefined && updateVariant !== undefined) {
+        nextTile.variant = updateVariant
+      }
+
+      return { x, y, tile: nextTile }
     })
 
     // Execute paint with optimized batch size
@@ -394,6 +456,8 @@ export function parseAIResponseToActions(
   meta: TilemapMeta
 ): AILayerAction[] {
   const actions: AILayerAction[] = []
+
+  tilesetRegistry.setActiveTileset(meta.activeTilesetId)
   const defaultLayerId = meta.layers?.[0]?.id || 'ground'
   const fallbackColor = meta.palette?.[0]?.color || '#ffffff'
   const paletteColorMap = new Map<string, string>(
