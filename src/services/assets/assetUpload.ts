@@ -6,9 +6,16 @@
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage'
 import { ref as dbRef, set, get, remove, update, query, orderByChild, equalTo } from 'firebase/database'
 import { storage, db } from '../firebase'
-import { analyzeTileset as analyzePatterns, generateBasicIndex, type TilesetAnalysisResult } from './tilesetAnalysis'
+import { analyzeTileset as analyzePatterns, generateBasicIndex } from './tilesetAnalysis'
 import { updateCatalogEntry, removeCatalogEntry } from './assetCatalog'
 import { analyzeImageFromUrl as analyzeThemesAndMaterials } from './assetAnalyzer'
+import {
+  applySemanticNamingToSprites,
+  buildTileSemanticGroups,
+  cloneSpriteSheetMetadata,
+  cloneTilesetMetadata,
+  type SpriteRenamingSummary
+} from './metadataUtils'
 import type {
   Asset,
   AssetType,
@@ -16,9 +23,7 @@ import type {
   AssetValidation,
   AssetUploadProgress,
   TilesetMetadata,
-  SpriteSheetMetadata,
-  SpriteSelection,
-  TileSemanticGroup
+  SpriteSheetMetadata
 } from '../../types/asset'
 
 /**
@@ -36,6 +41,24 @@ const ALLOWED_MIME_TYPES = [
   'image/webp',
   'image/gif'
 ]
+
+type TilesetAnalysisSummary = {
+  namedTileCount: number
+  tileGroupCount: number
+  themes: string[]
+  materials: string[]
+  autoTileSystem?: string
+  detectionConfidence?: TilesetMetadata['detectionConfidence']
+  warnings?: string[]
+}
+
+type SpriteSheetAnalysisSummary = {
+  spriteCount: number
+  namedTileCount: number
+  materials: string[]
+  themes: string[]
+  autoTileSystem?: string
+}
 
 /**
  * Generate unique asset ID
@@ -214,22 +237,32 @@ export async function uploadAsset(
           // Auto-detect asset type if not provided
           const assetType = options.type || detectAssetType(metadata, options)
           
-          // === NEW: Auto-analyze tileset ===
+          // Prepare metadata copies so caller-provided objects remain untouched
           let enrichedTilesetMetadata = options.tilesetMetadata
-          
+            ? cloneTilesetMetadata(options.tilesetMetadata)
+            : undefined
+          let enrichedSpriteSheetMetadata = options.spriteSheetMetadata
+            ? cloneSpriteSheetMetadata(options.spriteSheetMetadata)
+            : undefined
+
+          const analysisSummary: {
+            tileset?: TilesetAnalysisSummary
+            spriteSheet?: SpriteSheetAnalysisSummary
+            spriteRenaming?: SpriteRenamingSummary
+          } = {}
+
           if (assetType === 'tileset' && enrichedTilesetMetadata) {
-            const shouldAnalyze = options.autoAnalyze !== false && !options.skipPatternDetection
-            
-            if (shouldAnalyze) {
+            const shouldAnalyzeTileset = options.autoAnalyze !== false && !options.skipPatternDetection
+
+            if (shouldAnalyzeTileset) {
               options.onProgress?.({
                 assetId,
                 fileName,
                 progress: 95,
                 status: 'processing'
               })
-              
+
               try {
-                // 1. Pattern detection (auto-tile, named tiles)
                 const patternAnalysis = await analyzePatterns(url, {
                   tileWidth: enrichedTilesetMetadata.tileWidth,
                   tileHeight: enrichedTilesetMetadata.tileHeight,
@@ -238,8 +271,7 @@ export async function uploadAsset(
                   spacing: enrichedTilesetMetadata.spacing,
                   margin: enrichedTilesetMetadata.margin
                 })
-                
-                // 2. Theme and material detection (color-based)
+
                 const themeAnalysis = await analyzeThemesAndMaterials(url, assetName, {
                   tileWidth: enrichedTilesetMetadata.tileWidth,
                   tileHeight: enrichedTilesetMetadata.tileHeight,
@@ -247,61 +279,36 @@ export async function uploadAsset(
                   rows: enrichedTilesetMetadata.rows,
                   tileCount: enrichedTilesetMetadata.tileCount
                 })
-                
-                console.log('✅ Tileset analysis complete:', {
-                  themes: themeAnalysis.themes,
-                  materials: themeAnalysis.materials,
-                  autoTileSystem: patternAnalysis.autoTileSystem,
-                  namedTileCount: Object.keys(patternAnalysis.namedTiles || {}).length,
-                  confidence: patternAnalysis.detectionConfidence.overall
-                })
-                
-                // === NEW: Also try Kenney analyzer for better results ===
-                console.log('🎮 Checking if this is a Kenney tileset...')
+
                 const { detectKenneyTileset, generateKenneyMetadata } = await import('./kenneyTileNamer')
                 const isKenney = detectKenneyTileset(assetName)
-                console.log(`🎮 Kenney tileset detected: ${isKenney}`)
-                
+
                 if (isKenney) {
-                  console.log('🎮 Using Kenney analyzer for better tile naming...')
                   const kenneyMeta = generateKenneyMetadata(
                     assetName,
                     enrichedTilesetMetadata.tileCount,
                     enrichedTilesetMetadata.tileWidth,
                     enrichedTilesetMetadata.tileHeight
                   )
-                  
-                  console.log('✅ Kenney analysis complete:', {
-                    themes: kenneyMeta.themes,
-                    materials: kenneyMeta.materials,
-                    autoTileSystem: kenneyMeta.autoTileSystem,
-                    namedTileCount: Object.keys(kenneyMeta.namedTiles).length
-                  })
-                  
-                  // Use Kenney results instead
-                  Object.assign(patternAnalysis, {
-                    namedTiles: kenneyMeta.namedTiles,
-                    autoTileSystem: kenneyMeta.autoTileSystem
-                  })
+
+                  patternAnalysis.namedTiles = kenneyMeta.namedTiles
+                  patternAnalysis.autoTileSystem = kenneyMeta.autoTileSystem
+                  enrichedTilesetMetadata.materials = kenneyMeta.materials
+                  enrichedTilesetMetadata.themes = kenneyMeta.themes
                 }
-                // === END NEW ===
-                
-                // Merge both analysis results
+
                 enrichedTilesetMetadata = {
                   ...enrichedTilesetMetadata,
-
-                  // From theme analysis
                   ...themeAnalysis,
-                  
-                  // From pattern analysis (may override theme analysis if higher confidence)
                   autoTileSystem: patternAnalysis.autoTileSystem || themeAnalysis.autoTileSystem,
-                  namedTiles: patternAnalysis.namedTiles || themeAnalysis.namedTiles || {},
+                  namedTiles:
+                    Object.keys(patternAnalysis.namedTiles || {}).length > 0
+                      ? patternAnalysis.namedTiles
+                      : themeAnalysis.namedTiles || enrichedTilesetMetadata.namedTiles || {},
                   features: {
                     ...patternAnalysis.features,
                     ...themeAnalysis.features
                   },
-                  
-                  // Combined confidence
                   detectionConfidence: {
                     autoTilePattern: Math.max(
                       patternAnalysis.detectionConfidence.autoTilePattern,
@@ -311,10 +318,11 @@ export async function uploadAsset(
                       patternAnalysis.detectionConfidence.namedTiles,
                       themeAnalysis.detectionConfidence?.namedTiles || 0
                     ),
-                    overall: (patternAnalysis.detectionConfidence.overall + (themeAnalysis.detectionConfidence?.overall || 0)) / 2
+                    overall:
+                      (patternAnalysis.detectionConfidence.overall +
+                        (themeAnalysis.detectionConfidence?.overall || patternAnalysis.detectionConfidence.overall)) /
+                      2
                   },
-                  
-                  // Combined validation
                   validation: {
                     ...(themeAnalysis.validation || {}),
                     dimensionCheck: 'pass',
@@ -324,45 +332,11 @@ export async function uploadAsset(
                     ],
                     checkedAt: Date.now()
                   },
-                  
-                  // Set version
                   version: 1
                 }
-
-                if (enrichedTilesetMetadata.namedTiles && Object.keys(enrichedTilesetMetadata.namedTiles).length > 0) {
-                  const groups = buildTileSemanticGroups(
-                    enrichedTilesetMetadata.namedTiles,
-                    {
-                      materials: enrichedTilesetMetadata.materials,
-                      themes: enrichedTilesetMetadata.themes,
-                      autoTileSystem: enrichedTilesetMetadata.autoTileSystem
-                    }
-                  )
-                  if (Object.keys(groups).length > 0) {
-                    enrichedTilesetMetadata.tileGroups = groups
-                  }
-                }
-
-                console.log('✅ Final tileset metadata:', {
-                  themes: enrichedTilesetMetadata.themes,
-                  materials: enrichedTilesetMetadata.materials,
-                  autoTileSystem: enrichedTilesetMetadata.autoTileSystem,
-                  namedTileCount: Object.keys(enrichedTilesetMetadata.namedTiles || {}).length,
-                  confidence: enrichedTilesetMetadata.detectionConfidence?.overall
-                })
-                
-                // Apply semantic naming to sprite selections if they exist
-                if (options.spriteSheetMetadata?.spriteSelections && enrichedTilesetMetadata.namedTiles) {
-                  applySemanticNamingToSprites(
-                    options.spriteSheetMetadata.spriteSelections,
-                    enrichedTilesetMetadata.namedTiles,
-                    assetName
-                  )
-                }
               } catch (analysisError) {
-                console.warn('⚠ Tileset analysis failed, using basic index:', analysisError)
-                
-                // Fallback to basic index
+                console.warn('[AssetUpload] Tileset analysis failed, using basic index', analysisError)
+
                 enrichedTilesetMetadata = {
                   ...enrichedTilesetMetadata,
                   namedTiles: generateBasicIndex({ tileCount: enrichedTilesetMetadata.tileCount }),
@@ -378,92 +352,56 @@ export async function uploadAsset(
                   },
                   version: 1
                 }
-
-                const fallbackGroups = buildTileSemanticGroups(
-                  enrichedTilesetMetadata.namedTiles,
-                  {
-                    materials: enrichedTilesetMetadata.materials,
-                    themes: enrichedTilesetMetadata.themes,
-                    autoTileSystem: enrichedTilesetMetadata.autoTileSystem
-                  }
-                )
-                if (Object.keys(fallbackGroups).length > 0) {
-                  enrichedTilesetMetadata.tileGroups = fallbackGroups
-                }
               }
             }
-          }
 
-          if (
-            assetType === 'tileset' &&
-            enrichedTilesetMetadata?.namedTiles &&
-            !enrichedTilesetMetadata.tileGroups
-          ) {
-            const groups = buildTileSemanticGroups(
-              enrichedTilesetMetadata.namedTiles,
-              {
+            if (enrichedTilesetMetadata.namedTiles && Object.keys(enrichedTilesetMetadata.namedTiles).length > 0) {
+              const groups = buildTileSemanticGroups(enrichedTilesetMetadata.namedTiles, {
                 materials: enrichedTilesetMetadata.materials,
                 themes: enrichedTilesetMetadata.themes,
                 autoTileSystem: enrichedTilesetMetadata.autoTileSystem
+              })
+              if (Object.keys(groups).length > 0) {
+                enrichedTilesetMetadata.tileGroups = groups
               }
-            )
-            if (Object.keys(groups).length > 0) {
-              enrichedTilesetMetadata.tileGroups = groups
+            }
+
+            analysisSummary.tileset = {
+              namedTileCount: Object.keys(enrichedTilesetMetadata.namedTiles || {}).length,
+              tileGroupCount: Object.keys(enrichedTilesetMetadata.tileGroups || {}).length,
+              themes: enrichedTilesetMetadata.themes || [],
+              materials: enrichedTilesetMetadata.materials || [],
+              autoTileSystem: enrichedTilesetMetadata.autoTileSystem,
+              detectionConfidence: enrichedTilesetMetadata.detectionConfidence,
+              warnings: enrichedTilesetMetadata.validation?.warnings
             }
           }
 
-          // === NEW: Auto-analyze sprite sheets ===
-          let enrichedSpriteSheetMetadata = options.spriteSheetMetadata
-          
-          console.log('🔍 [SPRITESHEET] Checking for analysis...')
-          console.log(`🔍 [SPRITESHEET] assetType: ${assetType}`)
-          console.log(`🔍 [SPRITESHEET] has enrichedSpriteSheetMetadata: ${!!enrichedSpriteSheetMetadata}`)
-          console.log(`🔍 [SPRITESHEET] spriteSelections: ${enrichedSpriteSheetMetadata?.spriteSelections?.length || 0}`)
-          
-          if (assetType === 'spritesheet' && enrichedSpriteSheetMetadata?.spriteSelections) {
-            console.log('🔍 [SPRITESHEET] ✅ Conditions met! Starting analysis...')
-            const shouldAnalyze = options.autoAnalyze !== false
-            console.log(`🔍 [SPRITESHEET] shouldAnalyze: ${shouldAnalyze}`)
-            console.log(`🔍 [SPRITESHEET] spriteSelections.length: ${enrichedSpriteSheetMetadata.spriteSelections.length}`)
-            
-            if (shouldAnalyze && enrichedSpriteSheetMetadata.spriteSelections.length > 0) {
-              console.log('🔍 [SPRITESHEET] ✅ Entering analysis block...')
+          if (assetType === 'spritesheet' && enrichedSpriteSheetMetadata?.spriteSelections?.length) {
+            const shouldAnalyzeSpriteSheet = options.autoAnalyze !== false
+
+            if (shouldAnalyzeSpriteSheet) {
               options.onProgress?.({
                 assetId,
                 fileName,
                 progress: 95,
                 status: 'processing'
               })
-              
+
               try {
-                console.log('🔍 [SPRITESHEET] Starting sprite sheet analysis...')
-                
-                // Get first sprite dimensions for analysis
                 const firstSprite = enrichedSpriteSheetMetadata.spriteSelections[0]
                 const tileWidth = firstSprite.width
                 const tileHeight = firstSprite.height
-                
-                // Calculate effective grid dimensions
-                const cols = enrichedSpriteSheetMetadata.columns || 
-                            Math.ceil(Math.sqrt(enrichedSpriteSheetMetadata.spriteSelections.length))
-                const rows = enrichedSpriteSheetMetadata.rows || 
-                            Math.ceil(enrichedSpriteSheetMetadata.spriteSelections.length / cols)
-                
-                console.log(`📐 Analyzing as ${cols}x${rows} grid with ${tileWidth}x${tileHeight}px tiles`)
-                
-                // Check if this is a Kenney tileset first
+
                 const { detectKenneyTileset, generateKenneyMetadata } = await import('./kenneyTileNamer')
                 const isKenney = detectKenneyTileset(assetName)
-                console.log(`🎮 Kenney tileset detected: ${isKenney}`)
-                
+
                 let namedTiles: Record<string, number | string> = {}
                 let detectedMaterials: string[] = []
                 let detectedThemes: string[] = []
                 let autoTileSystem: string | undefined
-                
+
                 if (isKenney) {
-                  // Use Kenney-specific naming (more aggressive and accurate)
-                  console.log('🎮 Using Kenney-specific analyzer...')
                   const kenneyMeta = generateKenneyMetadata(
                     assetName,
                     enrichedSpriteSheetMetadata.spriteSelections.length,
@@ -474,52 +412,60 @@ export async function uploadAsset(
                   detectedMaterials = kenneyMeta.materials
                   detectedThemes = kenneyMeta.themes
                   autoTileSystem = kenneyMeta.autoTileSystem
-                  
-                  console.log('✅ Kenney analysis complete:', {
-                    themes: detectedThemes,
-                    materials: detectedMaterials,
-                    autoTileSystem,
-                    namedTileCount: Object.keys(namedTiles).length
-                  })
                 } else {
-                  // For sprite sheets with manual selections, skip pattern analysis
-                  // (it requires loading image which can have CORS issues)
-                  // Instead, just use basic naming
-                  console.log('ℹ️ Skipping pattern analysis for manual sprite selections')
-                  console.log('✅ Using basic naming for sprite sheet')
-                  
-                  // Detect sprite type from filename
                   const { detectSpriteType, generateNamedTilesWithType } = await import('./kenneyTileNamer')
                   const spriteType = detectSpriteType(assetName)
-                  
+
                   namedTiles = generateNamedTilesWithType(
                     enrichedSpriteSheetMetadata.spriteSelections.length,
                     'sprite',
                     spriteType
                   )
-                  
-                  detectedThemes = []
+
                   detectedMaterials = spriteType ? [spriteType] : []
+                  detectedThemes = []
                 }
-                
-                // Apply semantic naming to sprite selections
+
                 if (Object.keys(namedTiles).length > 0) {
-                  console.log(`🏷️ Found ${Object.keys(namedTiles).length} named tiles, applying to ${enrichedSpriteSheetMetadata.spriteSelections.length} sprites...`)
-                  applySemanticNamingToSprites(
+                  analysisSummary.spriteRenaming = applySemanticNamingToSprites(
                     enrichedSpriteSheetMetadata.spriteSelections,
                     namedTiles,
                     assetName
                   )
-                } else {
-                  console.warn('⚠️ No named tiles detected by analyzer - sprites will keep numeric names')
-                  console.warn('   This is normal for irregular sprite sheets or unrecognized patterns')
+                }
+
+                analysisSummary.spriteSheet = {
+                  spriteCount: enrichedSpriteSheetMetadata.spriteSelections.length,
+                  namedTileCount: Object.keys(namedTiles).length,
+                  materials: detectedMaterials,
+                  themes: detectedThemes,
+                  autoTileSystem
                 }
               } catch (analysisError) {
-                console.error('❌ Sprite sheet analysis failed, keeping original names:', analysisError)
+                console.warn('[AssetUpload] Sprite sheet analysis failed, keeping original names', analysisError)
+              }
+            } else {
+              analysisSummary.spriteSheet = {
+                spriteCount: enrichedSpriteSheetMetadata.spriteSelections.length,
+                namedTileCount: 0,
+                materials: [],
+                themes: [],
+                autoTileSystem: undefined
               }
             }
           }
-          // === END NEW ===
+
+          if (
+            assetType === 'tileset' &&
+            enrichedTilesetMetadata?.namedTiles &&
+            enrichedSpriteSheetMetadata?.spriteSelections
+          ) {
+            analysisSummary.spriteRenaming = applySemanticNamingToSprites(
+              enrichedSpriteSheetMetadata.spriteSelections,
+              enrichedTilesetMetadata.namedTiles,
+              assetName
+            )
+          }
 
           // === REMOVED DUPLICATE - Handled by universal analyzer above ===
 
@@ -563,55 +509,27 @@ export async function uploadAsset(
             status: 'complete'
           })
 
-          // === Final summary ===
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-          console.log('✅ Asset Upload Complete!')
-          console.log(`📦 Asset: ${assetName}`)
-          console.log(`🏷️  Type: ${assetType}`)
-          
-          if (asset.type === 'spritesheet' && enrichedSpriteSheetMetadata?.spriteSelections) {
-            const selections = enrichedSpriteSheetMetadata.spriteSelections
-            // Check if names contain semantic prefixes (like sprite_, grass_, etc) before the final number
-            const semanticCount = selections.filter(s => s.name.match(/_[a-z_]+_\d+$/i)).length
-            console.log(`🎨 Sprites: ${selections.length} total`)
-            if (semanticCount > 0) {
-              console.log(`   └─ ${semanticCount} with semantic names`)
-              console.log(`   └─ ${selections.length - semanticCount} with numeric names`)
-              console.log('📝 Sample sprite names:')
-              selections.slice(0, 10).forEach(s => console.log(`   - ${s.name}`))
-              if (selections.length > 10) {
-                console.log(`   ... and ${selections.length - 10} more`)
-              }
-            } else {
-              console.log(`   └─ All using numeric names (pattern not recognized)`)
+          if (!analysisSummary.spriteSheet && enrichedSpriteSheetMetadata?.spriteSelections) {
+            analysisSummary.spriteSheet = {
+              spriteCount: enrichedSpriteSheetMetadata.spriteSelections.length,
+              namedTileCount: analysisSummary.spriteRenaming?.renamedCount || 0,
+              materials: [],
+              themes: [],
+              autoTileSystem: undefined
             }
           }
-          
-          if (asset.type === 'tileset' && enrichedTilesetMetadata) {
-            const namedCount = Object.keys(enrichedTilesetMetadata.namedTiles || {}).length
-            console.log(`🎨 Tiles: ${enrichedTilesetMetadata.tileCount} total`)
-            if (namedCount > 0) {
-              console.log(`   └─ ${namedCount} with semantic names`)
-              console.log(`🌲 Themes: ${enrichedTilesetMetadata.themes?.join(', ') || 'none'}`)
-              console.log(`🪨 Materials: ${enrichedTilesetMetadata.materials?.join(', ') || 'none'}`)
-              if (enrichedTilesetMetadata.autoTileSystem) {
-                console.log(`🔧 Auto-tile: ${enrichedTilesetMetadata.autoTileSystem}`)
-              }
-              const tileGroups = enrichedTilesetMetadata.tileGroups
-              if (tileGroups && Object.keys(tileGroups).length > 0) {
-                const groupSummary = Object.entries(tileGroups)
-                  .map(([groupKey, group]) => `${groupKey} (${group.tileCount} variants)`)
-                  .join(', ')
-                console.log(`🧩 Groups: ${groupSummary}`)
-                const firstGroup = Object.values(tileGroups)[0]
-                if (firstGroup?.variants?.length) {
-                  console.log(`   └─ Sample variants: ${firstGroup.variants.slice(0, 6).join(', ')}${firstGroup.variants.length > 6 ? '…' : ''}`)
-                }
-              }
-            }
+
+          const summaryPayload = {
+            assetId,
+            assetName,
+            assetType,
+            tileset: analysisSummary.tileset,
+            spriteSheet: analysisSummary.spriteSheet,
+            spriteRenaming: analysisSummary.spriteRenaming,
+            spriteCount: enrichedSpriteSheetMetadata?.spriteSelections?.length
           }
-          
-          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
+          console.info('[AssetUpload] Upload complete', summaryPayload)
 
           resolve(asset)
         } catch (error) {
@@ -620,153 +538,6 @@ export async function uploadAsset(
       }
     )
   })
-}
-
-/**
- * Build semantic tile groups for AI consumption based on named tile metadata
- */
-function buildTileSemanticGroups(
-  namedTiles: Record<string, number | string>,
-  context: Pick<TilesetMetadata, 'materials' | 'themes' | 'autoTileSystem'>
-): Record<string, TileSemanticGroup> {
-  const groups: Record<string, TileSemanticGroup> = {}
-  const materials = context.materials || []
-  const themes = context.themes || []
-
-  for (const [rawName, rawIndex] of Object.entries(namedTiles)) {
-    const tileIndex = typeof rawIndex === 'number' ? rawIndex : parseInt(rawIndex as string, 10)
-    if (Number.isNaN(tileIndex)) {
-      continue
-    }
-
-    const normalizedName = rawName.trim()
-    if (!normalizedName) {
-      continue
-    }
-
-    const lowerName = normalizedName.toLowerCase()
-    const nameMatch = lowerName.match(/^([a-z0-9]+)[._-]?(.*)$/)
-    if (!nameMatch) {
-      continue
-    }
-
-    const groupKey = nameMatch[1]
-    const remainder = nameMatch[2]
-    const variant = remainder ? remainder.replace(/[.\s-]+/g, '_') : 'base'
-
-    if (!groups[groupKey]) {
-      const matchingMaterials = materials.filter(material => {
-        const materialKey = material.toLowerCase()
-        return materialKey === groupKey || groupKey.includes(materialKey) || materialKey.includes(groupKey)
-      })
-
-      const matchingThemes = themes.filter(theme => {
-        const themeKey = theme.toLowerCase()
-        return themeKey === groupKey || groupKey.includes(themeKey) || themeKey.includes(groupKey)
-      })
-
-      const label = groupKey.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
-
-      groups[groupKey] = {
-        label,
-        description: context.autoTileSystem
-          ? `${label} auto-tiling variants (${context.autoTileSystem})`
-          : `${label} tile variants`,
-        autoTileSystem: context.autoTileSystem,
-        materials: matchingMaterials.length > 0 ? matchingMaterials : undefined,
-        themes: matchingThemes.length > 0 ? matchingThemes : undefined,
-        tiles: {},
-        variants: [],
-        tileCount: 0
-      }
-    }
-
-    const group = groups[groupKey]
-    const normalizedVariant = variant || groupKey
-    group.tiles[normalizedVariant] = tileIndex
-    if (!group.variants.includes(normalizedVariant)) {
-      group.variants.push(normalizedVariant)
-    }
-    group.tileCount += 1
-  }
-
-  Object.entries(groups).forEach(([groupKey, group]) => {
-    group.variants.sort()
-
-    if (!group.materials && materials.length === 1) {
-      group.materials = materials
-    }
-
-    if (!group.themes && themes.length === 1) {
-      group.themes = themes
-    }
-
-    if (!group.description) {
-      group.description = `${group.label || groupKey} tile variants`
-    }
-  })
-
-  return groups
-}
-
-/**
- * Apply semantic naming to sprite selections based on namedTiles mapping
- * Renames sprites from "filename_00" to "filename_grass_center" etc.
- */
-function applySemanticNamingToSprites(
-  spriteSelections: SpriteSelection[],
-  namedTiles: Record<string, number | string>,
-  baseFileName: string
-): void {
-  // Create reverse mapping: index → semantic name
-  const indexToName: Record<number, string> = {}
-  
-  for (const [semanticName, index] of Object.entries(namedTiles)) {
-    const numIndex = typeof index === 'number' ? index : parseInt(index, 10)
-    if (!isNaN(numIndex)) {
-      // Clean up the semantic name (remove dots, lowercase, replace spaces with underscores)
-      const cleanName = semanticName
-        .replace(/\./g, '_')
-        .replace(/\s+/g, '_')
-        .toLowerCase()
-      indexToName[numIndex] = cleanName
-    }
-  }
-  
-  console.log(`🏷️ Applying semantic names to ${spriteSelections.length} sprites...`)
-  console.log(`📋 Available semantic names:`, indexToName)
-  
-  // Update sprite names
-  let renamedCount = 0
-  const renamedList: string[] = []
-  
-  spriteSelections.forEach((sprite, index) => {
-    if (indexToName[index]) {
-      const oldName = sprite.name
-      sprite.name = `${baseFileName}_${indexToName[index]}`
-      renamedList.push(`  ${oldName} → ${sprite.name}`)
-      renamedCount++
-    }
-    // If no semantic name found, keep the original name
-  })
-  
-  // Show first 20 renames, then summary
-  if (renamedList.length > 0) {
-    console.log('📝 Sample renames (first 20):')
-    renamedList.slice(0, 20).forEach(line => console.log(line))
-    if (renamedList.length > 20) {
-      console.log(`  ... and ${renamedList.length - 20} more`)
-    }
-  }
-  
-  console.log(`✅ Renamed ${renamedCount}/${spriteSelections.length} sprites with semantic names`)
-  
-  if (renamedCount === 0) {
-    console.warn('⚠️ No semantic names were applied. This could mean:')
-    console.warn('  - The tileset pattern was not recognized')
-    console.warn('  - The analyzer returned empty namedTiles')
-    console.warn('  - Detection confidence was too low')
-  }
 }
 
 /**
