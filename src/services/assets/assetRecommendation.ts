@@ -41,9 +41,9 @@ export async function recommendTilesets(
     .slice(0, limit)
     .map(x => x.entry)
   
-  // Load full assets
+  // Load full assets (public read)
   const assets = await Promise.all(
-    topEntries.map(entry => getAsset(entry.id, userId))
+    topEntries.map(entry => getAsset(entry.id))
   )
   
   return assets.filter(Boolean) as Asset[]
@@ -186,7 +186,7 @@ export async function getTilesetSuggestions(
   if (context.mapTileSize) {
     const sizeMatches = catalog.filter(e => e.tileSize === context.mapTileSize)
     if (sizeMatches.length > 0) {
-      const asset = await getAsset(sizeMatches[0].id, userId)
+      const asset = await getAsset(sizeMatches[0].id)
       if (asset) {
         suggestions.push({
           asset,
@@ -200,7 +200,7 @@ export async function getTilesetSuggestions(
   if (context.currentLayer) {
     const layerMatches = catalog.filter(e => e.layerTypes.includes(context.currentLayer!))
     if (layerMatches.length > 0) {
-      const asset = await getAsset(layerMatches[0].id, userId)
+      const asset = await getAsset(layerMatches[0].id)
       if (asset) {
         suggestions.push({
           asset,
@@ -216,7 +216,7 @@ export async function getTilesetSuggestions(
       context.recentMaterials!.some(m => e.materials.includes(m))
     )
     if (materialMatches.length > 0) {
-      const asset = await getAsset(materialMatches[0].id, userId)
+      const asset = await getAsset(materialMatches[0].id)
       if (asset) {
         suggestions.push({
           asset,

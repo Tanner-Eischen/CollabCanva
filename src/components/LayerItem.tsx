@@ -19,6 +19,10 @@ interface LayerItemProps {
   isExpanded?: boolean
   onToggleExpand?: () => void
   themed?: boolean
+  onFocusLayer?: (id: string) => void
+  onMoveLayer?: (id: string, direction: 'forward' | 'backward' | 'front' | 'back') => void
+  canMoveUp?: boolean
+  canMoveDown?: boolean
 }
 
 /**
@@ -38,6 +42,10 @@ export function LayerItem({
   isExpanded = true,
   onToggleExpand,
   themed = false,
+  onFocusLayer,
+  onMoveLayer,
+  canMoveUp,
+  canMoveDown,
 }: LayerItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(layer.name)
@@ -89,14 +97,14 @@ export function LayerItem({
   }
 
   return (
-    <div className={themed ? 'px-2 py-0.5' : ''}>
+    <div className={`${themed ? 'px-2 py-0.5' : ''}`}>
       <div
-        className={`flex items-center px-2 py-1.5 cursor-pointer rounded-md transition-colors ${
-          themed 
-            ? isSelected 
-              ? 'bg-white/50 border-l-4 border-white shadow-md' 
+        className={`group flex items-center px-2 py-1.5 cursor-pointer rounded-md transition-colors ${
+          themed
+            ? isSelected
+              ? 'bg-white/50 border-l-4 border-white shadow-md'
               : 'bg-white/15 hover:bg-white/25'
-            : isSelected 
+            : isSelected
               ? 'bg-blue-100 border-l-4 border-blue-600 shadow-sm' 
               : 'hover:bg-gray-100'
         }`}
@@ -184,8 +192,17 @@ export function LayerItem({
             }`}
             onClick={(e) => {
               e.stopPropagation()
-              onToggleVisibility(layer.id)
+              if (e.shiftKey || !onFocusLayer) {
+                onToggleVisibility(layer.id)
+              } else {
+                onFocusLayer(layer.id)
+              }
             }}
+            title={
+              onFocusLayer
+                ? 'Focus layer (Shift+Click to toggle visibility)'
+                : layer.visible ? 'Hide layer' : 'Show layer'
+            }
           >
             {layer.visible ? (
               <span className={`text-sm ${themed ? 'text-white/80' : 'text-gray-600'}`}>👁️</span>
@@ -208,6 +225,71 @@ export function LayerItem({
             >
               <span className="text-sm">🗑️</span>
             </button>
+          )}
+
+          {onMoveLayer && (
+            <div
+              className={`flex items-center gap-0 ml-1 transition-opacity ${
+                themed ? 'text-white/60' : 'text-gray-400'
+              } opacity-0 group-hover:opacity-100`}
+            >
+              <button
+                className={`w-6 h-6 flex items-center justify-center rounded ${
+                  themed ? 'hover:bg-white/30 disabled:opacity-30' : 'hover:bg-gray-200 disabled:opacity-40'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (canMoveDown === false) return
+                  onMoveLayer(layer.id, 'back')
+                }}
+                disabled={canMoveDown === false}
+                title="Send to back"
+              >
+                ⤓
+              </button>
+              <button
+                className={`w-6 h-6 flex items-center justify-center rounded ${
+                  themed ? 'hover:bg-white/30 disabled:opacity-30' : 'hover:bg-gray-200 disabled:opacity-40'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (canMoveDown === false) return
+                  onMoveLayer(layer.id, 'backward')
+                }}
+                disabled={canMoveDown === false}
+                title="Send backward"
+              >
+                ▼
+              </button>
+              <button
+                className={`w-6 h-6 flex items-center justify-center rounded ${
+                  themed ? 'hover:bg-white/30 disabled:opacity-30' : 'hover:bg-gray-200 disabled:opacity-40'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (canMoveUp === false) return
+                  onMoveLayer(layer.id, 'forward')
+                }}
+                disabled={canMoveUp === false}
+                title="Bring forward"
+              >
+                ▲
+              </button>
+              <button
+                className={`w-6 h-6 flex items-center justify-center rounded ${
+                  themed ? 'hover:bg-white/30 disabled:opacity-30' : 'hover:bg-gray-200 disabled:opacity-40'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (canMoveUp === false) return
+                  onMoveLayer(layer.id, 'front')
+                }}
+                disabled={canMoveUp === false}
+                title="Bring to front"
+              >
+                ⤒
+              </button>
+            </div>
           )}
         </div>
       </div>

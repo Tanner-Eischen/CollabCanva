@@ -1,7 +1,37 @@
 [
   {
-    "origin": ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
-    "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+    "origin": [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:5175",
+      "http://localhost:5176",
+      "http://localhost:5177",
+      "http://localhost:5178",
+      "http://localhost:5179",
+      "http://localhost:5180",
+      "http://localhost:5181",
+      "http://localhost:5182",
+      "http://localhost:5183",
+      "http://localhost:5184",
+      "http://localhost:5185",
+      "https://localhost:5173",
+      "https://localhost:5174",
+      "https://localhost:5175",
+      "https://localhost:5176",
+      "https://localhost:5177",
+      "https://localhost:5178",
+      "https://localhost:5179",
+      "https://localhost:5180",
+      "https://localhost:5181",
+      "https://localhost:5182",
+      "https://localhost:5183",
+      "https://localhost:5184",
+      "https://localhost:5185",
+      "https://collabcanva.firebaseapp.com",
+      "https://collabcanva.web.app"
+    ],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Authorization"],
     "maxAgeSeconds": 3600
   }
 ]

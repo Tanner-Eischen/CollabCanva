@@ -70,7 +70,7 @@ export const listAssetsTool: ToolDefinition = {
       const summary = {
         total: assets.length,
         byType: assets.reduce((acc: any, asset) => {
-          acc[asset.type] = (acc[asset.type] || 0) + 1
+          acc[asset_type] = (acc[asset_type] || 0) + 1
           return acc
         }, {}),
         tilesets: assets.filter(a => a.type === 'tileset').map(a => ({
@@ -109,7 +109,7 @@ export const listAssetsTool: ToolDefinition = {
  */
 export const analyzeAssetTool: ToolDefinition = {
   name: 'analyzeAsset',
-  description: 'Analyze a specific asset (sprite sheet or tileset) to understand its properties, tile sizes, and how it can be used. Returns detailed metadata about the asset.',
+  description: 'Analyze a specific asset (sprite sheet or tileset) to understand its properties, tile sizes, and how it can be used. Returns detailed metadata about the asset_',
   parameters: {
     type: 'object',
     properties: {
@@ -143,31 +143,31 @@ export const analyzeAssetTool: ToolDefinition = {
       // Build analysis
       const analysis: any = {
         id: assetId,
-        name: asset.name,
-        type: asset.type,
-        url: asset.url,
-        tags: asset.tags || []
+        name: asset_name,
+        type: asset_type,
+        url: asset_url,
+        tags: asset_tags || []
       }
 
-      if (asset.tilesetMetadata) {
+      if (asset_tilesetMetadata) {
         analysis.tileset = {
-          tileWidth: asset.tilesetMetadata.tileWidth,
-          tileHeight: asset.tilesetMetadata.tileHeight,
-          spacing: asset.tilesetMetadata.spacing || 0,
-          margin: asset.tilesetMetadata.margin || 0,
-          tiles: asset.tilesetMetadata.tiles || [],
-          tileCount: asset.tilesetMetadata.tiles?.length || 0,
-          hasAutoTile: asset.tilesetMetadata.autoTileMappings ? true : false,
-          gridLayout: `${asset.tilesetMetadata.columns || '?'} columns × ${asset.tilesetMetadata.rows || '?'} rows`
+          tileWidth: asset_tilesetMetadata.tileWidth,
+          tileHeight: asset_tilesetMetadata.tileHeight,
+          spacing: asset_tilesetMetadata.spacing || 0,
+          margin: asset_tilesetMetadata.margin || 0,
+          tiles: asset_tilesetMetadata.tiles || [],
+          tileCount: asset_tilesetMetadata.tiles?.length || 0,
+          hasAutoTile: asset_tilesetMetadata.autoTileMappings ? true : false,
+          gridLayout: `${asset_tilesetMetadata.columns || '?'} columns × ${asset_tilesetMetadata.rows || '?'} rows`
         }
       }
 
-      if (asset.spriteSheetMetadata) {
+      if (asset_spriteSheetMetadata) {
         analysis.spritesheet = {
-          selectionMode: asset.spriteSheetMetadata.selectionMode || 'grid',
-          sprites: asset.spriteSheetMetadata.spriteSelections || [],
-          spriteCount: asset.spriteSheetMetadata.spriteSelections?.length || 0,
-          sizes: asset.spriteSheetMetadata.spriteSelections?.map((s: any) => 
+          selectionMode: asset_spriteSheetMetadata.selectionMode || 'grid',
+          sprites: asset_spriteSheetMetadata.spriteSelections || [],
+          spriteCount: asset_spriteSheetMetadata.spriteSelections?.length || 0,
+          sizes: asset_spriteSheetMetadata.spriteSelections?.map((s: any) => 
             `${s.name}: ${s.width}×${s.height}`
           ) || []
         }
@@ -175,19 +175,19 @@ export const analyzeAssetTool: ToolDefinition = {
 
       // Generate usage suggestions
       const suggestions: string[] = []
-      if (asset.type === 'tileset') {
+      if (asset_type === 'tileset') {
         suggestions.push(`Use this tileset with the paintTileRegion tool to paint ${analysis.tileset?.tileCount || 0} different tiles`)
         if (analysis.tileset?.hasAutoTile) {
           suggestions.push('This tileset has auto-tile support for seamless terrain painting')
         }
       }
-      if (asset.type === 'spritesheet') {
+      if (asset_type === 'spritesheet') {
         suggestions.push(`This sprite sheet has ${analysis.spritesheet?.spriteCount || 0} individual sprites that can be used for game objects`)
       }
 
       return {
         success: true,
-        message: `Analyzed ${asset.name} (${asset.type})`,
+        message: `Analyzed ${asset_name} (${asset_type})`,
         data: {
           analysis,
           suggestions
@@ -368,7 +368,7 @@ export const recommendAssetTool: ToolDefinition = {
       const searchTerms = purpose.toLowerCase().split(/\s+/)
       const scored = assets.map(asset => {
         let score = 0
-        const assetText = `${asset.name} ${asset.tags.join(' ')}`.toLowerCase()
+        const assetText = `${asset_name} ${asset_tags.join(' ')}`.toLowerCase()
 
         // Score based on matching terms
         for (const term of searchTerms) {
@@ -379,7 +379,7 @@ export const recommendAssetTool: ToolDefinition = {
 
         // Boost tilesets for terrain-related queries
         if ((purpose.includes('terrain') || purpose.includes('tile') || purpose.includes('ground')) 
-            && asset.type === 'tileset') {
+            && asset_type === 'tileset') {
           score += 5
         }
 
@@ -693,15 +693,15 @@ export const selectTilesetTool: ToolDefinition = {
       return {
         success: true,
         message: `Selected "${best.name}" (${catalog.length} ${catalog.length === 1 ? 'match' : 'matches'} found)` +
-          (asset.tilesetMetadata?.tileGroups
-            ? ` — semantic groups: ${Object.keys(asset.tilesetMetadata.tileGroups).join(', ')}`
+          (asset_tilesetMetadata?.tileGroups
+            ? ` — semantic groups: ${Object.keys(asset_tilesetMetadata.tileGroups).join(', ')}`
             : ''),
         data: {
           tilesetId: best.id,
           name: best.name,
           tileSize: best.tileSize,
-          namedTiles: asset.tilesetMetadata?.namedTiles || {},
-          tileGroups: asset.tilesetMetadata?.tileGroups || {},
+          namedTiles: asset_tilesetMetadata?.namedTiles || {},
+          tileGroups: asset_tilesetMetadata?.tileGroups || {},
           features: best.features,
           autoTileSystem: best.autoTileSystem,
           themes: best.themes,
@@ -709,7 +709,7 @@ export const selectTilesetTool: ToolDefinition = {
           alternatives: alternatives.length > 0 ? alternatives : undefined,
           usage: {
             instruction: `Use namedTiles to reference specific tiles. Example: namedTiles["grass.center"] = tile index`,
-            availableTiles: Object.keys(asset.tilesetMetadata?.namedTiles || {}).slice(0, 10)
+            availableTiles: Object.keys(asset_tilesetMetadata?.namedTiles || {}).slice(0, 10)
           }
         }
       }

@@ -6,6 +6,7 @@
 
 import { ref, set, get, remove, query, orderByChild, equalTo, update } from 'firebase/database'
 import { db } from '../firebase'
+import type { Asset } from '../../types/asset'
 
 export interface AssetFolder {
   id: string
@@ -131,26 +132,31 @@ export async function deleteFolder(
   }
 
   // Move all assets in this folder to parent or root
-  const assetsRef = ref(db, 'assets')
+  const assetsRef = ref(db, `assets/${userId}`)
   const assetsSnapshot = await get(assetsRef)
-  
+
   if (assetsSnapshot.exists()) {
     const updates: Record<string, any> = {}
-    
+    const nextFolderId = folder.parentId ?? null
+    const timestamp = Date.now()
+
     assetsSnapshot.forEach((childSnapshot) => {
-      const asset = childSnapshot.val()
-      if (asset.userId === userId && asset.folderId === folderId) {
-        // Move to parent folder or root
-        updates[`assets/${childSnapshot.key}/folderId`] = folder.parentId || null
+      const asset = childSnapshot.val() as Asset | null
+      const assetId = childSnapshot.key
+
+      if (!assetId || !asset) {
+        return
+      }
+
+      const currentFolder = asset.folderId ?? null
+      if (currentFolder === folderId) {
+        updates[`assets/${userId}/${assetId}/folderId`] = nextFolderId
+        updates[`assets/${userId}/${assetId}/updatedAt`] = timestamp
       }
     })
 
     if (Object.keys(updates).length > 0) {
-      await Promise.all(
-        Object.entries(updates).map(([path, value]) => 
-          set(ref(db, path), value)
-        )
-      )
+      await update(ref(db), updates)
     }
   }
 
@@ -172,10 +178,20 @@ export async function deleteFolder(
  */
 export async function moveAssetToFolder(
   assetId: string,
+  userId: string,
   folderId: string | null
 ): Promise<void> {
   const assetRef = ref(db, `assets/${assetId}`)
-  await update(assetRef, { folderId: folderId || null })
+  // Verify ownership before updating
+  const snapshot = await get(assetRef)
+  if (!snapshot.exists()) {
+    throw new Error('Asset not found')
+  }
+  const asset = snapshot.val() as Asset
+  if (asset.userId !== userId) {
+    throw new Error('Permission denied: You can only move your own assets')
+  }
+  await update(assetRef, { folderId: folderId ?? null, updatedAt: Date.now() })
 }
 
 /**
@@ -185,24 +201,27 @@ export async function getAssetsInFolder(
   userId: string,
   folderId: string | null
 ): Promise<string[]> {
+  // Query user's assets
   const assetsRef = ref(db, 'assets')
-  const snapshot = await get(assetsRef)
-  
+  const userAssetsQuery = query(
+    assetsRef,
+    orderByChild('userId'),
+    equalTo(userId)
+  )
+  const snapshot = await get(userAssetsQuery)
+
   if (!snapshot.exists()) {
     return []
   }
 
   const assetIds: string[] = []
   snapshot.forEach((childSnapshot) => {
-    const asset = childSnapshot.val()
-    if (asset.userId === userId) {
-      const assetFolderId = asset.folderId || null
-      if (assetFolderId === folderId) {
-        assetIds.push(childSnapshot.key!)
-      }
+    const asset = childSnapshot.val() as Asset
+    if ((asset?.folderId ?? null) === (folderId ?? null)) {
+      assetIds.push(childSnapshot.key as string)
     }
   })
-
+  
   return assetIds
 }
 

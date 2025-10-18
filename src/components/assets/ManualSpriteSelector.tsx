@@ -26,7 +26,9 @@ export const ManualSpriteSelector: React.FC<ManualSpriteSelectorProps> = ({
   initialSelections = [],
   regionMode = false,
   region = null,
-  onRegionChange
+  onRegionChange,
+  initialGridSize,
+  gridSizeOptions
 }) => {
   const [image] = useImage(imageUrl, 'anonymous');
   const [selections, setSelections] = useState<SpriteSelection[]>(initialSelections);
