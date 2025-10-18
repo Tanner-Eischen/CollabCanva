@@ -77,10 +77,13 @@ export interface TilesetMetadata {
   
   // Layer suitability
   layerTypes?: Array<'background' | 'ground' | 'props' | 'fx' | 'decals' | 'collision'>
-  
+
   // Auto-tile system descriptor
   autoTileSystem?: 'blob16' | 'blob47' | 'wang' | 'custom'
-  
+
+  // Precomputed tile slices for AI/automation
+  tiles?: TileSlice[]
+
   // Named tile index (AI-friendly vocabulary)
   namedTiles?: Record<string, number>  // { "grass.center": 0, "tree.small": 45 }
 

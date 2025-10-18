@@ -7,7 +7,8 @@ import type {
   TilesetMetadata,
   SpriteSheetMetadata,
   SpriteSelection,
-  TileSemanticGroup
+  TileSemanticGroup,
+  TileSlice
 } from '../../types/asset'
 
 /**
@@ -41,6 +42,13 @@ export function cloneTilesetMetadata(metadata: TilesetMetadata): TilesetMetadata
     materials: metadata.materials ? [...metadata.materials] : undefined,
     layerTypes: metadata.layerTypes ? [...metadata.layerTypes] : undefined,
     autoTileSystem: metadata.autoTileSystem,
+    tiles: metadata.tiles ? metadata.tiles.map(tile => ({
+      index: tile.index,
+      x: tile.x,
+      y: tile.y,
+      width: tile.width,
+      height: tile.height
+    })) : undefined,
     namedTiles: metadata.namedTiles ? { ...metadata.namedTiles } : undefined,
     tileGroups: metadata.tileGroups ? cloneTileSemanticGroups(metadata.tileGroups) : undefined,
     adjacencyRules: metadata.adjacencyRules
@@ -197,4 +205,49 @@ export function buildTileSemanticGroups(
   }
 
   return groups
+}
+
+/**
+ * Generate tile slice coordinates from tileset metadata
+ */
+export function generateTileSlicesFromMetadata(
+  metadata: Pick<
+    TilesetMetadata,
+    'tileWidth' | 'tileHeight' | 'columns' | 'rows' | 'spacing' | 'margin'
+  >
+): TileSlice[] {
+  const {
+    tileWidth,
+    tileHeight,
+    columns,
+    rows,
+    spacing = 0,
+    margin = 0
+  } = metadata
+
+  if (!tileWidth || !tileHeight || !columns || !rows) {
+    return []
+  }
+
+  const slices: TileSlice[] = []
+  let index = 0
+
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      const x = margin + col * (tileWidth + spacing)
+      const y = margin + row * (tileHeight + spacing)
+
+      slices.push({
+        index,
+        x,
+        y,
+        width: tileWidth,
+        height: tileHeight
+      })
+
+      index++
+    }
+  }
+
+  return slices
 }

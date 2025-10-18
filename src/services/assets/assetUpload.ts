@@ -14,6 +14,7 @@ import {
   buildTileSemanticGroups,
   cloneSpriteSheetMetadata,
   cloneTilesetMetadata,
+  generateTileSlicesFromMetadata,
   type SpriteRenamingSummary
 } from './metadataUtils'
 import { notifyAIAssetUploaded } from '../ai/ai'
@@ -354,6 +355,21 @@ export async function uploadAsset(
                   version: 1
                 }
               }
+            }
+
+            const tileSlices = generateTileSlicesFromMetadata({
+              tileWidth: enrichedTilesetMetadata.tileWidth,
+              tileHeight: enrichedTilesetMetadata.tileHeight,
+              columns: enrichedTilesetMetadata.columns,
+              rows: enrichedTilesetMetadata.rows,
+              spacing: enrichedTilesetMetadata.spacing,
+              margin: enrichedTilesetMetadata.margin
+            })
+
+            if (tileSlices.length > 0) {
+              enrichedTilesetMetadata.tiles = tileSlices
+            } else {
+              delete enrichedTilesetMetadata.tiles
             }
 
             if (enrichedTilesetMetadata.namedTiles && Object.keys(enrichedTilesetMetadata.namedTiles).length > 0) {
@@ -804,6 +820,21 @@ export async function reanalyzeTileset(
       checkedAt: Date.now()
     },
     version: (asset.tilesetMetadata.version || 0) + 1
+  }
+
+  const reanalyzedSlices = generateTileSlicesFromMetadata({
+    tileWidth: updatedMetadata.tileWidth,
+    tileHeight: updatedMetadata.tileHeight,
+    columns: updatedMetadata.columns,
+    rows: updatedMetadata.rows,
+    spacing: updatedMetadata.spacing,
+    margin: updatedMetadata.margin
+  })
+
+  if (reanalyzedSlices.length > 0) {
+    updatedMetadata.tiles = reanalyzedSlices
+  } else {
+    delete updatedMetadata.tiles
   }
 
   if (updatedMetadata.namedTiles && Object.keys(updatedMetadata.namedTiles).length > 0) {
