@@ -132,6 +132,46 @@ function labelFromKey(key: string): string {
   return [toDisplayName(group), rest.map(toDisplayName).join(' • ')].join(' • ');
 }
 
+function computeAssignmentEntries(
+  selection: number[],
+  groupInput: string,
+  variantsInput: string,
+  existingKeys?: Set<string>
+): Array<{ index: number; key: string; label: string }> {
+  if (selection.length === 0 || !groupInput.trim()) {
+    return [];
+  }
+
+  const sanitizedGroup = sanitizeKeySegment(groupInput, 'tile');
+  const variants = parseCsvList(variantsInput);
+  const keysInUse = new Set(existingKeys ?? []);
+
+  return [...selection]
+    .sort((a, b) => a - b)
+    .map((tileIndex, idx, sorted) => {
+      const providedVariant = variants[idx] ?? (variants.length === 1 ? variants[0] : null);
+      const fallbackVariant = sorted.length === 1 ? 'center' : `variant_${idx + 1}`;
+      const sanitizedVariant = providedVariant
+        ? sanitizeKeySegment(providedVariant, fallbackVariant)
+        : sanitizeKeySegment(fallbackVariant, fallbackVariant);
+
+      const baseKey = sanitizedVariant ? `${sanitizedGroup}_${sanitizedVariant}` : sanitizedGroup;
+      let uniqueKey = baseKey;
+      let suffix = 2;
+      while (keysInUse.has(uniqueKey)) {
+        uniqueKey = `${baseKey}_${suffix++}`;
+      }
+
+      keysInUse.add(uniqueKey);
+
+      return {
+        index: tileIndex,
+        key: uniqueKey,
+        label: labelFromKey(uniqueKey),
+      };
+    });
+}
+
 type UploadMetadata = {
   name: string;
   type?: AssetType;
@@ -984,8 +1024,6 @@ export function AssetUploadModalEnhanced({
       return;
     }
 
-    const sanitizedGroup = sanitizeKeySegment(assignmentGroup, 'tile');
-    const variants = parseCsvList(assignmentVariants);
     const selection = [...selectedTiles].sort((a, b) => a - b);
     const selectionSet = new Set(selection);
 
@@ -998,31 +1036,12 @@ export function AssetUploadModalEnhanced({
 
       const updated: Record<number, TileAssignment> = { ...prev };
 
-      selection.forEach((tileIndex, idx) => {
-        const existing = updated[tileIndex];
-        if (existing) {
-          assignedKeys.delete(existing.key);
+      computeAssignmentEntries(selection, assignmentGroup, assignmentVariants, new Set(assignedKeys)).forEach(
+        ({ index, key, label }) => {
+          assignedKeys.add(key);
+          updated[index] = { key, label };
         }
-
-        const providedVariant = variants[idx] ?? (variants.length === 1 ? variants[0] : null);
-        const fallbackVariant = selection.length === 1 ? 'center' : `variant_${idx + 1}`;
-        const sanitizedVariant = providedVariant
-          ? sanitizeKeySegment(providedVariant, fallbackVariant)
-          : sanitizeKeySegment(fallbackVariant, fallbackVariant);
-
-        const baseKey = sanitizedVariant ? `${sanitizedGroup}_${sanitizedVariant}` : sanitizedGroup;
-        let uniqueKey = baseKey;
-        let suffix = 2;
-        while (assignedKeys.has(uniqueKey)) {
-          uniqueKey = `${baseKey}_${suffix++}`;
-        }
-
-        assignedKeys.add(uniqueKey);
-        updated[tileIndex] = {
-          key: uniqueKey,
-          label: labelFromKey(uniqueKey),
-        };
-      });
+      );
 
       return updated;
     });
@@ -1085,9 +1104,26 @@ export function AssetUploadModalEnhanced({
           ? parseManualNamedTiles(manualTileNames, tilesetAnalysis.slice.metadata.tileCount)
           : {};
 
+        let assignmentNamedTilesForUpload: Record<string, number> = assignmentNamedTiles;
+
+        if (
+          Object.keys(manualNamedTiles).length === 0 &&
+          Object.keys(assignmentNamedTilesForUpload).length === 0 &&
+          assignmentGroup.trim() &&
+          selectedTiles.length > 0
+        ) {
+          const generatedEntries = computeAssignmentEntries(selectedTiles, assignmentGroup, assignmentVariants);
+          if (generatedEntries.length > 0) {
+            assignmentNamedTilesForUpload = generatedEntries.reduce<Record<string, number>>((acc, entry) => {
+              acc[entry.key] = entry.index;
+              return acc;
+            }, {});
+          }
+        }
+
         const mergedNamedTiles = {
           ...manualNamedTiles,
-          ...assignmentNamedTiles,
+          ...assignmentNamedTilesForUpload,
         };
 
         const selectedIndexSet = new Set<number>();
@@ -1237,7 +1273,9 @@ export function AssetUploadModalEnhanced({
     tilesetSpacing,
     tilesetMargin,
     assignmentNamedTiles,
-    selectedTiles
+    selectedTiles,
+    assignmentGroup,
+    assignmentVariants
   ]);
 
   const handleVisualDetection = useCallback(async () => {
