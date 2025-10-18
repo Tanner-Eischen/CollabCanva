@@ -16,6 +16,7 @@ import {
   cloneTilesetMetadata,
   type SpriteRenamingSummary
 } from './metadataUtils'
+import { notifyAIAssetUploaded } from '../ai/ai'
 import type {
   Asset,
   AssetType,
@@ -530,6 +531,14 @@ export async function uploadAsset(
           }
 
           console.info('[AssetUpload] Upload complete', summaryPayload)
+
+          notifyAIAssetUploaded(userId, asset, summaryPayload).then(message => {
+            if (message) {
+              console.info('[AssetUpload] AI suggestions', message)
+            }
+          }).catch(error => {
+            console.warn('[AssetUpload] Failed to notify AI about asset upload', error)
+          })
 
           resolve(asset)
         } catch (error) {

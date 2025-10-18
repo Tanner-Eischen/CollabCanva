@@ -6,6 +6,7 @@
 
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
+import type { Asset, AssetAIContextPayload } from '../../types/asset';
 
 export type AIRequest = {
   message: string;
@@ -22,6 +23,9 @@ export type AIRequest = {
     };
     mode: 'shapes' | 'tilemap';
     tilemapMeta?: any;
+    availableAssets?: AssetAIContextPayload['availableAssets'];
+    assetStats?: AssetAIContextPayload['assetStats'];
+    tilesetSuggestions?: AssetAIContextPayload['tilesetSuggestions'];
   };
 }
 
@@ -189,13 +193,43 @@ export async function getAIAssetRecommendation(
  */
 export async function notifyAIAssetUploaded(
   userId: string,
-  assetId: string,
-  assetName: string,
-  assetType: string
+  asset: Asset,
+  summary?: Record<string, any>
 ): Promise<string | null> {
   try {
+    const details: string[] = [];
+
+    if (asset.type === 'tileset' && asset.tilesetMetadata) {
+      const { tileWidth, tileHeight, tileCount, themes, materials, autoTileSystem, namedTiles } = asset.tilesetMetadata;
+      details.push(
+        `tileSize: ${tileWidth}x${tileHeight}`,
+        `tiles: ${tileCount}`
+      );
+      if (autoTileSystem) details.push(`autoTile: ${autoTileSystem}`);
+      if (themes?.length) details.push(`themes: ${themes.slice(0, 3).join(', ')}`);
+      if (materials?.length) details.push(`materials: ${materials.slice(0, 3).join(', ')}`);
+      if (namedTiles) {
+        const namedCount = Object.keys(namedTiles).length;
+        if (namedCount > 0) details.push(`namedTiles: ${namedCount}`);
+      }
+    }
+
+    if (asset.type === 'spritesheet' && asset.spriteSheetMetadata?.spriteSelections) {
+      details.push(`sprites: ${asset.spriteSheetMetadata.spriteSelections.length}`);
+    }
+
+    if (summary?.spriteSheet?.autoTileSystem) {
+      details.push(`autoTileHint: ${summary.spriteSheet.autoTileSystem}`);
+    }
+
+    if (summary?.tileset?.autoTileSystem && !details.find(d => d.startsWith('autoTile'))) {
+      details.push(`autoTile: ${summary.tileset.autoTileSystem}`);
+    }
+
+    const summaryText = details.length > 0 ? ` Summary: ${details.join(', ')}` : '';
+
     const request: AIRequest = {
-      message: `A new ${assetType} called "${assetName}" was just uploaded (ID: ${assetId}). Analyze it and suggest how to use it.`,
+      message: `A new ${asset.type} asset called "${asset.name}" (ID: ${asset.id}) was uploaded.${summaryText} Suggest how it can be used for tilemap painting or map prompts.`,
       context: {
         canvasId: 'asset-notification',
         userId,

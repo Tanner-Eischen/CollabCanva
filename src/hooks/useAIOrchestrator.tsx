@@ -15,6 +15,7 @@ import {
   type AIActionResult,
 } from '../services/ai/aiLayerActions'
 import type { TilemapMeta } from '../types/tilemap'
+import type { AssetAIContextPayload } from '../types/asset'
 
 /**
  * AI Orchestration State
@@ -39,6 +40,7 @@ interface AIOrchestratorContextState extends AIOrchestrationState {
       userId: string
       tilemapMeta: TilemapMeta
       viewport: any
+      assetContext?: AssetAIContextPayload
     }
   ) => Promise<AIResponse>
 
@@ -102,6 +104,7 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
         userId: string
         tilemapMeta: TilemapMeta
         viewport: any
+        assetContext?: AssetAIContextPayload
       }
     ): Promise<AIResponse> => {
       setIsExecuting(true)
@@ -117,6 +120,9 @@ export function AIOrchestratorProvider({ children }: { children: ReactNode }) {
             viewport: context.viewport,
             mode: 'tilemap',
             tilemapMeta: context.tilemapMeta,
+            availableAssets: context.assetContext?.availableAssets,
+            assetStats: context.assetContext?.assetStats,
+            tilesetSuggestions: context.assetContext?.tilesetSuggestions,
           },
         }
 

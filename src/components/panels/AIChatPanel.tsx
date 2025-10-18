@@ -6,6 +6,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAIChat } from '../../hooks/useAIChat';
+import { useAssetLibrary } from '../../hooks/useAssetLibrary';
 import { MessageBubble } from '../ai/MessageBubble';
 import { isAIEnabled } from '../../services/ai/ai';
 
@@ -57,6 +58,8 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
     },
   });
 
+  const { getAssetAIContext } = useAssetLibrary({ userId, enableSync: Boolean(userId) });
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -72,11 +75,14 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
 
+    const assetContext = getAssetAIContext({ tileSize: tilemapMeta?.tileSize });
+
     sendMessage(input, {
       selectedShapes,
       viewport,
       mode,
       tilemapMeta,
+      assetContext,
     });
 
     setInput('');
