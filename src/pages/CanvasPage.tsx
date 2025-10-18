@@ -15,7 +15,7 @@ import { useGroups } from '../hooks/useGroups'
 import { useLayers } from '../hooks/useLayers'
 import { getCanvas, updateCanvas, generateThumbnail } from '../services/canvas/canvasManager'
 import { isAIEnabled } from '../services/ai/ai'
-import type { ToolType } from '../types/canvas'
+import type { ToolType, CanvasFocusArea } from '../types/canvas'
 import type { CanvasMetadata } from '../services/canvas/canvasManager'
 import type Konva from 'konva'
 
@@ -29,6 +29,7 @@ export default function CanvasPage() {
   const [canvasMetadata, setCanvasMetadata] = useState<CanvasMetadata | null>(null)
   const [viewport, setViewport] = useState({ x: 0, y: 0, scale: 1 })
   const stageRef = useRef<Konva.Stage | null>(null)
+  const [focusArea, setFocusArea] = useState<CanvasFocusArea | null>(null)
   
   // Use 'public-board' as default if no canvasId in route
   const canvasId = routeCanvasId || 'public-board'
@@ -75,7 +76,19 @@ export default function CanvasPage() {
   const { user } = useAuth()
 
   // Canvas, Groups, and Layers hooks (PR-19)
-  const { shapes, selectedIds, setSelection, updateColors, updateShape, getRecentColors, deleteShape } = useCanvas({
+  const {
+    shapes,
+    selectedIds,
+    setSelection,
+    updateColors,
+    updateShape,
+    getRecentColors,
+    deleteShape,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+  } = useCanvas({
     canvasId: canvasId,
     userId: user?.uid || '',
     enableSync: true,
@@ -92,17 +105,122 @@ export default function CanvasPage() {
     }, 0)
   }, [])
 
-  const { groups } = useGroups({
+  const { groups, calculateBounds } = useGroups({
     canvasId: canvasId,
     userId: user?.uid || '',
     enableSync: true,
   })
 
-  const { toggleVisibility, toggleLock } = useLayers({
+  const { toggleVisibility, toggleLock, visibility, locks } = useLayers({
     canvasId: canvasId,
     enableSync: true,
   })
-  
+
+  const computeShapeBounds = useCallback(
+    (shapeId: string): { x: number; y: number; width: number; height: number } | null => {
+      const shape = shapes.find((s) => s.id === shapeId)
+      if (!shape) return null
+
+      if (shape.type === 'line' && shape.points && shape.points.length >= 4) {
+        const [x1, y1, x2, y2] = shape.points
+        const minX = Math.min(x1, x2)
+        const minY = Math.min(y1, y2)
+        const width = Math.max(Math.abs(x2 - x1), 10)
+        const height = Math.max(Math.abs(y2 - y1), 10)
+        return { x: minX, y: minY, width, height }
+      }
+
+      if (shape.type === 'path' && shape.points && shape.points.length >= 2) {
+        let minX = Infinity
+        let maxX = -Infinity
+        let minY = Infinity
+        let maxY = -Infinity
+
+        for (let i = 0; i < shape.points.length; i += 2) {
+          const px = shape.points[i] + (shape.x || 0)
+          const py = shape.points[i + 1] + (shape.y || 0)
+          minX = Math.min(minX, px)
+          maxX = Math.max(maxX, px)
+          minY = Math.min(minY, py)
+          maxY = Math.max(maxY, py)
+        }
+
+        if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+          return null
+        }
+
+        return {
+          x: minX,
+          y: minY,
+          width: Math.max(maxX - minX, 10),
+          height: Math.max(maxY - minY, 10),
+        }
+      }
+
+      const width = Math.max(shape.width || 0, 10)
+      const height = Math.max(shape.height || 0, 10)
+      return {
+        x: shape.x,
+        y: shape.y,
+        width,
+        height,
+      }
+    },
+    [shapes]
+  )
+
+  const handleFocusLayer = useCallback(
+    (layerId: string) => {
+      const shapeBounds = computeShapeBounds(layerId)
+      if (shapeBounds) {
+        setFocusArea({
+          id: layerId,
+          ...shapeBounds,
+          padding: 200,
+          timestamp: Date.now(),
+        })
+        return
+      }
+
+      const group = groups.find((g) => g.id === layerId)
+      if (group) {
+        const bounds = calculateBounds(group.id, shapes)
+        if (bounds) {
+          setFocusArea({
+            id: layerId,
+            x: bounds.x,
+            y: bounds.y,
+            width: Math.max(bounds.width, 10),
+            height: Math.max(bounds.height, 10),
+            padding: 260,
+            timestamp: Date.now(),
+          })
+        }
+      }
+    },
+    [computeShapeBounds, groups, calculateBounds, shapes]
+  )
+
+  const handleMoveLayer = useCallback(
+    (layerId: string, direction: 'forward' | 'backward' | 'front' | 'back') => {
+      switch (direction) {
+        case 'front':
+          bringToFront([layerId])
+          break
+        case 'back':
+          sendToBack([layerId])
+          break
+        case 'forward':
+          bringForward([layerId])
+          break
+        case 'backward':
+          sendBackward([layerId])
+          break
+      }
+    },
+    [bringToFront, sendToBack, bringForward, sendBackward]
+  )
+
   
   // Load canvas metadata
   useEffect(() => {
@@ -346,6 +464,7 @@ export default function CanvasPage() {
                 />
               ) : null
             }
+            focusArea={focusArea}
           />
         </div>
 
@@ -372,6 +491,10 @@ export default function CanvasPage() {
               softBg: 'rgba(71, 85, 105, 0.3)',
               softBorder: 'rgba(71, 85, 105, 0.4)'
             }}
+            visibility={visibility}
+            locks={locks}
+            onFocusLayer={handleFocusLayer}
+            onMoveLayer={handleMoveLayer}
           />
         )}
 

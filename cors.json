@@ -1,7 +1,17 @@
 [
   {
-    "origin": ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
-    "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+    "origin": [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:5175",
+      "https://localhost:5173",
+      "https://localhost:5174",
+      "https://localhost:5175",
+      "https://collabcanva.firebaseapp.com",
+      "https://collabcanva.web.app"
+    ],
+    "method": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Authorization"],
     "maxAgeSeconds": 3600
   }
 ]

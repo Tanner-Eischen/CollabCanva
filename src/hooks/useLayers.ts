@@ -45,9 +45,24 @@ export function useLayers(options?: UseLayersOptions): UseLayersReturn {
     const visibilityRef = ref(db, `canvases/${canvasId}/visibility`)
     const locksRef = ref(db, `canvases/${canvasId}/locks`)
 
+    const normalizeBooleanMap = (value: any): Record<string, boolean> => {
+      if (!value || typeof value !== 'object') return {}
+
+      const normalized: Record<string, boolean> = {}
+      Object.entries(value).forEach(([key, entry]) => {
+        if (typeof entry === 'boolean') {
+          normalized[key] = entry
+        } else if (entry && typeof entry === 'object' && 'value' in entry) {
+          normalized[key] = Boolean((entry as { value: unknown }).value)
+        }
+      })
+      return normalized
+    }
+
     const handleVisibilityChange = (snapshot: any) => {
       if (snapshot.exists()) {
-        setVisibilityState(snapshot.val())
+        const value = snapshot.val()
+        setVisibilityState(normalizeBooleanMap(value))
       } else {
         setVisibilityState({})
       }
@@ -55,7 +70,8 @@ export function useLayers(options?: UseLayersOptions): UseLayersReturn {
 
     const handleLocksChange = (snapshot: any) => {
       if (snapshot.exists()) {
-        setLocksState(snapshot.val())
+        const value = snapshot.val()
+        setLocksState(normalizeBooleanMap(value))
       } else {
         setLocksState({})
       }
@@ -79,14 +95,14 @@ export function useLayers(options?: UseLayersOptions): UseLayersReturn {
       const newVisibility = !currentVisibility
 
       if (syncEnabled) {
-        const visibilityRef = ref(db, `canvases/${canvasId}/visibility/${objectId}`)
-        await update(visibilityRef, { value: newVisibility })
-      } else {
-        setVisibilityState((prev) => ({
-          ...prev,
-          [objectId]: newVisibility,
-        }))
+        const visibilityRef = ref(db, `canvases/${canvasId}/visibility`)
+        await update(visibilityRef, { [objectId]: newVisibility })
       }
+
+      setVisibilityState((prev) => ({
+        ...prev,
+        [objectId]: newVisibility,
+      }))
     },
     [canvasId, syncEnabled, visibility]
   )
@@ -100,14 +116,14 @@ export function useLayers(options?: UseLayersOptions): UseLayersReturn {
       const newLock = !currentLock
 
       if (syncEnabled) {
-        const lockRef = ref(db, `canvases/${canvasId}/locks/${objectId}`)
-        await update(lockRef, { value: newLock })
-      } else {
-        setLocksState((prev) => ({
-          ...prev,
-          [objectId]: newLock,
-        }))
+        const lockRef = ref(db, `canvases/${canvasId}/locks`)
+        await update(lockRef, { [objectId]: newLock })
       }
+
+      setLocksState((prev) => ({
+        ...prev,
+        [objectId]: newLock,
+      }))
     },
     [canvasId, syncEnabled, locks]
   )
@@ -118,14 +134,14 @@ export function useLayers(options?: UseLayersOptions): UseLayersReturn {
   const setVisibility = useCallback(
     async (objectId: string, visible: boolean): Promise<void> => {
       if (syncEnabled) {
-        const visibilityRef = ref(db, `canvases/${canvasId}/visibility/${objectId}`)
-        await update(visibilityRef, { value: visible })
-      } else {
-        setVisibilityState((prev) => ({
-          ...prev,
-          [objectId]: visible,
-        }))
+        const visibilityRef = ref(db, `canvases/${canvasId}/visibility`)
+        await update(visibilityRef, { [objectId]: visible })
       }
+
+      setVisibilityState((prev) => ({
+        ...prev,
+        [objectId]: visible,
+      }))
     },
     [canvasId, syncEnabled]
   )
@@ -136,14 +152,14 @@ export function useLayers(options?: UseLayersOptions): UseLayersReturn {
   const setLock = useCallback(
     async (objectId: string, locked: boolean): Promise<void> => {
       if (syncEnabled) {
-        const lockRef = ref(db, `canvases/${canvasId}/locks/${objectId}`)
-        await update(lockRef, { value: locked })
-      } else {
-        setLocksState((prev) => ({
-          ...prev,
-          [objectId]: locked,
-        }))
+        const lockRef = ref(db, `canvases/${canvasId}/locks`)
+        await update(lockRef, { [objectId]: locked })
       }
+
+      setLocksState((prev) => ({
+        ...prev,
+        [objectId]: locked,
+      }))
     },
     [canvasId, syncEnabled]
   )
