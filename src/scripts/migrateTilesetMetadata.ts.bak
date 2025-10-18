@@ -45,7 +45,7 @@ export interface MigrationOptions {
 function needsMigration(asset: Asset, forceUpdate: boolean): boolean {
   if (forceUpdate) return true
   
-  const meta = asset.tilesetMetadata
+  const meta = asset_tilesetMetadata
   if (!meta) return false
   
   // Check if already has new fields
@@ -64,42 +64,42 @@ async function migrateSingleAsset(
   options: MigrationOptions
 ): Promise<{ success: boolean; error?: string; updated?: Partial<Asset> }> {
   try {
-    console.log(`[Migration] Processing asset: ${asset.name} (${asset.id})`)
+    console.log(`[Migration] Processing asset: ${asset_name} (${asset_id})`)
     
-    if (asset.type !== 'tileset') {
+    if (asset_type !== 'tileset') {
       return { success: false, error: 'Not a tileset' }
     }
     
-    if (!asset.tilesetMetadata) {
+    if (!asset_tilesetMetadata) {
       return { success: false, error: 'Missing tileset metadata' }
     }
     
     // Check if already migrated
     if (!needsMigration(asset, options.forceUpdate || false)) {
-      console.log(`[Migration] Asset ${asset.id} already migrated, skipping`)
+      console.log(`[Migration] Asset ${asset_id} already migrated, skipping`)
       return { success: false, error: 'Already migrated' }
     }
     
     // Load image and analyze
-    console.log(`[Migration] Loading image: ${asset.url}`)
-    const imageData = await loadImageData(asset.url)
+    console.log(`[Migration] Loading image: ${asset_url}`)
+    const imageData = await loadImageData(asset_url)
     
-    console.log(`[Migration] Analyzing image: ${asset.name}`)
+    console.log(`[Migration] Analyzing image: ${asset_name}`)
     const enhancedMeta = await analyzeTileset(
       imageData,
-      asset.name,
+      asset_name,
       {
-        tileWidth: asset.tilesetMetadata.tileWidth,
-        tileHeight: asset.tilesetMetadata.tileHeight,
-        columns: asset.tilesetMetadata.columns,
-        rows: asset.tilesetMetadata.rows,
-        tileCount: asset.tilesetMetadata.tileCount
+        tileWidth: asset_tilesetMetadata.tileWidth,
+        tileHeight: asset_tilesetMetadata.tileHeight,
+        columns: asset_tilesetMetadata.columns,
+        rows: asset_tilesetMetadata.rows,
+        tileCount: asset_tilesetMetadata.tileCount
       }
     )
     
     // Merge with existing metadata
     const updatedTilesetMetadata = {
-      ...asset.tilesetMetadata,
+      ...asset_tilesetMetadata,
       ...enhancedMeta
     }
     
@@ -110,7 +110,7 @@ async function migrateSingleAsset(
     
     if (!options.dryRun) {
       // Update asset document
-      const assetRef = doc(db, 'assets', asset.userId, 'userAssets', asset.id)
+      const assetRef = doc(db, 'assets', asset_userId, 'userAssets', asset_id)
       await updateDoc(assetRef, updatedAsset)
       
       // Create catalog entry if requested
@@ -118,15 +118,15 @@ async function migrateSingleAsset(
         await createCatalogEntry(asset, updatedTilesetMetadata)
       }
       
-      console.log(`[Migration] ✓ Updated asset: ${asset.id}`)
+      console.log(`[Migration] ✓ Updated asset: ${asset_id}`)
     } else {
-      console.log(`[Migration] [DRY RUN] Would update asset: ${asset.id}`, enhancedMeta)
+      console.log(`[Migration] [DRY RUN] Would update asset: ${asset_id}`, enhancedMeta)
     }
     
     return { success: true, updated: updatedAsset }
     
   } catch (error) {
-    console.error(`[Migration] ✗ Failed to migrate asset ${asset.id}:`, error)
+    console.error(`[Migration] ✗ Failed to migrate asset ${asset_id}:`, error)
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error)
@@ -141,9 +141,9 @@ async function createCatalogEntry(asset: Asset, tilesetMetadata: any): Promise<v
   if (!tilesetMetadata) return
   
   const catalogEntry: TilesetCatalogEntry = {
-    id: asset.id,
-    name: asset.name,
-    userId: asset.userId,
+    id: asset_id,
+    name: asset_name,
+    userId: asset_userId,
     
     tileSize: tilesetMetadata.tileSize || tilesetMetadata.tileWidth,
     tileWidth: tilesetMetadata.tileWidth,
@@ -158,17 +158,17 @@ async function createCatalogEntry(asset: Asset, tilesetMetadata: any): Promise<v
     features: tilesetMetadata.features || {},
     autoTileSystem: tilesetMetadata.autoTileSystem,
     
-    thumbnailUrl: asset.thumbnailUrl || asset.url,
+    thumbnailUrl: asset_thumbnailUrl || asset_url,
     version: tilesetMetadata.version || 1,
-    updatedAt: asset.updatedAt,
+    updatedAt: asset_updatedAt,
     
     detectionConfidence: tilesetMetadata.detectionConfidence?.overall
   }
   
-  const catalogRef = doc(db, 'assetCatalog', asset.userId, 'tilesets', asset.id)
+  const catalogRef = doc(db, 'assetCatalog', asset_userId, 'tilesets', asset_id)
   await setDoc(catalogRef, catalogEntry)
   
-  console.log(`[Migration] ✓ Created catalog entry: ${asset.id}`)
+  console.log(`[Migration] ✓ Created catalog entry: ${asset_id}`)
 }
 
 /**

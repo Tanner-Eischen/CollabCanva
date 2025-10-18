@@ -156,7 +156,7 @@ function TileInspector({ selectedTile }: { selectedTile: TileData | null }) {
           setAnimation(anim)
           // Load sprite sheet URL from asset
           getAssetById(anim.spriteSheetId).then(asset => {
-            setSpriteSheetUrl(asset.url)
+            setSpriteSheetUrl(asset_url)
           })
         }
       })

@@ -18,6 +18,7 @@ import {
   type SpriteRenamingSummary
 } from './metadataUtils'
 import { notifyAIAssetUploaded } from '../ai/ai'
+import { encodeAssetForFirebase, decodeAssetFromFirebase } from '../../utils/firebaseKeyEncoder'
 import type {
   Asset,
   AssetType,
@@ -554,9 +555,12 @@ export async function uploadAsset(
             ...(options.folderId && { folderId: options.folderId })
           }
 
+          // Encode Firebase-invalid keys in metadata (like periods in "grass.center")
+          const encodedAsset = encodeAssetForFirebase(asset)
+
           // Save to Firebase Database (public assets structure)
           const assetRef = dbRef(db, `assets/${assetId}`)
-          await set(assetRef, asset)
+          await set(assetRef, encodedAsset)
           
           // === NEW: Update catalog ===
           if (asset.type === 'tileset') {
@@ -703,15 +707,18 @@ export async function updateAssetMetadata(
     throw new Error('Asset not found')
   }
   
-  const asset = snapshot.val() as Asset
+  const asset = decodeAssetFromFirebase(snapshot.val()) as Asset
   if (asset.userId !== userId) {
     throw new Error('Permission denied: You can only update your own assets')
   }
 
-  await update(assetRef, {
+  // Encode updates before saving
+  const encodedUpdates = encodeAssetForFirebase({
     ...updates,
     updatedAt: Date.now()
   })
+
+  await update(assetRef, encodedUpdates)
 }
 
 /**
@@ -725,7 +732,9 @@ export async function getAsset(assetId: string): Promise<Asset | null> {
     return null
   }
 
-  return snapshot.val() as Asset
+  // Decode Firebase-encoded keys back to original format
+  const asset = decodeAssetFromFirebase(snapshot.val()) as Asset
+  return asset
 }
 
 /**
@@ -747,7 +756,9 @@ export async function getUserAssets(userId: string): Promise<Asset[]> {
 
   const assets: Asset[] = []
   snapshot.forEach((childSnapshot) => {
-    assets.push(childSnapshot.val() as Asset)
+    // Decode Firebase-encoded keys back to original format
+    const asset = decodeAssetFromFirebase(childSnapshot.val()) as Asset
+    assets.push(asset)
   })
 
   return assets
@@ -825,8 +836,11 @@ export async function replaceAssetFile(
             updatedAt: Date.now()
           }
 
+          // Encode Firebase-invalid keys in metadata
+          const encodedAsset = encodeAssetForFirebase(updatedAsset)
+
           const assetRef = dbRef(db, `assets/${assetId}`)
-          await set(assetRef, updatedAsset)
+          await set(assetRef, encodedAsset)
 
           onProgress?.({
             assetId,
