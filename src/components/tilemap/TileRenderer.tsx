@@ -6,15 +6,16 @@
  * Performance optimized with React.memo and Konva settings
  */
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Layer, Rect } from 'react-konva'
 import type { TileData } from '../../types/tilemap'
 import type { TileLayerMeta } from '../../types/tileLayer'
 import { applyParallax } from '../../types/tileLayer'
-import { coordToKey } from '../../types/tilemap'
-import { getTilePath, hasSpriteAsset } from '../../constants/tilemapDefaults'
 import SpriteTile from '../canvas/SpriteTile'
 import AnimatedTile from '../canvas/AnimatedTile'
+import { tilesetRegistry } from '../../services/tilemap/tilesetRegistry'
+
+const NEUTRAL_FALLBACK_COLOR = '#9ca3af'
 
 interface TileRendererProps {
   tiles: Map<string, TileData>
@@ -118,40 +119,15 @@ function TileRenderer({
             />
           )
         }
-        
-        const hasSprite = hasSpriteAsset(tile.type)
-        
-        // Render sprite tile if available, otherwise colored rect
-        if (hasSprite && tile.variant !== undefined) {
-          // Clamp variant to valid range (0-8) to handle old data
-          const clampedVariant = Math.max(0, Math.min(8, tile.variant))
-          const tilePath = getTilePath(tile.type, clampedVariant)
-          return (
-            <SpriteTile
-              key={key}
-              x={x * tileSize}
-              y={y * tileSize}
-              tileSize={tileSize}
-              tilePath={tilePath}
-              color={tile.color}
-              opacity={1}
-            />
-          )
-        }
-        
-        // Fallback to colored rectangle (backwards compatible)
+
         return (
-          <Rect
+          <TileSpriteOrRect
             key={key}
             x={x * tileSize}
             y={y * tileSize}
-            width={tileSize}
-            height={tileSize}
-            fill={tile.color}
-            stroke="rgba(0, 0, 0, 0.1)"
-            strokeWidth={1}
-            listening={false}
-            perfectDrawEnabled={false}
+            tileSize={tileSize}
+            tile={tile}
+            opacity={1}
           />
         )
       })}
@@ -174,45 +150,114 @@ function TileRenderer({
           )
         }
         
-        const hasSprite = hasSpriteAsset(previewTile.tile.type)
-        
-        // Render sprite preview if available
-        if (hasSprite && previewTile.tile.variant !== undefined) {
-          // Clamp variant to valid range (0-8)
-          const clampedVariant = Math.max(0, Math.min(8, previewTile.tile.variant))
-          const tilePath = getTilePath(previewTile.tile.type, clampedVariant)
-          return (
-            <SpriteTile
-              key="preview"
-              x={previewTile.x * tileSize}
-              y={previewTile.y * tileSize}
-              tileSize={tileSize}
-              tilePath={tilePath}
-              color={previewTile.tile.color}
-              opacity={0.5}
-            />
-          )
-        }
-        
-        // Fallback to colored preview
         return (
-          <Rect
+          <TileSpriteOrRect
             key="preview"
             x={previewTile.x * tileSize}
             y={previewTile.y * tileSize}
-            width={tileSize}
-            height={tileSize}
-            fill={previewTile.tile.color}
+            tileSize={tileSize}
+            tile={previewTile.tile}
             opacity={0.5}
-            stroke="#3b82f6"
-            strokeWidth={2}
-            dash={[4, 4]}
-            listening={false}
-            perfectDrawEnabled={false}
+            isPreview
           />
         )
       })()}
     </Layer>
+  )
+}
+
+interface TileSpriteOrRectProps {
+  tile: TileData
+  tileSize: number
+  x: number
+  y: number
+  opacity: number
+  isPreview?: boolean
+}
+
+function TileSpriteOrRect({ tile, tileSize, x, y, opacity, isPreview = false }: TileSpriteOrRectProps) {
+  const [hasSprite, setHasSprite] = useState(false)
+  const [tilePath, setTilePath] = useState<string | null>(null)
+  const [fillColor, setFillColor] = useState<string>(tile.color ?? NEUTRAL_FALLBACK_COLOR)
+
+  useEffect(() => {
+    let isMounted = true
+
+    setHasSprite(false)
+    setTilePath(null)
+    setFillColor(tile.color ?? NEUTRAL_FALLBACK_COLOR)
+
+    const loadSpriteData = async () => {
+      try {
+        const [spriteAvailable, registryColor] = await Promise.all([
+          tilesetRegistry.hasSprite(tile.type),
+          tilesetRegistry.getTerrainColor(tile.type),
+        ])
+
+        if (!isMounted) {
+          return
+        }
+
+        const resolvedFill = registryColor ?? tile.color ?? NEUTRAL_FALLBACK_COLOR
+        setFillColor(resolvedFill)
+
+        if (!spriteAvailable) {
+          return
+        }
+
+        const path = await tilesetRegistry.getTilePath(tile.type, tile.variant ?? 4)
+
+        if (!isMounted) {
+          return
+        }
+
+        if (path) {
+          setTilePath(path)
+          setHasSprite(true)
+        }
+      } catch (_error) {
+        if (!isMounted) {
+          return
+        }
+        setHasSprite(false)
+        setTilePath(null)
+      }
+    }
+
+    void loadSpriteData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [tile.type, tile.variant, tile.color])
+
+  if (hasSprite && tilePath) {
+    return (
+      <SpriteTile
+        x={x}
+        y={y}
+        tileSize={tileSize}
+        tilePath={tilePath}
+        color={tile.color ?? fillColor}
+        opacity={opacity}
+      />
+    )
+  }
+
+  return (
+    <Rect
+      x={x}
+      y={y}
+      width={tileSize}
+      height={tileSize}
+      fill={fillColor}
+      opacity={opacity}
+      stroke={isPreview ? '#3b82f6' : 'rgba(0, 0, 0, 0.1)'}
+      strokeWidth={isPreview ? 2 : 1}
+      dash={isPreview ? [4, 4] : undefined}
+      listening={false}
+      perfectDrawEnabled={false}
+    />
   )
 }
 
