@@ -18,6 +18,7 @@ import {
   initializeTilemap,
 } from '../services/tilemap/tilemapSync'
 import { floodFill } from '../services/tilemap/tileFill'
+import { tilesetRegistry } from '../services/tilemap/tilesetRegistry'
 import type {
   TileData,
   TilemapMeta,
@@ -82,6 +83,9 @@ interface UseTilemapReturn {
   // Mode
   mode: TileMode
   setMode: (mode: TileMode) => void
+
+  // Tileset registry
+  tilesetRegistry: typeof tilesetRegistry
 }
 
 /**
@@ -109,6 +113,11 @@ export function useTilemap(options: UseTilemapOptions): UseTilemapReturn {
   // UI state
   const [selectedPaletteIndex, setSelectedPaletteIndex] = useState(0)
   const [mode, setMode] = useState<TileMode>('stamp')
+
+  // Tileset registry management
+  useEffect(() => {
+    tilesetRegistry.setActiveTileset(meta.activeTilesetId ?? 'builtin-default')
+  }, [meta.activeTilesetId])
   
   // ============================================================================
   // Connection Status Monitoring
@@ -523,6 +532,9 @@ export function useTilemap(options: UseTilemapOptions): UseTilemapReturn {
     // Mode
     mode,
     setMode,
+
+    // Tileset registry
+    tilesetRegistry,
   }
 }
 
