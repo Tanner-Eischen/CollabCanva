@@ -47,8 +47,18 @@ function checkIfCellHasContent(imageData: ImageData): boolean {
   return opaqueRatio > 0.10;
 }
 
+function sanitizeTileKey(rawKey: string, fallback: string): string {
+  const normalized = rawKey
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized || fallback;
+}
+
 function parseManualNamedTiles(input: string, tileCount: number): Record<string, number> {
   const namedTiles: Record<string, number> = {};
+  const usedKeys = new Set<string>();
   const lines = input
     .split(/\r?\n/)
     .map(line => line.trim())
@@ -60,13 +70,24 @@ function parseManualNamedTiles(input: string, tileCount: number): Record<string,
     const [rawName, rawIndex] = line.split('=').map(part => part.trim());
     if (!rawName) return;
 
+    const fallbackKey = `tile_${autoIndex + 1}`;
+    const sanitizedKeyBase = sanitizeTileKey(rawName, fallbackKey);
+
+    let sanitizedKey = sanitizedKeyBase;
+    let suffix = 2;
+    while (usedKeys.has(sanitizedKey)) {
+      sanitizedKey = `${sanitizedKeyBase}_${suffix++}`;
+    }
+
     if (rawIndex !== undefined && rawIndex !== '') {
       const parsedIndex = Number(rawIndex);
       if (!Number.isNaN(parsedIndex) && parsedIndex >= 0 && parsedIndex < tileCount) {
-        namedTiles[rawName] = parsedIndex;
+        namedTiles[sanitizedKey] = parsedIndex;
+        usedKeys.add(sanitizedKey);
       }
     } else {
-      namedTiles[rawName] = autoIndex;
+      namedTiles[sanitizedKey] = autoIndex;
+      usedKeys.add(sanitizedKey);
       autoIndex++;
     }
   });
@@ -98,10 +119,17 @@ function toDisplayName(segment: string): string {
 }
 
 function labelFromKey(key: string): string {
-  return key
-    .split('.')
-    .map(part => toDisplayName(part))
-    .join(' • ');
+  const segments = key.split(/[_.-]+/).filter(Boolean);
+  if (segments.length === 0) {
+    return toDisplayName(key);
+  }
+
+  const [group, ...rest] = segments;
+  if (rest.length === 0) {
+    return toDisplayName(group);
+  }
+
+  return [toDisplayName(group), rest.map(toDisplayName).join(' • ')].join(' • ');
 }
 
 type UploadMetadata = {
@@ -120,6 +148,13 @@ interface AssetUploadModalEnhancedProps {
 }
 
 type UploadMode = 'basic' | 'manual-select';
+
+type SelectionRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 export function AssetUploadModalEnhanced({
   isOpen,
@@ -176,6 +211,17 @@ export function AssetUploadModalEnhanced({
   const [assignmentGroup, setAssignmentGroup] = useState('');
   const [assignmentVariants, setAssignmentVariants] = useState('');
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [dragSelectRect, setDragSelectRect] = useState<SelectionRect | null>(null);
+  const dragAnchorIndexRef = useRef<number | null>(null);
+  const dragLatestIndexRef = useRef<number | null>(null);
+  const dragMovedRef = useRef(false);
+  const dragModifiersRef = useRef({ shift: false, meta: false, ctrl: false });
+  const isDraggingTilesRef = useRef(false);
+  const [rangeStartCol, setRangeStartCol] = useState('');
+  const [rangeStartRow, setRangeStartRow] = useState('');
+  const [rangeColSpan, setRangeColSpan] = useState('1');
+  const [rangeRowSpan, setRangeRowSpan] = useState('1');
+  const [rangeError, setRangeError] = useState<string | null>(null);
 
   // Manual grid detection function
   const handleManualGridDetection = useCallback(async () => {
@@ -411,6 +457,8 @@ export function AssetUploadModalEnhanced({
     }
   }, [tilesetImage, tilesetTileWidth, tilesetTileHeight, tilesetSpacing, tilesetMargin]);
 
+  const tilesetMetadata = tilesetAnalysis?.slice?.metadata;
+
   const assignmentEntries = useMemo(
     () =>
       Object.entries(tileAssignments)
@@ -431,13 +479,358 @@ export function AssetUploadModalEnhanced({
     return map;
   }, [assignmentEntries]);
 
+  const tileIndexLabel = useCallback((index: number) => {
+    if (!tilesetMetadata?.columns || tilesetMetadata.columns <= 0) {
+      return `#${index}`;
+    }
+
+    const columns = tilesetMetadata.columns;
+    const row = Math.floor(index / columns);
+    const col = index % columns;
+    return `r${row + 1}c${col + 1} (#${index})`;
+  }, [tilesetMetadata]);
+
   const selectionPreview = useMemo(() => {
     if (selectedTiles.length === 0) return 'none';
-    const preview = selectedTiles.slice(0, 10).join(', ');
+    const preview = selectedTiles
+      .slice(0, 10)
+      .map(tileIndexLabel)
+      .join(', ');
     return selectedTiles.length > 10
       ? `${preview} … (+${selectedTiles.length - 10} more)`
       : preview;
-  }, [selectedTiles]);
+  }, [selectedTiles, tileIndexLabel]);
+
+  const computeTileRangeFromIndices = useCallback(
+    (startIndex: number, endIndex: number) => {
+      if (!tilesetAnalysis?.slice) {
+        return { indices: [] as number[], rect: null as SelectionRect | null };
+      }
+
+      const metadata = tilesetAnalysis.slice.metadata;
+      const tiles = tilesetAnalysis.slice.tiles;
+
+      if (!metadata?.columns || metadata.columns <= 0) {
+        const startTile = tiles.find(tile => tile.index === startIndex);
+        const endTile = tiles.find(tile => tile.index === endIndex);
+        if (!startTile || !endTile) {
+          return { indices: [], rect: null };
+        }
+
+        const minX = Math.min(startTile.x, endTile.x);
+        const minY = Math.min(startTile.y, endTile.y);
+        const maxX = Math.max(startTile.x + startTile.width, endTile.x + endTile.width);
+        const maxY = Math.max(startTile.y + startTile.height, endTile.y + endTile.height);
+
+        const indices = tiles
+          .filter(tile =>
+            tile.x >= minX &&
+            tile.y >= minY &&
+            tile.x + tile.width <= maxX &&
+            tile.y + tile.height <= maxY
+          )
+          .map(tile => tile.index)
+          .sort((a, b) => a - b);
+
+        return {
+          indices,
+          rect: {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY,
+          },
+        };
+      }
+
+      const spacing = metadata.spacing ?? 0;
+      const margin = metadata.margin ?? 0;
+      const columns = metadata.columns;
+      const tileWidth = metadata.tileWidth;
+      const tileHeight = metadata.tileHeight;
+      const rows = metadata.rows ?? Math.ceil(metadata.tileCount / columns);
+      const tileCount = metadata.tileCount;
+
+      const startRow = Math.floor(startIndex / columns);
+      const startCol = startIndex % columns;
+      const endRow = Math.floor(endIndex / columns);
+      const endCol = endIndex % columns;
+
+      const minRow = Math.max(0, Math.min(startRow, endRow));
+      const maxRow = Math.min(rows - 1, Math.max(startRow, endRow));
+      const minCol = Math.max(0, Math.min(startCol, endCol));
+      const maxCol = Math.min(columns - 1, Math.max(startCol, endCol));
+
+      const indices: number[] = [];
+      for (let row = minRow; row <= maxRow; row++) {
+        for (let col = minCol; col <= maxCol; col++) {
+          const idx = row * columns + col;
+          if (idx < tileCount) {
+            indices.push(idx);
+          }
+        }
+      }
+
+      const rect: SelectionRect = {
+        x: margin + minCol * (tileWidth + spacing),
+        y: margin + minRow * (tileHeight + spacing),
+        width: (maxCol - minCol + 1) * tileWidth + (maxCol - minCol) * spacing,
+        height: (maxRow - minRow + 1) * tileHeight + (maxRow - minRow) * spacing,
+      };
+
+      return {
+        indices,
+        rect,
+      };
+    },
+    [tilesetAnalysis]
+  );
+
+  const getCanvasCoordinates = useCallback(
+    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+      if (!tilesetCanvasRef.current) return null;
+
+      const canvas = tilesetCanvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      return {
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY,
+      };
+    },
+    []
+  );
+
+  const getTileIndexAtEvent = useCallback(
+    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+      if (!tilesetAnalysis?.slice) return null;
+
+      const coords = getCanvasCoordinates(event);
+      if (!coords) return null;
+
+      for (const tile of tilesetAnalysis.slice.tiles) {
+        if (
+          coords.x >= tile.x &&
+          coords.x < tile.x + tile.width &&
+          coords.y >= tile.y &&
+          coords.y < tile.y + tile.height
+        ) {
+          return tile.index;
+        }
+      }
+
+      return null;
+    },
+    [getCanvasCoordinates, tilesetAnalysis]
+  );
+
+  const finalizeDragSelection = useCallback(() => {
+    if (!isDraggingTilesRef.current) {
+      return;
+    }
+
+    isDraggingTilesRef.current = false;
+
+    const anchorIndex = dragAnchorIndexRef.current;
+    const latestIndex = dragLatestIndexRef.current ?? anchorIndex;
+    setDragSelectRect(null);
+
+    if (anchorIndex === null || latestIndex === null) {
+      dragAnchorIndexRef.current = null;
+      dragLatestIndexRef.current = null;
+      dragMovedRef.current = false;
+      dragModifiersRef.current = { shift: false, meta: false, ctrl: false };
+      return;
+    }
+
+    const { indices } = computeTileRangeFromIndices(anchorIndex, latestIndex);
+    if (indices.length === 0) {
+      dragAnchorIndexRef.current = null;
+      dragLatestIndexRef.current = null;
+      dragMovedRef.current = false;
+      dragModifiersRef.current = { shift: false, meta: false, ctrl: false };
+      return;
+    }
+
+    const modifiers = dragModifiersRef.current;
+    const moved = dragMovedRef.current;
+
+    setSelectedTiles(prev => {
+      if (modifiers.ctrl || modifiers.meta) {
+        const set = new Set(prev);
+        indices.forEach(idx => {
+          if (set.has(idx)) {
+            set.delete(idx);
+          } else {
+            set.add(idx);
+          }
+        });
+        return Array.from(set).sort((a, b) => a - b);
+      }
+
+      if (modifiers.shift) {
+        const set = new Set(prev);
+        indices.forEach(idx => set.add(idx));
+        return Array.from(set).sort((a, b) => a - b);
+      }
+
+      if (!moved && indices.length === 1 && prev.length === 1 && prev[0] === indices[0]) {
+        return [];
+      }
+
+      return indices;
+    });
+
+    setAssignmentError(null);
+    setRangeError(null);
+
+    dragAnchorIndexRef.current = null;
+    dragLatestIndexRef.current = null;
+    dragMovedRef.current = false;
+    dragModifiersRef.current = { shift: false, meta: false, ctrl: false };
+  }, [computeTileRangeFromIndices]);
+
+  const handleTilesetCanvasMouseDown = useCallback(
+    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+      if (event.button !== 0) return;
+      const index = getTileIndexAtEvent(event);
+      if (index === null) return;
+
+      const { rect } = computeTileRangeFromIndices(index, index);
+      dragAnchorIndexRef.current = index;
+      dragLatestIndexRef.current = index;
+      dragMovedRef.current = false;
+      dragModifiersRef.current = {
+        shift: event.shiftKey,
+        meta: event.metaKey,
+        ctrl: event.ctrlKey,
+      };
+      isDraggingTilesRef.current = true;
+      setDragSelectRect(rect);
+      setAssignmentError(null);
+      setRangeError(null);
+      event.preventDefault();
+    },
+    [computeTileRangeFromIndices, getTileIndexAtEvent]
+  );
+
+  const handleTilesetCanvasMouseMove = useCallback(
+    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+      if (!isDraggingTilesRef.current) return;
+      const anchorIndex = dragAnchorIndexRef.current;
+      if (anchorIndex === null) return;
+
+      const index = getTileIndexAtEvent(event);
+      if (index === null) return;
+
+      if (dragLatestIndexRef.current !== index) {
+        dragLatestIndexRef.current = index;
+        if (index !== anchorIndex) {
+          dragMovedRef.current = true;
+        }
+        const { rect } = computeTileRangeFromIndices(anchorIndex, index);
+        setDragSelectRect(rect);
+      }
+    },
+    [computeTileRangeFromIndices, getTileIndexAtEvent]
+  );
+
+  const handleTilesetCanvasMouseUp = useCallback(
+    (event: ReactMouseEvent<HTMLCanvasElement>) => {
+      if (event.button !== 0 && event.type === 'mouseup') {
+        return;
+      }
+
+      if (isDraggingTilesRef.current) {
+        const index = getTileIndexAtEvent(event);
+        const anchorIndex = dragAnchorIndexRef.current;
+        if (index !== null && anchorIndex !== null) {
+          dragLatestIndexRef.current = index;
+          if (index !== anchorIndex) {
+            dragMovedRef.current = true;
+          }
+        }
+      }
+
+      finalizeDragSelection();
+    },
+    [finalizeDragSelection, getTileIndexAtEvent]
+  );
+
+  const handleTilesetCanvasMouseLeave = useCallback(() => {
+    finalizeDragSelection();
+  }, [finalizeDragSelection]);
+
+  const handleApplyCellRangeSelection = useCallback(() => {
+    if (!tilesetMetadata?.columns || tilesetMetadata.columns <= 0) {
+      setRangeError('Grid information unavailable. Detect the tileset first.');
+      return;
+    }
+
+    const startColValue = Number.parseInt(rangeStartCol, 10);
+    const startRowValue = Number.parseInt(rangeStartRow, 10);
+    const colSpanValue = Number.parseInt(rangeColSpan, 10);
+    const rowSpanValue = Number.parseInt(rangeRowSpan, 10);
+
+    if (
+      Number.isNaN(startColValue) ||
+      Number.isNaN(startRowValue) ||
+      Number.isNaN(colSpanValue) ||
+      Number.isNaN(rowSpanValue)
+    ) {
+      setRangeError('Enter valid numeric values for the cell range.');
+      return;
+    }
+
+    if (colSpanValue <= 0 || rowSpanValue <= 0) {
+      setRangeError('Row and column spans must be at least 1.');
+      return;
+    }
+
+    const columns = tilesetMetadata.columns;
+    const rows = tilesetMetadata.rows ?? Math.ceil((tilesetMetadata.tileCount ?? 0) / columns);
+
+    if (
+      startColValue < 1 ||
+      startRowValue < 1 ||
+      startColValue > columns ||
+      startRowValue > rows
+    ) {
+      setRangeError('Starting cell is outside of the detected grid.');
+      return;
+    }
+
+    const endCol = startColValue + colSpanValue - 1;
+    const endRow = startRowValue + rowSpanValue - 1;
+
+    if (endCol > columns || endRow > rows) {
+      setRangeError('Selection extends beyond the detected grid.');
+      return;
+    }
+
+    const startIndex = (startRowValue - 1) * columns + (startColValue - 1);
+    const endIndex = (endRow - 1) * columns + (endCol - 1);
+
+    const { indices } = computeTileRangeFromIndices(startIndex, endIndex);
+    if (indices.length === 0) {
+      setRangeError('No tiles were found in that range.');
+      return;
+    }
+
+    setSelectedTiles(indices);
+    setAssignmentError(null);
+    setRangeError(null);
+    setDragSelectRect(null);
+  }, [
+    computeTileRangeFromIndices,
+    rangeColSpan,
+    rangeRowSpan,
+    rangeStartCol,
+    rangeStartRow,
+    tilesetMetadata,
+  ]);
 
   useEffect(() => {
     if (!tilesetAnalysis?.slice) {
@@ -461,6 +854,17 @@ export function AssetUploadModalEnhanced({
     });
     setSelectedTiles(prev => prev.filter(index => index < tileCount));
   }, [tilesetAnalysis]);
+
+  useEffect(() => {
+    if (!tilesetMetadata) {
+      setRangeStartCol('');
+      setRangeStartRow('');
+      setRangeColSpan('1');
+      setRangeRowSpan('1');
+      setRangeError(null);
+    }
+  }, [tilesetMetadata]);
+
 
   useEffect(() => {
     if (!tilesetCanvasRef.current || !tilesetImage) return;
@@ -518,6 +922,22 @@ export function AssetUploadModalEnhanced({
       ctx.restore();
     }
 
+    if (dragSelectRect) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.18)';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.fillRect(dragSelectRect.x, dragSelectRect.y, dragSelectRect.width, dragSelectRect.height);
+      ctx.strokeRect(
+        dragSelectRect.x + 0.75,
+        dragSelectRect.y + 0.75,
+        Math.max(0, dragSelectRect.width - 1.5),
+        Math.max(0, dragSelectRect.height - 1.5)
+      );
+      ctx.restore();
+    }
+
     if (tilesetShowGrid) {
       ctx.save();
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
@@ -551,45 +971,8 @@ export function AssetUploadModalEnhanced({
     selectedTiles,
     tilesetTileHeight,
     tilesetTileWidth,
+    dragSelectRect,
   ]);
-
-  const handleTilesetCanvasClick = useCallback(
-    (event: ReactMouseEvent<HTMLCanvasElement>) => {
-      if (!tilesetCanvasRef.current || !tilesetAnalysis?.slice) return;
-
-      const canvas = tilesetCanvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const x = (event.clientX - rect.left) * scaleX;
-      const y = (event.clientY - rect.top) * scaleY;
-
-      let hitIndex: number | null = null;
-      for (const tile of tilesetAnalysis.slice.tiles) {
-        if (x >= tile.x && x < tile.x + tile.width && y >= tile.y && y < tile.y + tile.height) {
-          hitIndex = tile.index;
-          break;
-        }
-      }
-
-      if (hitIndex === null) {
-        return;
-      }
-
-      setSelectedTiles(prev => {
-        if (event.shiftKey || event.metaKey || event.ctrlKey) {
-          if (prev.includes(hitIndex)) {
-            return prev.filter(idx => idx !== hitIndex);
-          }
-          return [...prev, hitIndex].sort((a, b) => a - b);
-        }
-
-        return prev.length === 1 && prev[0] === hitIndex ? [] : [hitIndex];
-      });
-      setAssignmentError(null);
-    },
-    [tilesetAnalysis]
-  );
 
   const handleAssignSelection = useCallback(() => {
     if (selectedTiles.length === 0) {
@@ -628,7 +1011,7 @@ export function AssetUploadModalEnhanced({
           ? sanitizeKeySegment(providedVariant, fallbackVariant)
           : sanitizeKeySegment(fallbackVariant, fallbackVariant);
 
-        const baseKey = sanitizedVariant ? `${sanitizedGroup}.${sanitizedVariant}` : sanitizedGroup;
+        const baseKey = sanitizedVariant ? `${sanitizedGroup}_${sanitizedVariant}` : sanitizedGroup;
         let uniqueKey = baseKey;
         let suffix = 2;
         while (assignedKeys.has(uniqueKey)) {
@@ -708,6 +1091,24 @@ export function AssetUploadModalEnhanced({
           ...assignmentNamedTiles,
         };
 
+        const selectedIndexSet = new Set<number>();
+        const tileCountLimit = tilesetAnalysis.slice.metadata.tileCount;
+
+        Object.values(mergedNamedTiles).forEach(index => {
+          const numericIndex = Number(index);
+          if (!Number.isNaN(numericIndex) && numericIndex >= 0 && numericIndex < tileCountLimit) {
+            selectedIndexSet.add(numericIndex);
+          }
+        });
+
+        selectedTiles.forEach(index => {
+          if (index >= 0 && index < tileCountLimit) {
+            selectedIndexSet.add(index);
+          }
+        });
+
+        const tilesForUpload = tilesetAnalysis.slice.tiles.filter(tile => selectedIndexSet.has(tile.index));
+
         const tileGroups = Object.keys(mergedNamedTiles).length > 0
           ? buildTileSemanticGroups(mergedNamedTiles, {
               materials: manualMaterials.length > 0 ? manualMaterials : undefined,
@@ -719,7 +1120,7 @@ export function AssetUploadModalEnhanced({
           ...tilesetAnalysis.slice.metadata,
           spacing: tilesetSpacing,
           margin: tilesetMargin,
-          tiles: tilesetAnalysis.slice.tiles,
+          ...(tilesForUpload.length > 0 ? { tiles: tilesForUpload } : {}),
           ...(manualMaterials.length > 0 ? { materials: manualMaterials } : {}),
           ...(manualThemes.length > 0 ? { themes: manualThemes } : {}),
           ...(Object.keys(mergedNamedTiles).length > 0 ? { namedTiles: mergedNamedTiles } : {}),
@@ -788,7 +1189,8 @@ export function AssetUploadModalEnhanced({
     manualTileNames,
     tilesetSpacing,
     tilesetMargin,
-    assignmentNamedTiles
+    assignmentNamedTiles,
+    selectedTiles
   ]);
 
   const handleVisualDetection = useCallback(async () => {
@@ -871,7 +1273,6 @@ export function AssetUploadModalEnhanced({
 
   if (!isOpen) return null;
 
-  const tilesetMetadata = tilesetAnalysis?.slice?.metadata;
   const tilesetValidation = tilesetAnalysis?.validation;
   const tilesetWarnings = tilesetValidation?.warnings ?? [];
   const spriteSummary = detectionResult ? {
@@ -1084,7 +1485,10 @@ export function AssetUploadModalEnhanced({
                       <canvas
                         ref={tilesetCanvasRef}
                         className="border border-slate-300 bg-white rounded shadow-inner"
-                        onClick={handleTilesetCanvasClick}
+                        onMouseDown={handleTilesetCanvasMouseDown}
+                        onMouseMove={handleTilesetCanvasMouseMove}
+                        onMouseUp={handleTilesetCanvasMouseUp}
+                        onMouseLeave={handleTilesetCanvasMouseLeave}
                         style={{ imageRendering: 'pixelated', maxWidth: '100%', maxHeight: '70vh' }}
                       />
                     </div>
@@ -1100,6 +1504,93 @@ export function AssetUploadModalEnhanced({
                         ))}
                       </div>
                     )}
+                    {tilesetMetadata && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-3 text-xs text-slate-700">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="font-semibold text-slate-600">Select tiles by range</span>
+                          <span className="text-[11px] text-slate-500">Drag on the preview or enter grid cells (1-based)</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[11px] uppercase tracking-wide text-slate-500">Start column (x)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={tilesetMetadata.columns}
+                              value={rangeStartCol}
+                              onChange={(e) => setRangeStartCol(e.target.value)}
+                              placeholder="1"
+                              className="px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[11px] uppercase tracking-wide text-slate-500">Start row (y)</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={tilesetMetadata.rows ?? Math.ceil((tilesetMetadata.tileCount ?? 0) / tilesetMetadata.columns)}
+                              value={rangeStartRow}
+                              onChange={(e) => setRangeStartRow(e.target.value)}
+                              placeholder="1"
+                              className="px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[11px] uppercase tracking-wide text-slate-500">Columns span</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={tilesetMetadata.columns}
+                              value={rangeColSpan}
+                              onChange={(e) => setRangeColSpan(e.target.value)}
+                              className="px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">
+                            <span className="text-[11px] uppercase tracking-wide text-slate-500">Rows span</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={tilesetMetadata.rows ?? Math.ceil((tilesetMetadata.tileCount ?? 0) / tilesetMetadata.columns)}
+                              value={rangeRowSpan}
+                              onChange={(e) => setRangeRowSpan(e.target.value)}
+                              className="px-2 py-1 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </label>
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={handleApplyCellRangeSelection}
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                              disabled={!tilesetMetadata}
+                            >
+                              Select range
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRangeStartCol('');
+                                setRangeStartRow('');
+                                setRangeColSpan('1');
+                                setRangeRowSpan('1');
+                                setRangeError(null);
+                              }}
+                              className="px-3 py-1.5 bg-white border border-slate-300 rounded-md hover:bg-slate-100"
+                            >
+                              Reset inputs
+                            </button>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            Tip: Hold <span className="font-semibold">Shift</span> to add tiles or <span className="font-semibold">Ctrl/Cmd</span> to toggle while dragging.
+                          </div>
+                        </div>
+                        {rangeError && (
+                          <div className="text-[11px] text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-1">
+                            {rangeError}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : type === 'spritesheet' && preview ? (
                   <div className="h-full flex flex-col">
@@ -1111,6 +1602,8 @@ export function AssetUploadModalEnhanced({
                         regionMode={useRegion}
                         region={region}
                         onRegionChange={(newRegion) => setRegion(newRegion)}
+                        initialGridSize={manualGridWidth}
+                        gridSizeOptions={[manualGridWidth, manualGridWidth * 2, manualGridWidth * 3]}
                       />
                     </div>
                   </div>
@@ -1281,7 +1774,7 @@ export function AssetUploadModalEnhanced({
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500">
-                        Click tiles in the preview to select them. Hold Shift/Cmd to select multiple tiles at once.
+                        Drag on the preview to highlight a block of tiles. Hold Shift to add or Cmd/Ctrl to toggle. Use the range inputs above for precise grid coordinates.
                       </p>
                       <div className="grid grid-cols-1 gap-2">
                         <input
@@ -1332,13 +1825,15 @@ export function AssetUploadModalEnhanced({
                           {assignmentEntries.map(({ index, assignment }) => (
                             <div
                               key={index}
-                              className="flex items-center justify-between px-2 py-1.5 text-[11px] text-slate-600"
+                              className="flex items-center justify-between px-2 py-1.5 text-[11px] text-slate-600 gap-2"
                             >
-                              <span className="font-mono text-slate-500">#{String(index).padStart(3, '0')}</span>
-                              <span className="flex-1 ml-2 truncate">{assignment.label}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-slate-700 truncate">{assignment.label}</div>
+                                <div className="text-[10px] text-slate-400">{tileIndexLabel(index)}</div>
+                              </div>
                               <button
                                 onClick={() => handleRemoveAssignment(index)}
-                                className="ml-2 text-rose-500 hover:text-rose-600"
+                                className="ml-2 text-rose-500 hover:text-rose-600 whitespace-nowrap"
                               >
                                 Remove
                               </button>
