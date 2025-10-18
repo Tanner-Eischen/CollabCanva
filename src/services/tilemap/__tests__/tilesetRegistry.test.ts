@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../firebase', () => ({
+  firestore: {},
+}))
 
 import { BUILTIN_TERRAIN_ASSETS } from '../../../tilesets/builtinAssets'
 import { tilesetRegistry } from '../tilesetRegistry'
@@ -8,21 +12,20 @@ describe('TilesetRegistry', () => {
     tilesetRegistry.clear()
   })
 
-  it('reports sprite availability for known terrain types', () => {
-    expect(tilesetRegistry.hasSprite('water')).toBe(true)
-    expect(tilesetRegistry.hasSprite('unknown')).toBe(false)
+  it('reports sprite availability for known terrain types', async () => {
+    await expect(tilesetRegistry.hasSprite('water')).resolves.toBe(true)
+    await expect(tilesetRegistry.hasSprite('unknown')).resolves.toBe(false)
   })
 
-  it('clamps variant indices when returning tile paths', () => {
+  it('clamps variant indices when returning tile paths', async () => {
     tilesetRegistry.setActiveTileset('builtin-default')
 
-    expect(tilesetRegistry.getTilePath('grass', -5)).toBe(BUILTIN_TERRAIN_ASSETS.grass[1])
-    expect(tilesetRegistry.getTilePath('grass', 4)).toBe(BUILTIN_TERRAIN_ASSETS.grass[5])
-    expect(tilesetRegistry.getTilePath('grass', 99)).toBe(BUILTIN_TERRAIN_ASSETS.grass[9])
+    await expect(tilesetRegistry.getTilePath('grass', -5)).resolves.toBe(BUILTIN_TERRAIN_ASSETS.grass[1])
+    await expect(tilesetRegistry.getTilePath('grass', 4)).resolves.toBe(BUILTIN_TERRAIN_ASSETS.grass[5])
+    await expect(tilesetRegistry.getTilePath('grass', 99)).resolves.toBe(BUILTIN_TERRAIN_ASSETS.grass[9])
   })
 
-  it('returns all available terrain types for the active tileset', () => {
-    const types = tilesetRegistry.getAllTypes()
-    expect(types).toEqual(['grass', 'dirt', 'water', 'stone'])
+  it('returns all available terrain types for the active tileset', async () => {
+    await expect(tilesetRegistry.getAllTypes()).resolves.toEqual(['grass', 'dirt', 'water', 'stone'])
   })
 })
