@@ -1,4 +1,4 @@
-import type { ViewportTransform, ToolType } from '../../types/canvas'
+import type { ViewportTransform, ToolType, CanvasFocusArea } from '../../types/canvas'
 import type { TileMode } from '../../types/tilemap'
 import { LayerProvider } from '../../hooks/useLayerManagement'
 import ShapeCanvas from './ShapeCanvas'
@@ -34,6 +34,7 @@ interface CanvasProps {
   plainColor?: string
   onPlainColorChange?: (color: string) => void
   aiChat?: React.ReactNode // Optional AI chat to render in status bar (tilemap mode)
+  focusArea?: CanvasFocusArea | null
 }
 
 /**
@@ -83,6 +84,7 @@ export default function Canvas({
   plainColor = '#ffffff',
   onPlainColorChange = () => {},
   aiChat,
+  focusArea,
 }: CanvasProps) {
   // Simple orchestrator - delegate to the appropriate canvas mode
   if (isTilemapMode) {
@@ -127,6 +129,7 @@ export default function Canvas({
       onZoomControlsReady={onZoomControlsReady}
       snapToGrid={snapToGridProp}
       onColorSamplingReady={onColorSamplingReady}
+      focusArea={focusArea}
     />
   )
 }

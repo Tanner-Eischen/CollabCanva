@@ -25,6 +25,7 @@ interface TextShapeProps {
   onDragEnd: (x: number, y: number) => void
   onTransformEnd: (width: number, height: number, rotation: number, x: number, y: number) => void
   onDoubleClick?: () => void // PR-25: Double-click to edit
+  locked?: boolean
 }
 
 /**
@@ -55,29 +56,33 @@ export default function TextShape({
   onDragEnd,
   onTransformEnd,
   onDoubleClick,
+  locked = false,
 }: TextShapeProps) {
   const shapeRef = useRef<Konva.Text>(null)
   const trRef = useRef<Konva.Transformer>(null)
 
   // Attach transformer to shape when selected
   useEffect(() => {
-    if (isSelected && trRef.current && shapeRef.current) {
+    if (isSelected && !locked && trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current])
       trRef.current.getLayer()?.batchDraw()
     }
-  }, [isSelected])
+  }, [isSelected, locked])
 
   const handleDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragStart(node.x(), node.y())
   }
 
   const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
+    if (locked) return
     const node = e.target
     onDragEnd(node.x(), node.y())
   }
 
   const handleTransformEnd = () => {
+    if (locked) return
     const node = shapeRef.current
     if (!node) return
 
@@ -113,7 +118,7 @@ export default function TextShape({
         fill={fill}
         width={width}
         rotation={rotation}
-        draggable
+        draggable={!locked}
         onClick={onSelect}
         onTap={onSelect}
         onDblClick={onDoubleClick}
@@ -124,7 +129,7 @@ export default function TextShape({
       />
 
       {/* Transformer for width resize only (no rotation for text) - Figma style (PR-20) */}
-      {isSelected && (
+      {isSelected && !locked && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(oldBox, newBox) => {

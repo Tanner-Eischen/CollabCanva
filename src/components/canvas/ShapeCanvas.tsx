@@ -1,8 +1,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import { Stage, Layer, Line as KonvaLine } from 'react-konva'
 import Konva from 'konva'
-import type { ViewportTransform, ToolType, Shape } from '../../types/canvas'
-import { DEFAULT_CANVAS_BOUNDS } from '../../types/canvas'
+import type { ViewportTransform, ToolType, Shape, CanvasFocusArea } from '../../types/canvas'
+import { DEFAULT_CANVAS_BOUNDS, DEFAULT_CANVAS_CONFIG } from '../../types/canvas'
 import type { SelectionBox as SelectionBoxType } from '../../types/selection'
 import {
   createInitialSelectionBox,
@@ -14,6 +14,7 @@ import { useCanvas } from '../../hooks/useCanvas'
 import { useGroups } from '../../hooks/useGroups'
 import { useCanvasViewport } from '../../hooks/useCanvasViewport'
 import { useShapeKeyboardShortcuts } from '../../hooks/useShapeKeyboardShortcuts'
+import { useLayers } from '../../hooks/useLayers'
 import { simplifyPath } from '../../utils/canvas/pathHelpers'
 import Cursor from '../Cursor'
 import { SelectionBox } from '../shapes/SelectionBox'
@@ -36,6 +37,7 @@ interface ShapeCanvasProps {
   onZoomControlsReady?: (zoomIn: () => void, zoomOut: () => void, zoomReset: () => void, zoomFit: () => void) => void
   snapToGrid?: boolean
   onColorSamplingReady?: (fn: (callback: (color: string) => void) => void) => void
+  focusArea?: CanvasFocusArea | null
 }
 
 export default function ShapeCanvas({
@@ -49,6 +51,7 @@ export default function ShapeCanvas({
   onZoomControlsReady,
   snapToGrid: snapToGridProp = false,
   onColorSamplingReady,
+  focusArea,
 }: ShapeCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null)
   const isDraggingShapeRef = useRef(false)
@@ -87,6 +90,7 @@ export default function ShapeCanvas({
   // Viewport hook
   const {
     viewport,
+    setViewport,
     handleWheel: baseHandleWheel,
     handleDragEnd: baseHandleDragEnd,
     handleZoomIn,
@@ -98,6 +102,11 @@ export default function ShapeCanvas({
     containerHeight,
     onViewportChange,
     onZoomChange,
+  })
+
+  const { visibility, locks, isLocked: isExplicitlyLocked } = useLayers({
+    canvasId,
+    enableSync: true,
   })
 
   // Canvas hooks
@@ -161,6 +170,84 @@ export default function ShapeCanvas({
     userId: user?.uid || '',
     enableSync: true,
   })
+
+  const isGroupVisible = useCallback((groupId: string): boolean => {
+    const visited = new Set<string>()
+    let current: string | null = groupId
+
+    while (current) {
+      if (visited.has(current)) break
+      visited.add(current)
+
+      if (visibility[current] === false) {
+        return false
+      }
+
+      const group = groups.find((g) => g.id === current)
+      if (group && group.visible === false) {
+        return false
+      }
+
+      current = isShapeInGroup(current)
+    }
+
+    return true
+  }, [groups, visibility, isShapeInGroup])
+
+  const isGroupLocked = useCallback((groupId: string): boolean => {
+    const visited = new Set<string>()
+    let current: string | null = groupId
+
+    while (current) {
+      if (visited.has(current)) break
+      visited.add(current)
+
+      if (locks[current] === true) {
+        return true
+      }
+
+      const group = groups.find((g) => g.id === current)
+      if (group && group.locked) {
+        return true
+      }
+
+      current = isShapeInGroup(current)
+    }
+
+    return false
+  }, [groups, locks, isShapeInGroup])
+
+  const isShapeVisible = useCallback((shapeId: string): boolean => {
+    if (visibility[shapeId] === false) {
+      return false
+    }
+
+    let parentGroupId = isShapeInGroup(shapeId)
+    while (parentGroupId) {
+      if (!isGroupVisible(parentGroupId)) {
+        return false
+      }
+      parentGroupId = isShapeInGroup(parentGroupId)
+    }
+
+    return true
+  }, [visibility, isShapeInGroup, isGroupVisible])
+
+  const isShapeLocked = useCallback((shapeId: string): boolean => {
+    if (locks[shapeId] === true || isExplicitlyLocked(shapeId)) {
+      return true
+    }
+
+    let parentGroupId = isShapeInGroup(shapeId)
+    while (parentGroupId) {
+      if (isGroupLocked(parentGroupId)) {
+        return true
+      }
+      parentGroupId = isShapeInGroup(parentGroupId)
+    }
+
+    return false
+  }, [locks, isExplicitlyLocked, isShapeInGroup, isGroupLocked])
 
   // Helper functions
   const rgbToHex = (r: number, g: number, b: number): string => {
@@ -515,18 +602,22 @@ export default function ShapeCanvas({
 
   const handleShapeDragStart = useCallback(
     (shapeId: string, x: number, y: number) => {
+      if (isShapeLocked(shapeId)) {
+        return
+      }
+
       isDraggingShapeRef.current = true
       dragStartPosRef.current = { x, y }
       if (!selectedIds.has(shapeId)) {
         setSelection(shapeId)
       }
     },
-    [selectedIds, setSelection]
+    [selectedIds, setSelection, isShapeLocked]
   )
 
   const handleShapeDragEnd = useCallback(
     (shapeId: string, x: number, y: number) => {
-      if (!dragStartPosRef.current) return
+      if (!dragStartPosRef.current || isShapeLocked(shapeId)) return
 
       const snappedX = snapToGridCoord(x)
       const snappedY = snapToGridCoord(y)
@@ -534,7 +625,24 @@ export default function ShapeCanvas({
       const deltaY = snappedY - dragStartPosRef.current.y
 
       if (selectedIds.size > 1 && selectedIds.has(shapeId)) {
-        bulkMove(deltaX, deltaY)
+        const movableIds = Array.from(selectedIds).filter((id) => !isShapeLocked(id))
+
+        if (movableIds.length === 0) {
+          isDraggingShapeRef.current = false
+          dragStartPosRef.current = null
+          return
+        }
+
+        if (movableIds.length === selectedIds.size) {
+          bulkMove(deltaX, deltaY)
+        } else {
+          movableIds.forEach((id) => {
+            const shape = shapes.find((s) => s.id === id)
+            if (shape) {
+              updateShape(id, { x: shape.x + deltaX, y: shape.y + deltaY })
+            }
+          })
+        }
       } else {
         updateShape(shapeId, { x: snappedX, y: snappedY })
       }
@@ -542,14 +650,17 @@ export default function ShapeCanvas({
       isDraggingShapeRef.current = false
       dragStartPosRef.current = null
     },
-    [selectedIds, bulkMove, updateShape, snapToGridCoord]
+    [selectedIds, bulkMove, updateShape, snapToGridCoord, isShapeLocked, shapes]
   )
 
   const handleShapeTransformEnd = useCallback(
     (shapeId: string, width: number, height: number, rotation: number, x: number, y: number) => {
+      if (isShapeLocked(shapeId)) {
+        return
+      }
       updateShape(shapeId, { width, height, rotation, x, y })
     },
-    [updateShape]
+    [updateShape, isShapeLocked]
   )
 
   const DotGrid = useCallback(() => {
@@ -574,6 +685,34 @@ export default function ShapeCanvas({
       />
     )
   }, [])
+
+  useEffect(() => {
+    if (!focusArea) return
+
+    const padding = focusArea.padding ?? 120
+    const contentWidth = Math.max(focusArea.width, 1)
+    const contentHeight = Math.max(focusArea.height, 1)
+    const targetCenterX = focusArea.x + contentWidth / 2
+    const targetCenterY = focusArea.y + contentHeight / 2
+
+    const widthWithPadding = contentWidth + padding
+    const heightWithPadding = contentHeight + padding
+
+    const scaleX = containerWidth / widthWithPadding
+    const scaleY = containerHeight / heightWithPadding
+    const desiredScale = Math.min(scaleX, scaleY)
+
+    const clampedScale = Math.max(
+      DEFAULT_CANVAS_CONFIG.minScale,
+      Math.min(DEFAULT_CANVAS_CONFIG.maxScale, desiredScale)
+    )
+
+    setViewport({
+      x: containerWidth / 2 - targetCenterX * clampedScale,
+      y: containerHeight / 2 - targetCenterY * clampedScale,
+      scale: clampedScale,
+    })
+  }, [focusArea, containerWidth, containerHeight, setViewport])
 
   return (
     <div className="w-full h-full bg-gray-100 overflow-hidden relative flex flex-col">
@@ -608,30 +747,34 @@ export default function ShapeCanvas({
           </Layer>
 
           <Layer>
-            <ShapeRenderer
-              shapes={shapes}
-              groups={groups}
-              selectedIds={selectedIds}
-              viewport={viewport}
-              containerWidth={containerWidth}
-              containerHeight={containerHeight}
-              isDrawingLine={isDrawingLine}
-              lineStartPoint={lineStartPoint}
-              linePreviewEnd={linePreviewEnd}
-              isDrawingPath={isDrawingPath}
-              currentPathPoints={currentPathPoints}
-              selectedTool={selectedTool}
-              sortShapesByZIndex={sortShapesByZIndex}
-              isShapeInGroup={(id) => !!isShapeInGroup(id)}
-              calculateBounds={calculateBounds}
-              handleShapeSelect={handleShapeSelect}
-              handleShapeDragStart={handleShapeDragStart}
-              handleShapeDragEnd={handleShapeDragEnd}
-              handleShapeTransformEnd={handleShapeTransformEnd}
-              handleTextDoubleClick={handleTextDoubleClick}
-              updateShape={updateShape}
-              dragStartPosRef={dragStartPosRef}
-            />
+          <ShapeRenderer
+            shapes={shapes}
+            groups={groups}
+            selectedIds={selectedIds}
+            viewport={viewport}
+            containerWidth={containerWidth}
+            containerHeight={containerHeight}
+            isDrawingLine={isDrawingLine}
+            lineStartPoint={lineStartPoint}
+            linePreviewEnd={linePreviewEnd}
+            isDrawingPath={isDrawingPath}
+            currentPathPoints={currentPathPoints}
+            selectedTool={selectedTool}
+            sortShapesByZIndex={sortShapesByZIndex}
+            isShapeInGroup={(id) => !!isShapeInGroup(id)}
+            calculateBounds={calculateBounds}
+            handleShapeSelect={handleShapeSelect}
+            handleShapeDragStart={handleShapeDragStart}
+            handleShapeDragEnd={handleShapeDragEnd}
+            handleShapeTransformEnd={handleShapeTransformEnd}
+            handleTextDoubleClick={handleTextDoubleClick}
+            updateShape={updateShape}
+            dragStartPosRef={dragStartPosRef}
+            isShapeVisible={isShapeVisible}
+            isShapeLocked={isShapeLocked}
+            isGroupVisible={isGroupVisible}
+            isGroupLocked={isGroupLocked}
+          />
             <SelectionBox selectionBox={selectionBox} />
           </Layer>
 
