@@ -10,16 +10,16 @@ import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '..
 import { ToolButton } from '../toolbar/ToolButton'
 import type { TilemapQuickAction } from '../ai/AIQuickActionsPanel'
 
-// Icon assets from public/assets used throughout the palette toolbar
-import paintBrushIcon from '/assets/paint-brush-32.png'
-import eraserIcon from '/assets/eraser-32.png'
-import paintBucketIcon from '/assets/paint-bucket-32.png'
-import eyedropperIcon from '/assets/eyedropper-32.png'
-import handToolIcon from '/assets/hand-tool-32.svg'
-import autoTileIcon from '/assets/auto-tile-32.svg'
-import gridIcon from '/assets/grid-32.svg'
-import tilePaletteIcon from '/assets/tile-palette-32.svg'
-import aiSparkIcon from '/assets/ai-spark-32.svg'
+// Icon asset paths from public/assets used throughout the palette toolbar
+const paintBrushIcon = '/assets/paint-brush-32.png'
+const eraserIcon = '/assets/eraser-32.png'
+const paintBucketIcon = '/assets/paint-bucket-32.png'
+const eyedropperIcon = '/assets/eyedropper-32.png'
+const handToolIcon = '/assets/hand-tool-32.svg'
+const autoTileIcon = '/assets/auto-tile-32.svg'
+const gridIcon = '/assets/grid-32.svg'
+const tilePaletteIcon = '/assets/tile-palette-32.svg'
+const aiSparkIcon = '/assets/ai-spark-32.svg'
 
 interface TilePaletteProps {
   palette: PaletteColor[]
