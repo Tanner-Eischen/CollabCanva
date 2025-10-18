@@ -1,0 +1,9 @@
+// assetAnalyzer.ts
+- if (autoTileDetection.system && autoTileDetection.confidence > 0.6) {
++ if (autoTileDetection.system && autoTileDetection.confidence >= 0.6) {
+    const material = metadata.materials?.[0] || 'tile'
+    metadata.namedTiles = {}
+    for (let i = 0; i < baseMeta.tileCount; i++) {
+      metadata.namedTiles[`${material}.tile_${i}`] = i
+    }
+}

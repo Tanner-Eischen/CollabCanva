@@ -35,12 +35,16 @@ export async function updateCatalogEntry(asset: Asset): Promise<void> {
     materials: tilesetMetadata.materials || [],
     layerTypes: tilesetMetadata.layerTypes || [],
     features: tilesetMetadata.features || {},
-    autoTileSystem: tilesetMetadata.autoTileSystem,
-    semanticGroups: Object.keys(tilesetMetadata.tileGroups || {}),
+    ...(tilesetMetadata.autoTileSystem && { autoTileSystem: tilesetMetadata.autoTileSystem }),
+    ...(Object.keys(tilesetMetadata.tileGroups || {}).length > 0 && {
+      semanticGroups: Object.keys(tilesetMetadata.tileGroups || {})
+    }),
     thumbnailUrl: asset.thumbnailUrl || asset.url,
     version: tilesetMetadata.version || 1,
     updatedAt: asset.updatedAt,
-    detectionConfidence: tilesetMetadata.detectionConfidence?.overall
+    ...(tilesetMetadata.detectionConfidence?.overall && {
+      detectionConfidence: tilesetMetadata.detectionConfidence.overall
+    })
   }
   
   // Store in catalog

@@ -795,7 +795,8 @@ export async function reanalyzeTileset(
       overall: (patternAnalysis.detectionConfidence.overall + (themeAnalysis.detectionConfidence?.overall || 0)) / 2
     },
     validation: {
-      ...(themeAnalysis.validation || asset.tilesetMetadata.validation),
+      seamQuality: (themeAnalysis.validation?.seamQuality ?? asset.tilesetMetadata.validation?.seamQuality),
+      dimensionCheck: themeAnalysis.validation?.dimensionCheck ?? asset.tilesetMetadata.validation?.dimensionCheck ?? 'fail',
       warnings: [
         ...patternAnalysis.warnings,
         ...(themeAnalysis.validation?.warnings || [])

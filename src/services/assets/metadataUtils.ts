@@ -1,133 +1,127 @@
-import type { SpriteSelection, SpriteSheetMetadata, TilesetMetadata, TileSemanticGroup } from '../../types/asset'
+/**
+ * Metadata Utilities for Asset Management
+ * Provides helper functions for metadata cloning, semantic naming, and grouping
+ */
 
-export type SpriteRenamingSummary = {
+import type {
+  TilesetMetadata,
+  SpriteSheetMetadata,
+  SpriteSelection,
+  TileSemanticGroup
+} from '../../types/asset'
+
+/**
+ * Summary of sprite renaming operations
+ */
+export interface SpriteRenamingSummary {
   renamedCount: number
-  total: number
-  sampleNames: string[]
+  skippedCount: number
+  renames: Array<{ oldName: string; newName: string }>
 }
 
+/**
+ * Deep clone tileset metadata to avoid mutations
+ */
 export function cloneTilesetMetadata(metadata: TilesetMetadata): TilesetMetadata {
-  const tileGroups = metadata.tileGroups
-    ? Object.fromEntries(
-        Object.entries(metadata.tileGroups).map(([key, group]) => [
-          key,
-          {
-            ...group,
-            tiles: { ...group.tiles },
-            variants: [...(group.variants || [])],
-          },
-        ]),
-      )
-    : undefined
-
   return {
-    ...metadata,
+    tileWidth: metadata.tileWidth,
+    tileHeight: metadata.tileHeight,
+    spacing: metadata.spacing,
+    margin: metadata.margin,
+    columns: metadata.columns,
+    rows: metadata.rows,
+    tileCount: metadata.tileCount,
+    autoTileMapping: metadata.autoTileMapping ? { ...metadata.autoTileMapping } : undefined,
+    tileSize: metadata.tileSize,
+    version: metadata.version,
+    pixelArt: metadata.pixelArt,
+    palette: metadata.palette ? [...metadata.palette] : undefined,
+    themes: metadata.themes ? [...metadata.themes] : undefined,
+    styles: metadata.styles ? [...metadata.styles] : undefined,
+    materials: metadata.materials ? [...metadata.materials] : undefined,
+    layerTypes: metadata.layerTypes ? [...metadata.layerTypes] : undefined,
+    autoTileSystem: metadata.autoTileSystem,
     namedTiles: metadata.namedTiles ? { ...metadata.namedTiles } : undefined,
-    tileGroups,
+    tileGroups: metadata.tileGroups ? cloneTileSemanticGroups(metadata.tileGroups) : undefined,
+    adjacencyRules: metadata.adjacencyRules
+      ? {
+          system: metadata.adjacencyRules.system,
+          rulesData: metadata.adjacencyRules.rulesData,
+          rulesUrl: metadata.adjacencyRules.rulesUrl
+        }
+      : undefined,
+    features: metadata.features ? { ...metadata.features } : undefined,
+    validation: metadata.validation
+      ? {
+          seamQuality: metadata.validation.seamQuality,
+          dimensionCheck: metadata.validation.dimensionCheck,
+          warnings: [...metadata.validation.warnings],
+          checkedAt: metadata.validation.checkedAt
+        }
+      : undefined,
+    detectionConfidence: metadata.detectionConfidence
+      ? { ...metadata.detectionConfidence }
+      : undefined
   }
 }
 
+/**
+ * Deep clone sprite sheet metadata to avoid mutations
+ */
 export function cloneSpriteSheetMetadata(metadata: SpriteSheetMetadata): SpriteSheetMetadata {
   return {
-    ...metadata,
-    spriteSelections: metadata.spriteSelections?.map(selection => ({ ...selection })) || [],
+    frameWidth: metadata.frameWidth,
+    frameHeight: metadata.frameHeight,
+    frameCount: metadata.frameCount,
+    columns: metadata.columns,
+    rows: metadata.rows,
+    spacing: metadata.spacing,
+    margin: metadata.margin,
+    spriteSelections: metadata.spriteSelections
+      ? metadata.spriteSelections.map(sprite => ({ ...sprite }))
+      : undefined,
+    selectionMode: metadata.selectionMode
   }
 }
 
-export function buildTileSemanticGroups(
-  namedTiles: Record<string, number | string>,
-  context: Pick<TilesetMetadata, 'materials' | 'themes' | 'autoTileSystem'>,
+/**
+ * Deep clone semantic groups
+ */
+function cloneTileSemanticGroups(
+  groups: Record<string, TileSemanticGroup>
 ): Record<string, TileSemanticGroup> {
-  const groups: Record<string, TileSemanticGroup> = {}
-  const materials = context.materials || []
-  const themes = context.themes || []
-
-  for (const [rawName, rawIndex] of Object.entries(namedTiles)) {
-    const tileIndex = typeof rawIndex === 'number' ? rawIndex : parseInt(rawIndex as string, 10)
-    if (Number.isNaN(tileIndex)) {
-      continue
+  const cloned: Record<string, TileSemanticGroup> = {}
+  for (const [key, group] of Object.entries(groups)) {
+    cloned[key] = {
+      label: group.label,
+      description: group.description,
+      autoTileSystem: group.autoTileSystem,
+      materials: group.materials ? [...group.materials] : undefined,
+      themes: group.themes ? [...group.themes] : undefined,
+      tiles: { ...group.tiles },
+      variants: [...group.variants],
+      tileCount: group.tileCount
     }
-
-    const normalizedName = rawName.trim()
-    if (!normalizedName) {
-      continue
-    }
-
-    const lowerName = normalizedName.toLowerCase()
-    const nameMatch = lowerName.match(/^([a-z0-9]+)[._-]?(.*)$/)
-    if (!nameMatch) {
-      continue
-    }
-
-    const groupKey = nameMatch[1]
-    const remainder = nameMatch[2]
-    const variant = remainder ? remainder.replace(/[.\s-]+/g, '_') : 'base'
-
-    if (!groups[groupKey]) {
-      const matchingMaterials = materials.filter(material => {
-        const materialKey = material.toLowerCase()
-        return materialKey === groupKey || groupKey.includes(materialKey) || materialKey.includes(groupKey)
-      })
-
-      const matchingThemes = themes.filter(theme => {
-        const themeKey = theme.toLowerCase()
-        return themeKey === groupKey || groupKey.includes(themeKey) || themeKey.includes(groupKey)
-      })
-
-      const label = groupKey.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
-
-      groups[groupKey] = {
-        label,
-        description: context.autoTileSystem
-          ? `${label} auto-tiling variants (${context.autoTileSystem})`
-          : `${label} tile variants`,
-        autoTileSystem: context.autoTileSystem,
-        materials: matchingMaterials.length > 0 ? matchingMaterials : undefined,
-        themes: matchingThemes.length > 0 ? matchingThemes : undefined,
-        tiles: {},
-        variants: [],
-        tileCount: 0,
-      }
-    }
-
-    const group = groups[groupKey]
-    const normalizedVariant = variant || groupKey
-    group.tiles[normalizedVariant] = tileIndex
-    if (!group.variants.includes(normalizedVariant)) {
-      group.variants.push(normalizedVariant)
-    }
-    group.tileCount += 1
   }
-
-  Object.entries(groups).forEach(([groupKey, group]) => {
-    group.variants.sort()
-
-    if (!group.materials && materials.length === 1) {
-      group.materials = materials
-    }
-
-    if (!group.themes && themes.length === 1) {
-      group.themes = themes
-    }
-
-    if (!group.description) {
-      group.description = `${group.label || groupKey} tile variants`
-    }
-  })
-
-  return groups
+  return cloned
 }
 
+/**
+ * Apply semantic naming to sprite selections based on namedTiles mapping
+ * Returns a summary of what was renamed
+ */
 export function applySemanticNamingToSprites(
   spriteSelections: SpriteSelection[],
   namedTiles: Record<string, number | string>,
-  baseFileName: string,
+  baseFileName: string
 ): SpriteRenamingSummary {
+  // Create reverse mapping: index → semantic name
   const indexToName: Record<number, string> = {}
 
   for (const [semanticName, index] of Object.entries(namedTiles)) {
     const numIndex = typeof index === 'number' ? index : parseInt(index, 10)
-    if (!Number.isNaN(numIndex)) {
+    if (!isNaN(numIndex)) {
+      // Clean up the semantic name (remove dots, lowercase, replace spaces with underscores)
       const cleanName = semanticName
         .replace(/\./g, '_')
         .replace(/\s+/g, '_')
@@ -136,18 +130,71 @@ export function applySemanticNamingToSprites(
     }
   }
 
+  const renames: Array<{ oldName: string; newName: string }> = []
   let renamedCount = 0
+  let skippedCount = 0
 
   spriteSelections.forEach((sprite, index) => {
     if (indexToName[index]) {
-      sprite.name = `${baseFileName}_${indexToName[index]}`
-      renamedCount += 1
+      const oldName = sprite.name
+      const newName = `${baseFileName}_${indexToName[index]}`
+      sprite.name = newName
+      renames.push({ oldName, newName })
+      renamedCount++
+    } else {
+      skippedCount++
     }
   })
 
   return {
     renamedCount,
-    total: spriteSelections.length,
-    sampleNames: spriteSelections.slice(0, 10).map(selection => selection.name),
+    skippedCount,
+    renames
   }
+}
+
+/**
+ * Build semantic tile groups from named tiles metadata
+ * Groups tiles by material/theme/auto-tile system
+ */
+export function buildTileSemanticGroups(
+  namedTiles: Record<string, number>,
+  context?: {
+    materials?: string[]
+    themes?: string[]
+    autoTileSystem?: string
+  }
+): Record<string, TileSemanticGroup> {
+  const groups: Record<string, TileSemanticGroup> = {}
+
+  // Extract tile names and group by prefix (e.g., "grass_center" -> group "grass")
+  for (const [name, index] of Object.entries(namedTiles)) {
+    // Split by common delimiters
+    const parts = name.split(/[._-]/)
+    if (parts.length > 0) {
+      const groupKey = parts[0].toLowerCase()
+
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          label: groupKey.charAt(0).toUpperCase() + groupKey.slice(1),
+          description: `Tiles in the ${groupKey} group`,
+          autoTileSystem: context?.autoTileSystem,
+          materials: context?.materials,
+          themes: context?.themes,
+          tiles: {},
+          variants: [],
+          tileCount: 0
+        }
+      }
+
+      // Add tile to group
+      groups[groupKey].tiles[name] = typeof index === 'number' ? index : parseInt(String(index), 10)
+      if (!groups[groupKey].variants.includes(name)) {
+        groups[groupKey].variants.push(name)
+      }
+      groups[groupKey].tileCount = Object.keys(groups[groupKey].tiles).length
+    }
+  }
+
+  return groups
 }
