@@ -5,10 +5,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { TileMode, PaletteColor } from '../../types/tilemap'
-import { hasSpriteAsset, getTilePath } from '../../constants/tilemapDefaults'
+import { getTilePath } from '../../constants/tilemapDefaults'
 import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 import { ToolButton } from '../toolbar/ToolButton'
 import type { TilemapQuickAction } from '../ai/AIQuickActionsPanel'
+import { tilesetRegistry } from '../../services/tilemap/tilesetRegistry'
 
 // Icon asset paths from public/assets used throughout the palette toolbar
 const paintBrushIcon = '/assets/paint-brush-32.png'
@@ -83,6 +84,12 @@ const MODE_BUTTONS: Array<{
 
 const VARIANT_COUNT = 9
 
+interface TilesetPaletteEntry {
+  type: string
+  preview?: string
+  color?: string
+}
+
 export default function TilePalette({
   palette,
   selectedIndex,
@@ -112,11 +119,20 @@ export default function TilePalette({
   const [isTilePanelOpen, setIsTilePanelOpen] = useState(false)
   const [isAIOptionsOpen, setIsAIOptionsOpen] = useState(false)
   const [variantPopupTile, setVariantPopupTile] = useState<number | null>(null)
+  const [tilesetPalette, setTilesetPalette] = useState<TilesetPaletteEntry[]>([])
 
   const selectedTile = palette[selectedIndex]
   const isPlainTile = selectedTile?.type === 'plain'
-  const hasSprite = selectedTile ? hasSpriteAsset(selectedTile.type) : false
-  const previewTilePath = hasSprite ? getTilePath(selectedTile.type, selectedVariant ?? 4) : null
+  const tilesetPaletteMap = useMemo(() => {
+    const map = new Map<string, TilesetPaletteEntry>()
+    for (const entry of tilesetPalette) {
+      map.set(entry.type, entry)
+    }
+    return map
+  }, [tilesetPalette])
+  const selectedTilesetEntry = selectedTile ? tilesetPaletteMap.get(selectedTile.type) : undefined
+  const hasSprite = Boolean(selectedTilesetEntry?.preview)
+  const previewTilePath = hasSprite ? selectedTilesetEntry?.preview ?? null : null
 
   const topOffset = PRESENCE_BAR_HEIGHT + HUD_SAFE_MARGIN
   const bottomOffset = TILE_STATUS_BAR_HEIGHT + HUD_SAFE_MARGIN
@@ -165,12 +181,9 @@ export default function TilePalette({
     }
   }, [isTilePanelOpen, autoTilingEnabled])
 
-  const tilePreviewBackground = useMemo(() => {
-    if (isPlainTile) {
-      return plainColor
-    }
-    return '#2a2a2a'
-  }, [isPlainTile, plainColor])
+  const tilePreviewBackground = isPlainTile
+    ? plainColor
+    : selectedTilesetEntry?.color ?? '#2a2a2a'
 
   const aiToolbarActive = isAIOptionsOpen || isAIQuickActionsVisible || isAdvancedAIOpen
   const quickActionsSummary = useMemo(
@@ -178,12 +191,56 @@ export default function TilePalette({
     [quickActionsPreview]
   )
 
-  const handleTileSelect = (index: number) => {
-    onSelectIndex(index)
+  useEffect(() => {
+    let isActive = true
 
-    const tile = palette[index]
-    if (!autoTilingEnabled && tile && hasSpriteAsset(tile.type)) {
-      setVariantPopupTile(index)
+    const loadTilesetPalette = async () => {
+      try {
+        const types = await tilesetRegistry.getAllTypes()
+        const entries = await Promise.all(
+          types.map(async (type) => {
+            const [preview, color] = await Promise.all([
+              tilesetRegistry.getTilePath(type, 4),
+              tilesetRegistry.getTerrainColor(type),
+            ])
+
+            return { type, preview, color }
+          })
+        )
+
+        if (isActive) {
+          setTilesetPalette(entries)
+        }
+      } catch (error) {
+        console.error('Failed to load tileset palette from registry:', error)
+        if (isActive) {
+          setTilesetPalette([])
+        }
+      }
+    }
+
+    void loadTilesetPalette()
+
+    return () => {
+      isActive = false
+    }
+  }, [])
+
+  const handleTileSelect = (index: number, type?: string) => {
+    const resolvedIndex = type ? palette.findIndex((entry) => entry.type === type) : index
+    const nextIndex = resolvedIndex >= 0 ? resolvedIndex : index
+
+    if (nextIndex < 0 || nextIndex >= palette.length) {
+      setVariantPopupTile(null)
+      return
+    }
+
+    onSelectIndex(nextIndex)
+
+    const tile = palette[nextIndex]
+    const tilesetEntry = tile ? tilesetPaletteMap.get(tile.type) : undefined
+    if (!autoTilingEnabled && tile && tilesetEntry?.preview) {
+      setVariantPopupTile(nextIndex)
     } else {
       setVariantPopupTile(null)
     }
@@ -366,37 +423,48 @@ export default function TilePalette({
               <div className="space-y-2">
                 <div className="text-white/70 text-[10px] uppercase tracking-wide font-semibold">Tiles</div>
                 <div className="flex flex-col gap-1">
-                  {palette.map((paletteColor, index) => {
-                    const sprite = hasSpriteAsset(paletteColor.type)
-                    const tilePath = sprite ? getTilePath(paletteColor.type, 4) : null
-                    const isPlain = paletteColor.type === 'plain'
+                  {(tilesetPalette.length > 0 ? tilesetPalette.map((entry) => entry.type) : palette.map((p) => p.type))
+                    .map((type, orderIndex) => {
+                      const paletteIndex = palette.findIndex((paletteColor) => paletteColor.type === type)
+                      const paletteColor = paletteIndex >= 0 ? palette[paletteIndex] : undefined
+                      const registryEntry = tilesetPaletteMap.get(type)
+                      const isPlain = type === 'plain'
+                      const resolvedIndex = paletteIndex >= 0 ? paletteIndex : orderIndex
+                      const isSelected = palette[selectedIndex]?.type === type || selectedIndex === resolvedIndex
+                      const baseColor = paletteColor?.color ?? registryEntry?.color ?? '#2a2a2a'
+                      const displayColor = isPlain
+                        ? (palette[selectedIndex]?.type === 'plain' ? plainColor : baseColor)
+                        : baseColor
+                      const hasPreview = Boolean(registryEntry?.preview)
+                      const tilePath = hasPreview ? registryEntry?.preview : null
+                      const name = paletteColor?.name ?? type
 
-                    return (
-                      <button
-                        key={paletteColor.type + index}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleTileSelect(index)
-                        }}
-                        className={`
+                      return (
+                        <button
+                          key={`${type}-${resolvedIndex}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleTileSelect(resolvedIndex, type)
+                          }}
+                          className={`
                           w-full rounded-lg transition-all relative overflow-hidden flex items-center gap-2 p-2
-                          ${selectedIndex === index
+                          ${isSelected
                             ? 'ring-2 ring-white/60 bg-white/20 shadow-lg'
                             : 'ring-1 ring-white/10 hover:ring-white/30 hover:bg-white/10'
                           }
                         `}
-                        title={`${paletteColor.name}${index < 9 ? ` (${index + 1})` : ''}`}
+                        title={`${name}${resolvedIndex < 9 ? ` (${resolvedIndex + 1})` : ''}`}
                       >
                         <div
                           className="w-8 h-8 rounded flex-shrink-0 border border-white/20 overflow-hidden flex items-center justify-center"
                           style={{
-                            backgroundColor: isPlain ? (index === selectedIndex ? plainColor : paletteColor.color) : '#2a2a2a'
+                            backgroundColor: hasPreview ? '#2a2a2a' : displayColor
                           }}
                         >
-                          {sprite && tilePath ? (
+                          {hasPreview && tilePath ? (
                             <img
                               src={tilePath}
-                              alt={paletteColor.name}
+                              alt={name}
                               className="w-full h-full object-contain"
                               style={{ imageRendering: 'pixelated' }}
                             />
@@ -404,10 +472,10 @@ export default function TilePalette({
                         </div>
                         <div className="flex-1 flex items-center justify-between">
                           <span className="text-white/90 text-sm font-medium text-left truncate">
-                            {paletteColor.name}
+                            {name}
                           </span>
-                          {index < 9 && (
-                            <span className="text-[9px] font-mono text-white/40">{index + 1}</span>
+                          {resolvedIndex < 9 && (
+                            <span className="text-[9px] font-mono text-white/40">{resolvedIndex + 1}</span>
                           )}
                         </div>
                       </button>
