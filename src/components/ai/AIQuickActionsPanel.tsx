@@ -3,7 +3,7 @@
  * Contextaware AI suggestions for tilemap operations
  * PR-34: AI Tilemap Orchestration
  * 
- * Follows pattern from SmartSuggestions.tsx but optimized for tilemap workflows
+ * Designed specifically for tilemap workflows and builds on earlier AI suggestion prototypes.
  */
 
 import { useEffect, useState, useMemo } from 'react'

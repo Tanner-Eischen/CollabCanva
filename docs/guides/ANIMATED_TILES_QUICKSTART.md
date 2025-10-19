@@ -2,6 +2,11 @@
 
 Get animated tiles and environmental effects running in 5 minutes.
 
+> **Note**
+> The original helper components (`ParticleOverlay`, `TileAnimationPreview`, etc.) were removed during the unused code cleanup.
+> The snippets below remain as implementation references—copy them into your project when you need the functionality or adapt the
+> ideas to your own components.
+
 ---
 
 ## ⚡ Quick Setup
