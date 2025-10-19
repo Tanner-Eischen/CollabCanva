@@ -1,4 +1,4 @@
-import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore'
+import { doc, getDoc, collection, getDocs, query, where, setDoc } from 'firebase/firestore'
 
 import { firestore } from '../firebase'
 import { BUILTIN_TILESET, getBuiltinTileset, listBuiltinTilesets } from '../../tilesets/builtin'
@@ -93,8 +93,21 @@ export class TilesetRegistry {
     }
   }
 
-  async saveTileset(tileset: Tileset3x3): Promise<void> {
-    console.log('TODO: implement saveTileset Firestore persistence', tileset)
+  async saveTileset(tileset: Tileset3x3, userId: string): Promise<void> {
+    try {
+      const docRef = doc(firestore, 'tilesets3x3', tileset.id)
+      const payload = {
+        ...tileset,
+        owner: userId,
+        updatedAt: Date.now(),
+      }
+
+      await setDoc(docRef, payload)
+      this.cache.set(tileset.id, { ...tileset })
+    } catch (error) {
+      console.error(`Failed to save tileset ${tileset.id} to Firestore:`, error)
+      throw error
+    }
   }
 
   async hasSprite(type: string): Promise<boolean> {

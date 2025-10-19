@@ -1,0 +1,29 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TileRenderer integration with tileset registry > renders sprite tiles for grass/dirt boundary using registry data 2`] = `
+<DocumentFragment>
+  <div
+    data-component="Layer"
+    opacity="1"
+    x="0"
+    y="0"
+  >
+    <div
+      data-opacity="1"
+      data-path="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKklEQVR42mNwOl5MU8QwasGoBaMWjFowasGoBaMWjFowasGoBaMWDBULAGQg8Ey6liD6AAAAAElFTkSuQmCC"
+      data-size="32"
+      data-testid="sprite-tile"
+      data-x="0"
+      data-y="0"
+    />
+    <div
+      data-opacity="1"
+      data-path="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKklEQVR42mNY5MVBU8QwasGoBaMWjFowasGoBaMWjFowasGoBaMWDBULAM8A0C5B34lnAAAAAElFTkSuQmCC"
+      data-size="32"
+      data-testid="sprite-tile"
+      data-x="32"
+      data-y="0"
+    />
+  </div>
+</DocumentFragment>
+`;
