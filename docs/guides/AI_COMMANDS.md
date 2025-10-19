@@ -136,6 +136,9 @@ Align shapes to common edges or centers.
 
 ### 🗺️ Tilemap Commands
 
+> ℹ️ **Registry-aware auto-tiling:** The agent queries the shared tileset registry before painting. If a requested tileset is un
+available it automatically falls back to builtin variants, so commands remain safe even while custom tilesets are syncing.
+
 #### Paint Tiles
 Paint rectangular regions with tiles.
 
