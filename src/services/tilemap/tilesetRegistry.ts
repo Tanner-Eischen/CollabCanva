@@ -102,8 +102,23 @@ export class TilesetRegistry {
     return Boolean(terrain)
   }
 
+  hasSpriteSync(type: string): boolean {
+    const terrain = this.findTerrainSync(type)
+    return Boolean(terrain)
+  }
+
   async getTilePath(type: string, variant: number): Promise<string | undefined> {
     const terrain = await this.findTerrain(type)
+    if (!terrain) {
+      return undefined
+    }
+
+    const clampedVariant = this.clampVariantIndex(variant)
+    return terrain.variants[clampedVariant]
+  }
+
+  getTilePathSync(type: string, variant: number): string | undefined {
+    const terrain = this.findTerrainSync(type)
     if (!terrain) {
       return undefined
     }
@@ -134,6 +149,12 @@ export class TilesetRegistry {
 
   private async findTerrain(type: string): Promise<TilesetTerrain3x3 | undefined> {
     const tileset = await this.getActiveTileset()
+    return tileset.terrains.find((terrain) => terrain.id === type)
+  }
+
+  private findTerrainSync(type: string): TilesetTerrain3x3 | undefined {
+    const activeTileset = this.cache.get(this.activeTilesetId)
+    const tileset = activeTileset ?? this.cache.get(DEFAULT_TILESET_ID) ?? BUILTIN_TILESET
     return tileset.terrains.find((terrain) => terrain.id === type)
   }
 

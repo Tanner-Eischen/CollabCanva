@@ -7,7 +7,7 @@ import { useCallback, useRef } from 'react'
 import type { TileData, TileMode } from '../types/tilemap'
 import { coordToKey } from '../types/tilemap'
 import { calculateTileVariant, calculateAutoTileUpdates } from '../utils/tilemap/autoTile'
-import { hasSpriteAsset } from '../constants/tilemapDefaults'
+import { tilesetRegistry } from '../services/tilemap/tilesetRegistry'
 
 export interface UseTilemapPainterOptions {
   mode: TileMode
@@ -62,7 +62,7 @@ export function useTilemapPainter(options: UseTilemapPainterOptions): UseTilemap
       
       // Calculate variant if sprite assets available
       let variant: number | undefined
-      if (hasSpriteAsset(type)) {
+      if (tilesetRegistry.hasSpriteSync(type)) {
         variant = calculateTileVariant(x, y, tiles, type)
       }
       
@@ -82,7 +82,7 @@ export function useTilemapPainter(options: UseTilemapPainterOptions): UseTilemap
       currentStrokeRef.current.push({ x, y, oldTile, newTile })
       
       // Update neighbor variants if using sprites
-      if (hasSpriteAsset(type)) {
+      if (tilesetRegistry.hasSpriteSync(type)) {
         updateNeighborVariants(x, y, type)
       }
     },
@@ -138,7 +138,7 @@ export function useTilemapPainter(options: UseTilemapPainterOptions): UseTilemap
       })
       
       // Update neighbor variants if old tile had sprites
-      if (hasSpriteAsset(oldTile.type)) {
+      if (tilesetRegistry.hasSpriteSync(oldTile.type)) {
         updateNeighborVariantsAfterDelete(x, y, oldTile.type)
       }
     },
@@ -162,7 +162,7 @@ export function useTilemapPainter(options: UseTilemapPainterOptions): UseTilemap
         const key = coordToKey(pos.x, pos.y)
         const neighborTile = tiles.get(key)
         
-        if (neighborTile && hasSpriteAsset(neighborTile.type)) {
+        if (neighborTile && tilesetRegistry.hasSpriteSync(neighborTile.type)) {
           // Recalculate neighbor's variant (tile at x,y is now deleted)
           const variant = calculateTileVariant(pos.x, pos.y, tiles, neighborTile.type)
           setTile(pos.x, pos.y, {

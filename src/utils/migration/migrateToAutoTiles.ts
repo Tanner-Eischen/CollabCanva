@@ -6,7 +6,7 @@
 import { ref, get, update } from 'firebase/database'
 import { db } from '../../services/firebase'
 import { calculateTileVariant } from '../tilemap/autoTile'
-import { hasSpriteAsset } from '../../constants/tilemapDefaults'
+import { tilesetRegistry } from '../../services/tilemap/tilesetRegistry'
 import type { TileData, FirebaseTileData } from '../../types/tilemap'
 import { coordToKey, keyToCoord, coordToChunk, chunkToKey } from '../../types/tilemap'
 
@@ -65,7 +65,7 @@ export async function needsMigration(canvasId: string): Promise<boolean> {
         const tile: FirebaseTileData = tiles[tileKey]
         
         // If tile type has sprite assets but no variant, needs migration
-        if (hasSpriteAsset(tile.t) && tile.v === undefined) {
+        if (tilesetRegistry.hasSpriteSync(tile.t) && tile.v === undefined) {
           return true
         }
       }
@@ -189,7 +189,7 @@ export async function migrateCanvas(
       // Only update tiles that:
       // 1. Have sprite assets available
       // 2. Don't already have a variant
-      if (hasSpriteAsset(tile.type) && tile.variant === undefined) {
+      if (tilesetRegistry.hasSpriteSync(tile.type) && tile.variant === undefined) {
         const variant = calculateTileVariant(x, y, tileMap, tile.type)
         
         // Build Firebase path
