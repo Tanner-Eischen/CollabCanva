@@ -5,7 +5,6 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { TileMode, PaletteColor } from '../../types/tilemap'
-import { getTilePath } from '../../constants/tilemapDefaults'
 import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
 import { ToolButton } from '../toolbar/ToolButton'
 import type { TilemapQuickAction } from '../ai/AIQuickActionsPanel'
@@ -497,7 +496,10 @@ export default function TilePalette({
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     {Array.from({ length: VARIANT_COUNT }, (_, variant) => {
-                      const tilePath = getTilePath(palette[variantPopupTile].type, variant)
+                      const tilePath = tilesetRegistry.getTilePathSync(
+                        palette[variantPopupTile].type,
+                        variant
+                      )
 
                       return (
                         <button
@@ -519,12 +521,14 @@ export default function TilePalette({
                           }}
                           title={`Variant ${variant + 1}`}
                         >
-                          <img
-                            src={tilePath}
-                            alt={`Variant ${variant + 1}`}
-                            className="w-full h-full object-contain"
-                            style={{ imageRendering: 'pixelated' }}
-                          />
+                          {tilePath ? (
+                            <img
+                              src={tilePath}
+                              alt={`Variant ${variant + 1}`}
+                              className="w-full h-full object-contain"
+                              style={{ imageRendering: 'pixelated' }}
+                            />
+                          ) : null}
                           <div className="absolute bottom-0 right-0 text-[8px] font-mono bg-black/80 text-white px-1 leading-none rounded-tl">
                             {variant + 1}
                           </div>

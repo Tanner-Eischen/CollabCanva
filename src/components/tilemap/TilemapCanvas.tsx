@@ -14,13 +14,14 @@ import { TileSetCommand, BulkTileCommand } from '../../commands/tile/TileCommand
 import { TileStrokeCommand } from '../../commands/tile/TileStrokeCommand'
 import { TileFillCommand } from '../../commands/tile/TileFillCommand'
 import { exportTilemapJSON, generateExportFilename } from '../../services/tilemap/tilemapExport'
-import { DEFAULT_TILEMAP_PALETTE, hasSpriteAsset } from '../../constants/tilemapDefaults'
+import { DEFAULT_TILEMAP_PALETTE } from '../../constants/tilemapDefaults'
 import { calculateTileVariant, calculateAutoTileUpdates } from '../../utils/tilemap/autoTile'
 import { updateLayer as updateLayerInFirebase } from '../../services/tilemap/tilemapSync'
 import { useLayerContext } from '../../hooks/useLayerManagement'
 import { AIOrchestratorProvider, useAIOrchestrator } from '../../hooks/useAIOrchestrator'
 import { useAssetLibrary } from '../../hooks/useAssetLibrary'
 import { PRESENCE_BAR_HEIGHT, TILE_STATUS_BAR_HEIGHT, HUD_SAFE_MARGIN } from '../../constants/layout'
+import { tilesetRegistry } from '../../services/tilemap/tilesetRegistry'
 import Cursor from '../Cursor'
 import TilemapGrid from './TilemapGrid'
 import TileRenderer from './TileRenderer'
@@ -366,7 +367,7 @@ function TilemapCanvasInner({
 
         // Calculate variant if this tile type has sprite assets
         let variant: number | undefined
-        if (hasSpriteAsset(selectedPalette.type)) {
+        if (tilesetRegistry.hasSpriteSync(selectedPalette.type)) {
           if (autoTilingEnabled) {
             // Auto-tiling: calculate based on neighbors
             variant = calculateTileVariant(x, y, workingTiles, selectedPalette.type)
@@ -393,7 +394,7 @@ function TilemapCanvasInner({
       
       // Collect neighbor variant updates if auto-tiling is enabled
       const neighborUpdates: Array<{x: number, y: number, oldTile: TileData, newTile: TileData}> = []
-      if (autoTilingEnabled && hasSpriteAsset(selectedPalette.type)) {
+      if (autoTilingEnabled && tilesetRegistry.hasSpriteSync(selectedPalette.type)) {
         affectedTiles.forEach(({x, y}) => {
           const updates = calculateAutoTileUpdates(x, y, workingTiles, selectedPalette.type)
           updates.forEach(update => {
@@ -468,7 +469,7 @@ function TilemapCanvasInner({
       const neighborUpdates: Array<{x: number, y: number, oldTile: TileData, newTile: TileData}> = []
       affectedTiles.forEach(({x, y}) => {
         const oldTile = tiles.get(coordToKey(x, y))
-        if (oldTile && autoTilingEnabled && hasSpriteAsset(oldTile.type)) {
+        if (oldTile && autoTilingEnabled && tilesetRegistry.hasSpriteSync(oldTile.type)) {
           const updates = calculateAutoTileUpdates(x, y, workingTiles, null)
           updates.forEach(update => {
             const neighborKey = coordToKey(update.x, update.y)
